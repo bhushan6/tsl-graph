@@ -4,6 +4,7 @@ import { useCallback, useRef } from 'react';
 import { Save, Upload, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useEditorStore } from '@/store/editor';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export function Toolbar() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +91,10 @@ export function Toolbar() {
                 <Trash2 className="w-4 h-4" />
                 <span className="text-xs">Clear</span>
             </Button>
+
+            <div className="w-px h-4 bg-border" />
+
+            <ThemeToggle />
 
             {/* Hidden file input */}
             <input

@@ -1,11 +1,11 @@
 'use client';
 
-import { Handle, HandleProps, useNodeConnections } from '@xyflow/react';
+import { Handle, HandleProps } from '@xyflow/react';
 import { TSLType } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 // Color mapping for TSL types
-const TYPE_COLORS: Partial<Record<TSLType, string>> = {
+export const TYPE_COLORS: Partial<Record<TSLType, string>> = {
     float: '#8b5cf6',   // violet
     int: '#3b82f6',     // blue
     uint: '#06b6d4',    // cyan
@@ -29,39 +29,72 @@ const TYPE_COLORS: Partial<Record<TSLType, string>> = {
     sampler2D: '#a855f7', // purple
 };
 
-const DEFAULT_COLOR = '#71717a'; // zinc-500
+export const DEFAULT_HANDLE_COLOR = '#71717a';
 
 interface TSLHandleProps extends Omit<HandleProps, 'isConnectable'> {
     dataType: TSLType;
-    connectionLimit?: number;
+    label: string;
+    isConnected?: boolean;
+    isDark?: boolean;
 }
 
-export function TSLHandle({ dataType, connectionLimit = 1, ...props }: TSLHandleProps) {
-    const connections = useNodeConnections({
-        handleType: props.type,
-    });
+export function TSLHandle({
+    dataType,
+    label,
+    isConnected = false,
+    isDark = true,
+    ...props
+}: TSLHandleProps) {
+    const handleColor = TYPE_COLORS[dataType] ?? DEFAULT_HANDLE_COLOR;
+    const isOutput = props.type === 'source';
 
-    // Filter connections for this specific handle
-    const handleConnections = connections.filter(conn =>
-        props.type === 'target'
-            ? conn.targetHandle === props.id
-            : conn.sourceHandle === props.id
-    );
+    // Background color based on state
+    const defaultBg = isConnected
+        ? handleColor
+        : (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)');
 
-    const isConnectable = handleConnections.length < connectionLimit;
-    const handleColor = TYPE_COLORS[dataType] ?? DEFAULT_COLOR;
+    // Text color for icon
+    const textColor = isConnected
+        ? '#fff'
+        : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)');
 
     return (
-        <Handle
-            {...props}
-            isConnectable={isConnectable}
+        <div
             className={cn(
-                '!w-2.5 !h-2.5 !border-2 !border-border/50 !rounded-sm transition-opacity',
-                !isConnectable && 'opacity-50'
+                'relative flex items-center py-1 group',
+                isOutput ? 'flex-row-reverse' : 'flex-row'
             )}
-            style={{
-                backgroundColor: handleColor,
-            }}
-        />
+        >
+            {/* Handle styled as indicator */}
+            <div className={cn('relative', isOutput ? 'ml-2' : 'mr-2')}>
+                <Handle
+                    {...props}
+                    isConnectable={true}
+                    className="!relative !transform-none !inset-auto !w-4 !h-4 !rounded !border-0 transition-colors duration-150"
+                    style={{
+                        '--handle-bg': defaultBg,
+                        '--handle-hover-bg': handleColor,
+                        backgroundColor: 'var(--handle-bg)',
+                    } as React.CSSProperties}
+                />
+                {/* Icon overlay */}
+                {/* <div
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none text-[10px] font-medium select-none transition-colors duration-150"
+                    style={{ color: textColor }}
+                >
+                    =
+                </div> */}
+            </div>
+
+            {/* Label */}
+            <span className={cn(
+                'text-[11px] uppercase tracking-wider font-medium whitespace-nowrap transition-colors duration-150',
+                isConnected
+                    ? 'text-gray-700 dark:text-white/90'
+                    : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/90'
+            )}>
+                {label}
+            </span>
+        </div>
     );
 }

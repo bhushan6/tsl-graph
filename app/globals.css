@@ -123,3 +123,43 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* React Flow theme overrides */
+.react-flow__background {
+  background-color: var(--background) !important;
+}
+
+.react-flow__controls {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.react-flow__controls-button {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+  fill: var(--foreground) !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--muted) !important;
+}
+
+.react-flow__minimap {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--muted-foreground) !important;
+  stroke-width: 2px;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path,
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: var(--primary) !important;
+}
+
+.react-flow__connection-line {
+  stroke: var(--primary) !important;
+  stroke-width: 2px;
+}
