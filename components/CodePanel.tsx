@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useCallback } from 'react';
-import { Copy, Check, X } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { compileGraph, getRequiredImports } from '@/lib/compiler';
 import { Button } from '@/components/ui/button';
@@ -44,10 +44,10 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
             <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center justify-between">
+                    <DialogTitle className="flex flex-col gap-1">
                         <span>TSL Output</span>
                         <span className="text-xs text-muted-foreground font-normal">
-                            {nodes.length} node{nodes.length !== 1 ? 's' : ''}
+                            ({nodes.length} node{nodes.length !== 1 ? 's' : ''})
                         </span>
                     </DialogTitle>
                 </DialogHeader>

@@ -94,7 +94,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
             className={cn(
                 'min-w-[220px] flex flex-col rounded-xl shadow-lg',
                 'bg-white/95 shadow-gray-300/50',
-                'dark:bg-[rgba(30,32,44,0.95)] dark:shadow-black/30',
+                'dark:bg-card/95 dark:shadow-black/30',
                 'backdrop-blur-sm transition-shadow duration-150',
                 selected && 'shadow-xl dark:shadow-black/50 shadow-gray-400/50'
             )}
