@@ -4,16 +4,18 @@ import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import {
     ReactFlow,
     Background,
-    Controls,
-    MiniMap,
     BackgroundVariant,
     ReactFlowProvider,
     type NodeTypes,
     type OnSelectionChangeParams,
+    useReactFlow,
+    type Connection,
+    type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
+import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import { NodePicker } from './NodePicker';
 import { registry } from '@/lib/registry';
@@ -82,6 +84,28 @@ function EditorCanvas() {
         return types;
     }, []);
 
+    const { getNodes, getEdges } = useReactFlow();
+
+    const isValidConnection = useCallback(
+        (connection: Connection | Edge) => {
+            const nodes = getNodes();
+            const edges = getEdges();
+            const target = nodes.find((node) => node.id === connection.target);
+            const source = nodes.find((node) => node.id === connection.source);
+
+            if (!target || !source) {
+                return false;
+            }
+
+            // Cycle check
+            // We want to check if connecting source -> target creates a cycle.
+            // This happens if target can reach source (target -> ... -> source).
+            // Pass target first, then source to check if path target->source exists.
+            return !hasCycle(target, source, nodes, edges);
+        },
+        [getNodes, getEdges]
+    );
+
     return (
         <>
             {/* Canvas Layer */}
@@ -94,6 +118,7 @@ function EditorCanvas() {
                     onConnect={onConnect}
                     onSelectionChange={onSelectionChange}
                     nodeTypes={nodeTypes}
+                    isValidConnection={isValidConnection}
                     fitView
                     className="bg-background"
                     defaultEdgeOptions={{

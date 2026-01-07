@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { topologicalSort } from './graph-utils';
+import { topologicalSort, hasCycle } from './graph-utils';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData } from '@/lib/types';
 
@@ -65,5 +65,52 @@ describe('topologicalSort', () => {
         expect(sorted).toHaveLength(2);
         expect(sorted).toContain('A');
         expect(sorted).toContain('B');
+    });
+});
+
+describe('hasCycle', () => {
+    it('should detect a direct cycle (back edge)', () => {
+        const nodes = [createNode('A'), createNode('B')];
+        const edges: Edge[] = [
+            { id: '1', source: 'A', target: 'B' }
+        ];
+
+        // Try to connect B -> A (Source: B, Target: A)
+        // Check if A reaches B
+        // hasCycle(Target, Source)
+        expect(hasCycle(createNode('A'), createNode('B'), nodes, edges)).toBe(true);
+    });
+
+    it('should detect an indirect cycle', () => {
+        const nodes = [createNode('A'), createNode('B'), createNode('C')];
+        const edges: Edge[] = [
+            { id: '1', source: 'A', target: 'B' },
+            { id: '2', source: 'B', target: 'C' }
+        ];
+
+        // Try to connect C -> A (Source: C, Target: A)
+        // Check if A reaches C
+        // hasCycle(Target, Source)
+        expect(hasCycle(createNode('A'), createNode('C'), nodes, edges)).toBe(true);
+    });
+
+    it('should allow non-cyclic connections', () => {
+        const nodes = [createNode('A'), createNode('B'), createNode('C')];
+        const edges: Edge[] = [
+            { id: '1', source: 'A', target: 'B' }
+        ];
+
+        // Try to connect B -> C (Source: B, Target: C)
+        // Check if C reaches B
+        // hasCycle(Target, Source) => hasCycle(C, B)
+        expect(hasCycle(createNode('C'), createNode('B'), nodes, edges)).toBe(false);
+    });
+
+    it('should detect self-loops', () => {
+        const nodes = [createNode('A')];
+        const edges: Edge[] = [];
+
+        // Try to connect A -> A
+        expect(hasCycle(createNode('A'), createNode('A'), nodes, edges)).toBe(true);
     });
 });

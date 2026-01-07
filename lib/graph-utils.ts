@@ -41,3 +41,36 @@ export function topologicalSort(nodes: Node<TSLNodeData>[], edges: Edge[]): stri
 
     return sorted;
 }
+
+export function getOutgoers(node: Node, nodes: Node[], edges: Edge[]): Node[] {
+    if (!node) {
+        return [];
+    }
+
+    const outgoerIds = edges
+        .filter((e) => e.source === node.id)
+        .map((e) => e.target);
+
+    return nodes.filter((n) => outgoerIds.includes(n.id));
+}
+
+export function hasCycle(target: Node, source: Node, nodes: Node[], edges: Edge[]): boolean {
+    const visited = new Set<string>();
+
+    const visit = (currentNode: Node): boolean => {
+        if (visited.has(currentNode.id)) return false;
+        visited.add(currentNode.id);
+
+        const outgoers = getOutgoers(currentNode, nodes, edges);
+        for (const outgoer of outgoers) {
+            if (outgoer.id === source.id) return true;
+            if (visit(outgoer)) return true;
+        }
+
+        return false;
+    };
+
+    if (target.id === source.id) return true;
+    return visit(target);
+}
+
