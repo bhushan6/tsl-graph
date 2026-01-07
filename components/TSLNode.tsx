@@ -37,8 +37,9 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         edges.filter((e) => e.source === id).map((e) => e.sourceHandle)
     );
 
+    const storedName = (data.values?.localName as string | undefined) || '';
     const [isEditingName, setIsEditingName] = useState(false);
-    const [localName, setLocalName] = useState(data.localName || '');
+    const [localName, setLocalName] = useState(storedName);
     // const [hoveredPort, setHoveredPort] = useState<string | null>(null);
 
     const handleNameSubmit = useCallback(() => {
@@ -53,11 +54,11 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         (e: React.KeyboardEvent) => {
             if (e.key === 'Enter') handleNameSubmit();
             else if (e.key === 'Escape') {
-                setLocalName(data.localName || '');
+                setLocalName(storedName);
                 setIsEditingName(false);
             }
         },
-        [handleNameSubmit, data.localName]
+        [handleNameSubmit, storedName]
     );
 
     if (!def) {
@@ -135,11 +136,11 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                     <span
                         className="text-[10px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate max-w-[180px]"
                         onDoubleClick={() => {
-                            setLocalName(data.localName || '');
+                            setLocalName(storedName);
                             setIsEditingName(true);
                         }}
                     >
-                        ({data.localName || 'Db Click to set name'})
+                        ({storedName || 'Db Click to set name'})
                     </span>
                 )}
             </div>

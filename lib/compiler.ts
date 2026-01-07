@@ -148,6 +148,7 @@ export function compileGraph(nodes: Node<TSLNodeData>[], edges: Edge[]): string 
     const otherNodes = nodes.filter(n => !MATERIAL_NODE_TYPES.includes(n.data.type));
     const sorted = topologicalSort(otherNodes, edges);
     const compiledNodes = new Map<string, CompiledNode>();
+    const usedNames = new Set<string>();
     const lines: string[] = [];
 
     lines.push('// Generated TSL Code');
@@ -164,7 +165,22 @@ export function compileGraph(nodes: Node<TSLNodeData>[], edges: Edge[]): string 
             continue;
         }
 
-        const varName = `_node${nodeIndex++}`;
+        // Use user-defined name if available, otherwise use auto-generated name
+        // Check both data.localName and data.values.localName (store saves under values)
+        const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+        let baseName = localName
+            ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+            : `_node${nodeIndex}`;
+
+        // Ensure unique name by adding suffix if needed
+        let displayName = baseName;
+        let suffix = 1;
+        while (usedNames.has(displayName)) {
+            displayName = `${baseName}_${suffix++}`;
+        }
+        usedNames.add(displayName);
+        nodeIndex++;
+
         const inputs = def.inputs ?? {};
         const inputKeys = Object.keys(inputs);
 
@@ -181,11 +197,11 @@ export function compileGraph(nodes: Node<TSLNodeData>[], edges: Edge[]): string 
             code = `${def.tsl}(${args.join(', ')})`;
         }
 
-        lines.push(`const ${varName} = ${code};`);
+        lines.push(`const ${displayName} = ${code};`);
 
         compiledNodes.set(nodeId, {
             id: nodeId,
-            varName,
+            varName: displayName,
             code,
         });
     }
