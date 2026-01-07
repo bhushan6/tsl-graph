@@ -5,6 +5,7 @@ import { useReactFlow } from '@xyflow/react';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
+import { NodeType } from '@/lib/types';
 
 export function NodePicker() {
     const addNode = useEditorStore((s) => s.addNode);
@@ -12,7 +13,7 @@ export function NodePicker() {
     const nodesByCategory = registry.byCategory();
 
     const handleAddNode = useCallback(
-        (type: string) => {
+        (type: NodeType) => {
             // Add node at center of current viewport
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;

@@ -1,6 +1,6 @@
-import { NodeDef } from '../types';
+import { BaseNodeDef } from './definitions';
 
-export const mathNodes: NodeDef[] = [
+export const mathNodes = [
     // Basic arithmetic
     {
         type: 'math/add',
@@ -260,4 +260,8 @@ export const mathNodes: NodeDef[] = [
         },
         tsl: 'reflect',
     },
-];
+] as const;
+
+// Type check
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _mathNodesCheck: readonly BaseNodeDef[] = mathNodes;

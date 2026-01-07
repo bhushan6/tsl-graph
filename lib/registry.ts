@@ -1,4 +1,4 @@
-import { NodeDef } from './types';
+import { NodeDef, NodeType } from './types';
 
 class NodeRegistry {
     private defs = new Map<string, NodeDef>();
@@ -7,16 +7,16 @@ class NodeRegistry {
         this.defs.set(def.type, def);
     }
 
-    registerMany(defs: NodeDef[]) {
+    registerMany(defs: readonly NodeDef[]) {
         defs.forEach((d) => this.register(d));
     }
 
     get(type: string): NodeDef | undefined {
-        return this.defs.get(type);
+        return this.defs.get(type as NodeType);
     }
 
     has(type: string): boolean {
-        return this.defs.has(type);
+        return this.defs.has(type as NodeType);
     }
 
     all(): NodeDef[] {

@@ -1,6 +1,6 @@
-import { NodeDef } from '../types';
+import { BaseNodeDef } from './definitions';
 
-export const constantNodes: NodeDef[] = [
+export const constantNodes = [
     {
         type: 'const/float',
         label: 'Float',
@@ -91,4 +91,8 @@ export const constantNodes: NodeDef[] = [
         },
         tsl: 'color',
     },
-];
+] as const;
+
+// Type check to ensure conformity without widening the inferred type
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _constantNodesCheck: readonly BaseNodeDef[] = constantNodes;

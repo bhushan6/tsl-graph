@@ -1,4 +1,4 @@
-import { NodeDef } from '../types';
+import { BaseNodeDef } from './definitions';
 
 // Helper for vec3 outputs with components
 const vec3Outputs = {
@@ -15,7 +15,7 @@ const vec2Outputs = {
     out: { label: 'XY', type: 'vec2' as const },
 };
 
-export const geometryNodes: NodeDef[] = [
+export const geometryNodes = [
     // Position
     {
         type: 'geo/positionLocal',
@@ -84,4 +84,8 @@ export const geometryNodes: NodeDef[] = [
         tsl: 'time',
         pure: true,
     },
-];
+] as const;
+
+// Type check
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _geometryNodesCheck: readonly BaseNodeDef[] = geometryNodes;

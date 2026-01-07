@@ -2,13 +2,13 @@
 import { describe, it, expect } from 'vitest';
 import { topologicalSort } from './graph-utils';
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData } from '@/components/TSLNode';
+import { TSLNodeData } from '@/lib/types';
 
 // Mock TSLNodeData since we just need the structure for sorting
 const createNode = (id: string): Node<TSLNodeData> => ({
     id,
     position: { x: 0, y: 0 },
-    data: { type: 'test', label: id, values: {}, connected: {} }
+    data: { type: 'math/add', values: {}, connected: {} }
 });
 
 describe('topologicalSort', () => {

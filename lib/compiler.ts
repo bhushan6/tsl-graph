@@ -1,5 +1,5 @@
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData } from '@/components/TSLNode';
+import { TSLNodeData } from '@/lib/types';
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 
@@ -104,10 +104,10 @@ export function compileGraph(nodes: Node<TSLNodeData>[], edges: Edge[]): string 
     }
 
     // Find material node
-    const materialNode = nodes.find(n => MATERIAL_NODE_TYPES.includes(n.data.type));
+    const materialNode = nodes.find(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
 
     // Filter out material nodes for initial compilation
-    const otherNodes = nodes.filter(n => !MATERIAL_NODE_TYPES.includes(n.data.type));
+    const otherNodes = nodes.filter(n => !(MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
     const sorted = topologicalSort(otherNodes, edges);
     const compiledNodes = new Map<string, CompiledNode>();
     const usedNames = new Set<string>();
@@ -196,7 +196,7 @@ export function getRequiredImports(nodes: Node<TSLNodeData>[]): string[] {
     const imports = new Set<string>();
 
     // Check for material node and add its import
-    const materialNode = nodes.find(n => MATERIAL_NODE_TYPES.includes(n.data.type));
+    const materialNode = nodes.find(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
     if (materialNode) {
         const def = registry.get(materialNode.data.type);
         if (def) {
@@ -205,7 +205,7 @@ export function getRequiredImports(nodes: Node<TSLNodeData>[]): string[] {
     }
 
     for (const node of nodes) {
-        if (MATERIAL_NODE_TYPES.includes(node.data.type)) continue;
+        if ((MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)) continue;
 
         const def = registry.get(node.data.type);
         if (def) {

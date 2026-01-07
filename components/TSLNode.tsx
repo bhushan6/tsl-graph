@@ -8,20 +8,10 @@ import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
 
+import { AppNode } from '@/lib/types';
+import { NodeProps } from '@xyflow/react';
 
-// Node data structure
-export interface TSLNodeData extends Record<string, unknown> {
-    type: string;
-    values: Record<string, unknown>;
-    connected: Record<string, boolean>;
-    localName?: string;
-}
-
-interface TSLNodeProps {
-    id: string;
-    data: TSLNodeData;
-    selected?: boolean;
-}
+type TSLNodeProps = NodeProps<AppNode>;
 
 function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const def = registry.get(data.type);

@@ -1,6 +1,6 @@
 
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData } from '@/components/TSLNode';
+import { TSLNodeData } from '@/lib/types';
 
 /**
  * Topologically sort nodes so dependencies come first.

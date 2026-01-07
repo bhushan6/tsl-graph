@@ -1,9 +1,9 @@
-import { NodeDef } from '../types';
+import { BaseNodeDef } from './definitions';
 
 // Material nodes - only ONE material node is allowed per graph
 // This is enforced in the store
 
-export const meshStandardMaterial: NodeDef = {
+export const meshStandardMaterial = {
     type: 'material/standard',
     label: 'MeshStandardMaterial',
     category: 'Material',
@@ -19,9 +19,9 @@ export const meshStandardMaterial: NodeDef = {
     },
     outputs: {},
     tsl: 'MeshStandardNodeMaterial',
-};
+} as const;
 
-export const meshBasicMaterial: NodeDef = {
+export const meshBasicMaterial = {
     type: 'material/basic',
     label: 'MeshBasicMaterial',
     category: 'Material',
@@ -32,9 +32,9 @@ export const meshBasicMaterial: NodeDef = {
     },
     outputs: {},
     tsl: 'MeshBasicNodeMaterial',
-};
+} as const;
 
-export const meshPhysicalMaterial: NodeDef = {
+export const meshPhysicalMaterial = {
     type: 'material/physical',
     label: 'MeshPhysicalMaterial',
     category: 'Material',
@@ -58,9 +58,9 @@ export const meshPhysicalMaterial: NodeDef = {
     },
     outputs: {},
     tsl: 'MeshPhysicalNodeMaterial',
-};
+} as const;
 
-export const meshPhongMaterial: NodeDef = {
+export const meshPhongMaterial = {
     type: 'material/phong',
     label: 'MeshPhongMaterial',
     category: 'Material',
@@ -75,7 +75,7 @@ export const meshPhongMaterial: NodeDef = {
     },
     outputs: {},
     tsl: 'MeshPhongNodeMaterial',
-};
+} as const;
 
 // All material node types for easy checking
 export const MATERIAL_NODE_TYPES = [
@@ -83,11 +83,19 @@ export const MATERIAL_NODE_TYPES = [
     'material/basic',
     'material/physical',
     'material/phong',
-];
+] as const;
 
-export const materialNodes: NodeDef[] = [
+export const materialNodes = [
     meshStandardMaterial,
     meshBasicMaterial,
     meshPhysicalMaterial,
     meshPhongMaterial,
+] as const;
+
+// Type checks
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _materialChecks: readonly BaseNodeDef[] = [
+    meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial
 ];
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _materialNodesCheck: readonly BaseNodeDef[] = materialNodes;

@@ -2,10 +2,11 @@
 import { describe, it, expect } from 'vitest';
 import { compileGraph } from './compiler';
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData } from '@/components/TSLNode';
+import { TSLNodeData } from '@/lib/types';
 // We need to register nodes to test compilation properly
 import { registry } from './registry';
 import { NodeDef } from './types';
+import { NodeType } from '@/lib/types';
 
 // Mock registry data
 const mockDefs: NodeDef[] = [
@@ -25,9 +26,9 @@ const mockDefs: NodeDef[] = [
         inputs: { colorNode: { type: 'color', default: '#ffffff', label: 'Color' } }
     },
     {
-        type: 'input/float',
+        type: 'const/float',
         label: 'Float',
-        category: 'Input',
+        category: 'Constants',
         tsl: 'float',
         pure: true,
         inputs: {},
@@ -44,7 +45,7 @@ const createNode = (id: string, type: string, data: Partial<TSLNodeData> = {}): 
     id,
     position: { x: 0, y: 0 },
     data: {
-        type,
+        type: type as NodeType,
         label: id,
         values: {},
         connected: {},
@@ -68,7 +69,7 @@ describe('compileGraph', () => {
     it('should compile math nodes connected to material', () => {
         // float -> add -> material
         const nodes = [
-            createNode('f1', 'input/float', { values: { value: 0.5 } }), // Wait, pure nodes might not use values here in this mock setup unless inputs defined.
+            createNode('f1', 'const/float', { values: { value: 0.5 } }), // Wait, pure nodes might not use values here in this mock setup unless inputs defined.
             // Actually 'input/float' usually has an input? 
             // In the real app, 'float' function takes a value. 
             // In my mock above, 'input/float' has no inputs. Let's fix mock for float to accept value or just be pure.

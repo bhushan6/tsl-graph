@@ -1,6 +1,6 @@
 import { Node as FlowNode, Edge } from '@xyflow/react';
 import * as THREE from 'three/webgpu';
-import { TSLNodeData } from '@/components/TSLNode';
+import { TSLNodeData } from '@/lib/types';
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 
@@ -221,7 +221,7 @@ export function buildTSLMaterial(
     edges: Edge[]
 ): THREE.Material {
     // Find the material node
-    const materialNode = nodes.find(n => MATERIAL_NODE_TYPES.includes(n.data.type));
+    const materialNode = nodes.find(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
 
     if (!materialNode) {
         // No material node - use default material
@@ -235,7 +235,7 @@ export function buildTSLMaterial(
     }
 
     // Sort and evaluate all non-material nodes
-    const otherNodes = nodes.filter(n => !MATERIAL_NODE_TYPES.includes(n.data.type));
+    const otherNodes = nodes.filter(n => !(MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
     const sorted = topologicalSort(otherNodes, edges);
     const evaluatedNodes = new Map<string, TSLNode>();
 

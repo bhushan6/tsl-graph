@@ -10,8 +10,8 @@ import {
     addEdge,
     type Connection,
 } from '@xyflow/react';
-import { TSLNodeData } from '@/components/TSLNode';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { TSLNodeData, NodeType } from '@/lib/types';
 
 // Graph save format
 export interface GraphData {
@@ -32,7 +32,7 @@ interface EditorState {
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
 
-    addNode: (type: string, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
+    addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: unknown) => void;
     deleteNode: (nodeId: string) => void;
     setSelectedNode: (nodeId: string | null) => void;
@@ -82,12 +82,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     addNode: (type, position, data = {}) => {
-        const isMaterialNode = MATERIAL_NODE_TYPES.includes(type);
+        const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
 
         // If trying to add a material node, check if one already exists
         if (isMaterialNode) {
             const existingMaterial = get().nodes.find(n =>
-                MATERIAL_NODE_TYPES.includes(n.data.type)
+                (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
             );
 
             if (existingMaterial) {
@@ -125,7 +125,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         ...node,
                         data: {
                             ...node.data,
-                            values: { ...node.data.values, [key]: value },
+                            values: { ...node.data.values, [key]: value as import('@/lib/nodes/definitions').TSLValueType },
                         },
                     }
                     : node
@@ -201,10 +201,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     hasMaterialNode: () => {
-        return get().nodes.some(n => MATERIAL_NODE_TYPES.includes(n.data.type));
+        return get().nodes.some(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
     },
 
     getMaterialNode: () => {
-        return get().nodes.find(n => MATERIAL_NODE_TYPES.includes(n.data.type));
+        return get().nodes.find(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
     },
 }));
