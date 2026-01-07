@@ -163,3 +163,27 @@
   stroke: var(--primary) !important;
   stroke-width: 2px;
 }
+
+/* React Colorful overrides for inline node picker */
+.react-colorful {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.react-colorful__saturation {
+  border-radius: 6px 6px 0 0 !important;
+}
+
+.react-colorful__hue {
+  height: 14px !important;
+  border-radius: 0 0 6px 6px !important;
+}
+
+.react-colorful__saturation-pointer,
+.react-colorful__hue-pointer {
+  width: 16px !important;
+  height: 16px !important;
+  border: 2px solid white !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+

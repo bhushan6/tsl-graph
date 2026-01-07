@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useRef, useCallback } from 'react';
+import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Position, useEdges } from '@xyflow/react';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
@@ -8,11 +8,34 @@ import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { Input } from '@/components/ui/input';
 import { useTheme } from 'next-themes';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
+import { HexColorPicker } from 'react-colorful';
+
+// Debounce hook for input values
+function useDebouncedCallback<T extends (...args: unknown[]) => void>(
+    callback: T,
+    delay: number
+): T {
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const callbackRef = useRef(callback);
+    callbackRef.current = callback;
+
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+    }, []);
+
+    return useMemo(
+        () =>
+            ((...args: unknown[]) => {
+                if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                timeoutRef.current = setTimeout(() => {
+                    callbackRef.current(...args);
+                }, delay);
+            }) as T,
+        [delay]
+    );
+}
 
 // Node data structure
 export interface TSLNodeData extends Record<string, unknown> {
@@ -168,7 +191,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     isDark={isDark}
                                 />
                                 {!connectedInputs.has(row.input[0]) && (
-                                    <div className="flex-1 mx-2">
+                                    <div className="flex-1 mx-2 no-drag">
                                         <NodeInput
                                             type={row.input[1].type}
                                             value={data.values?.[row.input[0]] ?? row.input[1].default}
@@ -242,85 +265,75 @@ function NodeInput({ type, value, onChange }: NodeInputProps) {
 }
 
 function ColorInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+    const [showPicker, setShowPicker] = useState(false);
+    const [localColor, setLocalColor] = useState(value);
+    const debouncedOnChange = useDebouncedCallback(onChange, 500);
+
+    // Sync local state with prop when value changes externally
+    useEffect(() => {
+        setLocalColor(value);
+    }, [value]);
+
+    const handleColorChange = useCallback((newColor: string) => {
+        setLocalColor(newColor);
+        debouncedOnChange(newColor);
+    }, [debouncedOnChange]);
+
     return (
-        <Popover>
-            <PopoverTrigger asChild>
+        <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
                 <button
-                    className="w-6 h-5 rounded border border-gray-300 dark:border-white/20 cursor-pointer shadow-sm hover:shadow transition-shadow focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    style={{ backgroundColor: value }}
+                    className="w-6 h-6 rounded-md border border-gray-300 dark:border-white/20 cursor-pointer shadow-sm hover:shadow transition-shadow focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    style={{ backgroundColor: localColor }}
+                    onClick={() => setShowPicker(!showPicker)}
                 />
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-3" align="start" side="bottom">
-                <div className="flex flex-col gap-2">
-                    <input
-                        type="color"
-                        value={value}
-                        onChange={(e) => onChange(e.target.value)}
-                        className="w-32 h-24 cursor-pointer border-0 p-0 rounded-md"
-                    />
-                    <Input
-                        type="text"
-                        value={value}
-                        onChange={(e) => onChange(e.target.value)}
-                        className="h-7 text-xs font-mono uppercase"
-                        maxLength={7}
+                <Input
+                    type="text"
+                    value={localColor}
+                    onChange={(e) => handleColorChange(e.target.value)}
+                    className="h-6 w-16 text-[10px] font-mono uppercase px-1.5"
+                    maxLength={7}
+                />
+            </div>
+            {showPicker && (
+                <div
+                    className="nodrag nowheel relative z-50"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                >
+                    <HexColorPicker
+                        color={localColor}
+                        onChange={handleColorChange}
+                        style={{ width: '100%', height: '120px' }}
                     />
                 </div>
-            </PopoverContent>
-        </Popover>
+            )}
+        </div>
     );
 }
 
 function NumberInput({ value, onChange, step }: { value: number; onChange: (value: unknown) => void; step: number }) {
-    const [isDragging, setIsDragging] = useState(false);
-    const dragStartRef = useRef({ x: 0, value: 0 });
-    const inputRef = useRef<HTMLInputElement>(null);
+    const [localValue, setLocalValue] = useState(value);
+    const debouncedOnChange = useDebouncedCallback(onChange, 500);
 
-    const handleMouseDown = useCallback(
-        (e: React.MouseEvent) => {
-            if (e.target === inputRef.current) return;
-            setIsDragging(true);
-            dragStartRef.current = { x: e.clientX, value };
+    // Sync local state with prop when value changes externally
+    useEffect(() => {
+        setLocalValue(value);
+    }, [value]);
 
-            const handleMouseMove = (moveEvent: MouseEvent) => {
-                const delta = moveEvent.clientX - dragStartRef.current.x;
-                const sensitivity = moveEvent.shiftKey ? 0.01 : 0.1;
-                const newValue = dragStartRef.current.value + delta * sensitivity * step;
-                onChange(Math.round(newValue / step) * step);
-            };
-
-            const handleMouseUp = () => {
-                setIsDragging(false);
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            };
-
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-        },
-        [value, onChange, step]
-    );
+    const handleValueChange = useCallback((newValue: number) => {
+        setLocalValue(newValue);
+        debouncedOnChange(newValue);
+    }, [debouncedOnChange]);
 
     return (
-        <div
-            className={cn(
-                'flex items-center px-2 py-0.5 rounded cursor-ew-resize transition-all duration-150',
-                'bg-gray-100 border border-gray-200 hover:border-gray-300',
-                'dark:bg-white/5 dark:border-white/10 dark:hover:border-white/20',
-                isDragging && 'border-blue-500 ring-1 ring-blue-500/30'
-            )}
-            onMouseDown={handleMouseDown}
-            onDoubleClick={() => inputRef.current?.select()}
-        >
-            <input
-                ref={inputRef}
-                type="number"
-                value={value}
-                onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-                step={step}
-                className="h-5 w-12 px-0 py-0 text-[11px] text-right text-gray-700 dark:text-white/80 bg-transparent border-0 outline-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-        </div>
+        <Input
+            type="number"
+            value={localValue}
+            onChange={(e) => handleValueChange(parseFloat(e.target.value) || 0)}
+            step={step}
+            className="nodrag h-6 w-full px-2 py-0 text-[11px] text-right bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 rounded transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
     );
 }
 
