@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three/webgpu';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { useEditorStore } from '@/store/editor';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,7 @@ export function Preview() {
     const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const controlsRef = useRef<OrbitControls | null>(null);
     const meshRef = useRef<THREE.Mesh | null>(null);
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
@@ -97,18 +99,20 @@ export function Preview() {
             const gridHelper = new THREE.GridHelper(10, 10, 0x333333, 0x333333);
             scene.add(gridHelper);
 
+            // Orbit Controls
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 0.75, 0);
+            controls.update();
+            controlsRef.current = controls;
+
             setIsReady(true);
 
             // Animation loop
-            let time = 0;
             const animate = () => {
                 frameIdRef.current = requestAnimationFrame(animate);
-                time += 0.01;
-
-                if (meshRef.current) {
-                    meshRef.current.rotation.y = time * 0.5;
-                }
-
+                controls.update();
                 renderer.render(scene, camera);
             };
             animate();
@@ -132,6 +136,9 @@ export function Preview() {
         return () => {
             cancelAnimationFrame(frameIdRef.current);
             resizeObserver.disconnect();
+            if (controlsRef.current) {
+                controlsRef.current.dispose();
+            }
             if (rendererRef.current) {
                 rendererRef.current.dispose();
                 if (container.contains(rendererRef.current.domElement)) {
