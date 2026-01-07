@@ -179,28 +179,12 @@ export function Preview() {
     return (
         <div
             className={cn(
-                'absolute bg-card border border-border rounded-lg shadow-lg overflow-hidden transition-all duration-200',
-                isExpanded
-                    ? 'top-4 right-4 bottom-20 w-96'
-                    : 'top-4 right-4 w-48 h-48'
+                'pointer-events-auto relative bg-card border border-border rounded-xl shadow-lg overflow-hidden transition-all duration-200',
+                isExpanded ? 'w-80 h-80' : 'w-48 h-48'
             )}
         >
-            {/* Controls */}
+            {/* Controls - Expand button on left */}
             <div className="absolute top-2 left-2 z-10 flex gap-1">
-                {meshOptions.map((opt) => (
-                    <Button
-                        key={opt.value}
-                        variant={currentMesh === opt.value ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 w-6 p-0 text-xs"
-                        onClick={() => setCurrentMesh(opt.value)}
-                    >
-                        {opt.label}
-                    </Button>
-                ))}
-            </div>
-
-            <div className="absolute top-2 right-2 z-10 flex gap-1">
                 <Button
                     variant="ghost"
                     size="sm"
@@ -213,6 +197,21 @@ export function Preview() {
                         <Maximize2 className="w-3 h-3" />
                     )}
                 </Button>
+            </div>
+
+            {/* Geometry selector on right */}
+            <div className="absolute top-2 right-2 z-10 flex gap-1">
+                {meshOptions.map((opt) => (
+                    <Button
+                        key={opt.value}
+                        variant={currentMesh === opt.value ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="h-6 w-6 p-0 text-xs"
+                        onClick={() => setCurrentMesh(opt.value)}
+                    >
+                        {opt.label}
+                    </Button>
+                ))}
             </div>
 
             {/* Error display */}

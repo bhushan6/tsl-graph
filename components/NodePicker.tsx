@@ -2,29 +2,18 @@
 
 import { useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarGroupLabel,
-    SidebarGroupContent,
-    SidebarMenu,
-    SidebarMenuItem,
-    SidebarMenuButton,
-    SidebarHeader,
-} from '@/components/ui/sidebar';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
+import { cn } from '@/lib/utils';
 
 export function NodePicker() {
     const addNode = useEditorStore((s) => s.addNode);
-    const { screenToFlowPosition, getViewport } = useReactFlow();
+    const { screenToFlowPosition } = useReactFlow();
     const nodesByCategory = registry.byCategory();
 
     const handleAddNode = useCallback(
         (type: string) => {
             // Add node at center of current viewport
-            const viewport = getViewport();
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
 
@@ -39,35 +28,42 @@ export function NodePicker() {
 
             addNode(type, position);
         },
-        [addNode, screenToFlowPosition, getViewport]
+        [addNode, screenToFlowPosition]
     );
 
     return (
-        <Sidebar collapsible="none" className="border-r">
-            <SidebarHeader className="border-b px-4 py-3">
+        <div className="pointer-events-auto nowheel bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-lg w-48 max-h-[calc(100vh-8rem)] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-3 py-2 border-b border-border shrink-0">
                 <h2 className="text-sm font-semibold">Nodes</h2>
-            </SidebarHeader>
-            <SidebarContent>
-                {Object.entries(nodesByCategory).map(([category, nodes]) => (
-                    <SidebarGroup key={category}>
-                        <SidebarGroupLabel>{category}</SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-2">
+                <div className="flex flex-col gap-3">
+                    {Object.entries(nodesByCategory).map(([category, nodes]) => (
+                        <div key={category}>
+                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 mb-1">
+                                {category}
+                            </div>
+                            <div className="flex flex-col gap-0.5">
                                 {nodes.map((node) => (
-                                    <SidebarMenuItem key={node.type}>
-                                        <SidebarMenuButton
-                                            onClick={() => handleAddNode(node.type)}
-                                            tooltip={node.label}
-                                        >
-                                            <span>{node.label}</span>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
+                                    <button
+                                        key={node.type}
+                                        onClick={() => handleAddNode(node.type)}
+                                        className={cn(
+                                            'text-left px-2 py-1.5 text-sm rounded-md transition-colors',
+                                            'hover:bg-muted text-foreground/80 hover:text-foreground'
+                                        )}
+                                    >
+                                        {node.label}
+                                    </button>
                                 ))}
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                ))}
-            </SidebarContent>
-        </Sidebar>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
     );
 }

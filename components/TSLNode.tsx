@@ -1,41 +1,13 @@
 'use client';
 
-import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { Position, useEdges } from '@xyflow/react';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
-import { Input } from '@/components/ui/input';
 import { useTheme } from 'next-themes';
-import { HexColorPicker } from 'react-colorful';
 
-// Debounce hook for input values
-function useDebouncedCallback<T extends (...args: unknown[]) => void>(
-    callback: T,
-    delay: number
-): T {
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const callbackRef = useRef(callback);
-    callbackRef.current = callback;
-
-    useEffect(() => {
-        return () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        };
-    }, []);
-
-    return useMemo(
-        () =>
-            ((...args: unknown[]) => {
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-                timeoutRef.current = setTimeout(() => {
-                    callbackRef.current(...args);
-                }, delay);
-            }) as T,
-        [delay]
-    );
-}
 
 // Node data structure
 export interface TSLNodeData extends Record<string, unknown> {
@@ -178,7 +150,9 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                     <div key={row.key} className="flex items-center justify-between min-h-[28px]">
                         {/* Input */}
                         {row.input ? (
-                            <div className="flex items-center flex-1 min-w-0">
+                            <div className="flex items-center flex-1 min-w-0" style={{
+                                // border: '1px solid red'
+                            }}>
                                 <TSLHandle
                                     id={row.input[0]}
                                     type="target"
@@ -191,11 +165,12 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     isDark={isDark}
                                 />
                                 {!connectedInputs.has(row.input[0]) && (
-                                    <div className="flex-1 mx-2 no-drag">
-                                        <NodeInput
+                                    <div className="flex-1 mx-2" style={{
+                                        // border: '1px solid red'
+                                    }}>
+                                        <ValuePreview
                                             type={row.input[1].type}
                                             value={data.values?.[row.input[0]] ?? row.input[1].default}
-                                            onChange={(v) => updateNodeValue(id, row.input![0], v)}
                                         />
                                     </div>
                                 )}
@@ -244,97 +219,41 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     );
 }
 
-// Node Input Components
-interface NodeInputProps {
+// Value Preview Components - Read-only previews for node values
+interface ValuePreviewProps {
     type: string;
     value: unknown;
-    onChange: (value: unknown) => void;
 }
 
-function NodeInput({ type, value, onChange }: NodeInputProps) {
+function ValuePreview({ type, value }: ValuePreviewProps) {
     if (type === 'color') {
-        return <ColorInput value={String(value ?? '#ffffff')} onChange={onChange} />;
+        return <ColorPreview value={String(value ?? '#ffffff')} />;
     }
-    return (
-        <NumberInput
-            value={Number(value ?? 0)}
-            onChange={onChange}
-            step={type === 'int' || type === 'uint' ? 1 : 0.1}
-        />
-    );
+    return <NumberPreview value={Number(value ?? 0)} />;
 }
 
-function ColorInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
-    const [showPicker, setShowPicker] = useState(false);
-    const [localColor, setLocalColor] = useState(value);
-    const debouncedOnChange = useDebouncedCallback(onChange, 500);
-
-    // Sync local state with prop when value changes externally
-    useEffect(() => {
-        setLocalColor(value);
-    }, [value]);
-
-    const handleColorChange = useCallback((newColor: string) => {
-        setLocalColor(newColor);
-        debouncedOnChange(newColor);
-    }, [debouncedOnChange]);
-
+function ColorPreview({ value }: { value: string }) {
     return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-                <button
-                    className="w-6 h-6 rounded-md border border-gray-300 dark:border-white/20 cursor-pointer shadow-sm hover:shadow transition-shadow focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    style={{ backgroundColor: localColor }}
-                    onClick={() => setShowPicker(!showPicker)}
-                />
-                <Input
-                    type="text"
-                    value={localColor}
-                    onChange={(e) => handleColorChange(e.target.value)}
-                    className="h-6 w-16 text-[10px] font-mono uppercase px-1.5"
-                    maxLength={7}
-                />
-            </div>
-            {showPicker && (
-                <div
-                    className="nodrag nowheel relative z-50"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                >
-                    <HexColorPicker
-                        color={localColor}
-                        onChange={handleColorChange}
-                        style={{ width: '100%', height: '120px' }}
-                    />
-                </div>
-            )}
+        <div
+            className="h-4 flex-1 rounded-sm border border-gray-300 dark:border-white/20 shadow-sm flex items-center justify-center text-[8px]"
+            style={{ backgroundColor: value }}
+            title={value}
+        >
+            <span className="!mix-blend-difference font-semibold">
+                {value}
+            </span>
         </div>
     );
 }
 
-function NumberInput({ value, onChange, step }: { value: number; onChange: (value: unknown) => void; step: number }) {
-    const [localValue, setLocalValue] = useState(value);
-    const debouncedOnChange = useDebouncedCallback(onChange, 500);
-
-    // Sync local state with prop when value changes externally
-    useEffect(() => {
-        setLocalValue(value);
-    }, [value]);
-
-    const handleValueChange = useCallback((newValue: number) => {
-        setLocalValue(newValue);
-        debouncedOnChange(newValue);
-    }, [debouncedOnChange]);
-
+function NumberPreview({ value }: { value: number }) {
     return (
-        <Input
-            type="number"
-            value={localValue}
-            onChange={(e) => handleValueChange(parseFloat(e.target.value) || 0)}
-            step={step}
-            className="nodrag h-6 w-full px-2 py-0 text-[11px] text-right bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 rounded transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
+        //vertically center the text
+        <span className="text-[11px] text-gray-600 dark:text-white/70 font-mono tabular-nums flex items-center">
+            {Number.isInteger(value) ? value : value.toFixed(2)}
+        </span>
     );
 }
 
 export const TSLNode = memo(TSLNodeComponent);
+

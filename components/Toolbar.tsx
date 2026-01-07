@@ -1,12 +1,16 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { Save, Upload, Trash2, Download } from 'lucide-react';
+import { Download, Upload, Trash2, Code } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useEditorStore } from '@/store/editor';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
-export function Toolbar() {
+interface ToolbarProps {
+    onOpenCodePanel?: () => void;
+}
+
+export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { saveToJSON, loadFromJSON, clearGraph, nodes } = useEditorStore();
 
@@ -55,7 +59,7 @@ export function Toolbar() {
     }, [clearGraph, nodes.length]);
 
     return (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-card border border-border rounded-lg p-1 shadow-lg">
+        <div className="pointer-events-auto flex items-center gap-1 bg-card/95 backdrop-blur-sm border border-border rounded-xl p-1.5 shadow-lg">
             <Button
                 variant="ghost"
                 size="sm"
@@ -93,6 +97,23 @@ export function Toolbar() {
             </Button>
 
             <div className="w-px h-4 bg-border" />
+
+            {onOpenCodePanel && (
+                <>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onOpenCodePanel}
+                        className="h-8 px-3 gap-2"
+                        title="View generated code"
+                    >
+                        <Code className="w-4 h-4" />
+                        <span className="text-xs">Code</span>
+                    </Button>
+
+                    <div className="w-px h-4 bg-border" />
+                </>
+            )}
 
             <ThemeToggle />
 

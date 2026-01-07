@@ -26,6 +26,7 @@ const STORAGE_KEY = 'tsl-editor-graph';
 interface EditorState {
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
+    selectedNodeId: string | null;
 
     onNodesChange: OnNodesChange<Node<TSLNodeData>>;
     onEdgesChange: OnEdgesChange;
@@ -34,6 +35,8 @@ interface EditorState {
     addNode: (type: string, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: unknown) => void;
     deleteNode: (nodeId: string) => void;
+    setSelectedNode: (nodeId: string | null) => void;
+    getSelectedNode: () => Node<TSLNodeData> | undefined;
 
     // Save/Load
     saveToJSON: () => string;
@@ -50,6 +53,7 @@ interface EditorState {
 export const useEditorStore = create<EditorState>((set, get) => ({
     nodes: [],
     edges: [],
+    selectedNodeId: null,
 
     onNodesChange: (changes) => {
         set({
@@ -65,13 +69,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     onConnect: (connection: Connection) => {
         const { edges } = get();
-        
+
         // Remove any existing connection to the same target handle
         // (inputs can only have one connection, so replace the old one)
         const filteredEdges = edges.filter(
             (edge) => !(edge.target === connection.target && edge.targetHandle === connection.targetHandle)
         );
-        
+
         set({
             edges: addEdge(connection, filteredEdges),
         });
@@ -135,7 +139,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: get().edges.filter(
                 (edge) => edge.source !== nodeId && edge.target !== nodeId
             ),
+            // Clear selection if the deleted node was selected
+            selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
         });
+    },
+
+    setSelectedNode: (nodeId) => {
+        set({ selectedNodeId: nodeId });
+    },
+
+    getSelectedNode: () => {
+        const { nodes, selectedNodeId } = get();
+        return nodes.find((n) => n.id === selectedNodeId);
     },
 
     // Save graph to JSON string
