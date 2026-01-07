@@ -95,8 +95,9 @@ function getInputValue(
     const value = node.data.values?.[inputKey] ?? inputDef.default;
 
     if (inputDef.type === 'color') {
+        // Return just the quoted hex string - the TSL function wrapper is added by the caller
         const hex = String(value ?? '#ffffff');
-        return `color("${hex}")`;
+        return `"${hex}"`;
     }
 
     if (inputDef.type === 'bool') {
