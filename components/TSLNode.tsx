@@ -154,7 +154,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     isDark={isDark}
                                     isMaterialNode={data.type.startsWith('material')}
                                 />
-                                {!connectedInputs.has(row.input[0]) && (
+                                {!connectedInputs.has(row.input[0]) && !row.input[1].connectionOnly && (
                                     <div className="flex-1 mx-2" style={{
                                         // border: '1px solid red'
                                     }}>
@@ -164,6 +164,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                         />
                                     </div>
                                 )}
+
                             </div>
                         ) : (
                             <div className="flex-1" />
@@ -216,30 +217,47 @@ interface ValuePreviewProps {
 }
 
 function ValuePreview({ type, value }: ValuePreviewProps) {
-    if (type === 'color') {
-        return <ColorPreview value={String(value ?? '#ffffff')} />;
+    // If type is explicitly one of these, use it.
+    // If 'any', try to infer from value.
+    const isVector = type.startsWith('vec') || (type === 'any' && Array.isArray(value));
+    const isBool = type === 'bool' || (type === 'any' && typeof value === 'boolean');
+    const isColor = type === 'color'; // Value inference for color is harder (hex string vs string), assume any defaults to float/vec unless explicit hex?
+
+    // Check if value looks like a color string if type is any?
+    const looksLikeColor = type === 'any' && typeof value === 'string' && value.startsWith('#');
+
+    if (isColor || looksLikeColor) {
+        return <ColorInputPreview value={String(value ?? '#ffffff')} />;
+    }
+    if (isBool) {
+        return <span className="text-[10px] text-gray-500 font-mono">{value ? 'true' : 'false'}</span>;
+    }
+    if (isVector) {
+        const arr = Array.isArray(value) ? value : [Number(value ?? 0)];
+        return (
+            <span className="text-[9px] text-gray-500 font-mono truncate max-w-[60px]">
+                ({arr.map(n => typeof n === 'number' ? n.toFixed(1) : n).join(',')})
+            </span>
+        );
     }
     return <NumberPreview value={Number(value ?? 0)} />;
 }
 
-function ColorPreview({ value }: { value: string }) {
+function ColorInputPreview({ value }: { value: string }) {
     return (
         <div
-            className="h-4 flex-1 rounded-sm shadow-sm flex items-center justify-center text-[8px]"
+            className="h-4 w-4 rounded-sm shadow-sm border border-gray-200 dark:border-white/10"
             style={{ backgroundColor: value }}
             title={value}
-        >
-            <span className="!mix-blend-difference font-semibold">
-                {value}
-            </span>
-        </div>
+        />
     );
 }
+
 
 function NumberPreview({ value }: { value: number }) {
     return (
         //vertically center the text
-        <span className="text-[11px] text-gray-600 dark:text-white/70 font-mono tabular-nums flex items-center">
+        <span className="text-[9px] text-gray-500 font-mono tabular-nums flex items-center">
             {Number.isInteger(value) ? value : value.toFixed(2)}
         </span>
     );

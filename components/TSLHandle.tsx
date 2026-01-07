@@ -22,11 +22,11 @@ export const TYPE_COLORS: Partial<Record<TSLType, string>> = {
     bvec2: '#f97316',
     bvec3: '#f97316',
     bvec4: '#f97316',
-    mat2: '#ec4899',    // pink
     mat3: '#ec4899',
     mat4: '#ec4899',
     color: '#f59e0b',   // amber
     sampler2D: '#a855f7', // purple
+    any: '#a1a1aa',     // zinc-400 (gray)
 };
 
 export const DEFAULT_HANDLE_COLOR = '#71717a';

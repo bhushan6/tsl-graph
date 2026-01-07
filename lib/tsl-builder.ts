@@ -145,7 +145,7 @@ function getInputValue(
     inputKey: string,
     edges: Edge[],
     evaluatedNodes: Map<string, TSLNode>,
-    inputDef: { type: string; default?: number | number[] | string }
+    inputDef: { type: string; default?: number | readonly number[] | string }
 ): TSLNode | number | null {
     // Check for connection
     const edge = edges.find(e => e.target === node.id && e.targetHandle === inputKey);
@@ -169,6 +169,16 @@ function getInputValue(
     if (inputDef.type === 'color') {
         // Return raw hex string - the TSL function will handle wrapping
         return String(value ?? '#ffffff');
+    }
+
+    // Handle array values (vectors)
+    if (Array.isArray(value)) {
+        const nums = value.map(v => Number(v ?? 0));
+        if (nums.length === 2) return vec2(...nums);
+        if (nums.length === 3) return vec3(...nums);
+        if (nums.length === 4) return vec4(...nums);
+        // Fallback for other sizes
+        return vec3(...nums.slice(0, 3));
     }
 
     // For numeric types, return the number (TSL will handle conversion)

@@ -58,7 +58,9 @@ function PropertiesPanelContent() {
 
     const inputs = def.inputs ?? {};
     const inputKeys = Object.keys(inputs);
-    const editableInputs = inputKeys.filter((key) => !connectedInputs.has(key));
+    const editableInputs = inputKeys.filter((key) =>
+        !connectedInputs.has(key) && !inputs[key].connectionOnly
+    );
 
     return (
         <div className="flex flex-col h-full">
@@ -110,10 +112,31 @@ interface PropertyInputProps {
     onChange: (value: unknown) => void;
 }
 
+import { VectorInput } from './inputs/VectorInput';
+import { BooleanInput } from './inputs/BooleanInput';
+import { AnyInput } from './inputs/AnyInput';
+
 function PropertyInput({ type, value, onChange }: PropertyInputProps) {
+    if (type === 'any') {
+        return <AnyInput value={value} onChange={onChange} />;
+    }
     if (type === 'color') {
         return <ColorInput value={String(value ?? '#ffffff')} onChange={onChange} />;
     }
+    if (type === 'bool') {
+        return <BooleanInput value={value} onChange={onChange} />;
+    }
+    if (type === 'vec2') {
+        return <VectorInput size={2} value={value} onChange={onChange} labels={['X', 'Y']} />;
+    }
+    if (type === 'vec3') {
+        return <VectorInput size={3} value={value} onChange={onChange} labels={['X', 'Y', 'Z']} />;
+    }
+    if (type === 'vec4') {
+        return <VectorInput size={4} value={value} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} />;
+    }
+    // Also handle color swizzle or specific vector types if needed, but basic mapping covers most.
+
     return (
         <NumberInput
             value={Number(value ?? 0)}

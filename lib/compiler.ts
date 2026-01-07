@@ -42,7 +42,7 @@ function getInputValue(
     inputKey: string,
     edges: Edge[],
     compiledNodes: Map<string, CompiledNode>,
-    inputDef: { type: string; default?: number | number[] | string }
+    inputDef: { type: string; default?: number | readonly number[] | string }
 ): string {
     const edge = edges.find(e => e.target === node.id && e.targetHandle === inputKey);
 
@@ -64,6 +64,16 @@ function getInputValue(
 
     if (inputDef.type === 'bool') {
         return value ? 'true' : 'false';
+    }
+
+    // Handle array values (vectors)
+    if (Array.isArray(value)) {
+        const components = value.map(v => String(Number(v ?? 0)));
+        if (components.length === 2) return `vec2(${components.join(', ')})`;
+        if (components.length === 3) return `vec3(${components.join(', ')})`;
+        if (components.length === 4) return `vec4(${components.join(', ')})`;
+        // Fallback for unknown sizes
+        return `vec${components.length}(${components.join(', ')})`;
     }
 
     const num = Number(value ?? 0);
