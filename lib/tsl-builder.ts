@@ -205,8 +205,8 @@ function getInputValue(
 
     // Convert based on type
     if (inputDef.type === 'color') {
-        const hex = String(value ?? '#ffffff');
-        return color(hex);
+        // Return raw hex string - the TSL function will handle wrapping
+        return String(value ?? '#ffffff');
     }
 
     // For numeric types, return the number (TSL will handle conversion)

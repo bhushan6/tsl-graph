@@ -101,11 +101,11 @@ function EditorCanvas() {
                     }}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-                    <Controls />
-                    <MiniMap
+                    {/* <Controls /> */}
+                    {/* <MiniMap
                         className="!bg-card !border-border"
                         nodeColor="#525252"
-                    />
+                    /> */}
                 </ReactFlow>
             </div>
 
