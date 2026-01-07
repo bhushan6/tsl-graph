@@ -36,6 +36,7 @@ interface TSLHandleProps extends Omit<HandleProps, 'isConnectable'> {
     label: string;
     isConnected?: boolean;
     isDark?: boolean;
+    isMaterialNode?: boolean;
 }
 
 export function TSLHandle({
@@ -43,6 +44,7 @@ export function TSLHandle({
     label,
     isConnected = false,
     isDark = true,
+    isMaterialNode = false,
     ...props
 }: TSLHandleProps) {
     const handleColor = TYPE_COLORS[dataType] ?? DEFAULT_HANDLE_COLOR;
@@ -52,11 +54,6 @@ export function TSLHandle({
     const defaultBg = isConnected
         ? handleColor
         : (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)');
-
-    // Text color for icon
-    const textColor = isConnected
-        ? '#fff'
-        : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)');
 
     return (
         <div
@@ -88,10 +85,11 @@ export function TSLHandle({
 
             {/* Label */}
             <span className={cn(
-                'text-[11px] uppercase tracking-wider font-medium whitespace-nowrap transition-colors duration-150',
+                'text-[11px] uppercase tracking-wider font-medium whitespace-nowrap transition-colors duration-150 ',
                 isConnected
                     ? 'text-gray-700 dark:text-white/90'
-                    : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/90'
+                    : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/90',
+                isMaterialNode ? isOutput ? '' : 'min-w-[100px] max-w-[100px] whitespace-normal' : ''
             )}>
                 {label}
             </span>

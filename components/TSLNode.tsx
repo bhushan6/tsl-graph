@@ -151,9 +151,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     dataType={row.input[1].type}
                                     label={row.input[1].label}
                                     isConnected={connectedInputs.has(row.input[0])}
-                                    // isHovered={hoveredPort === row.input[0]}
-                                    // onHover={setHoveredPort}
                                     isDark={isDark}
+                                    isMaterialNode={data.type.startsWith('material')}
                                 />
                                 {!connectedInputs.has(row.input[0]) && (
                                     <div className="flex-1 mx-2" style={{
@@ -226,7 +225,7 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
 function ColorPreview({ value }: { value: string }) {
     return (
         <div
-            className="h-4 flex-1 rounded-sm border border-gray-300 dark:border-white/20 shadow-sm flex items-center justify-center text-[8px]"
+            className="h-4 flex-1 rounded-sm shadow-sm flex items-center justify-center text-[8px]"
             style={{ backgroundColor: value }}
             title={value}
         >
