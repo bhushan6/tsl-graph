@@ -221,7 +221,19 @@ export function getRequiredImports(nodes: Node<TSLNodeData>[]): string[] {
         if (def) {
             imports.add(def.tsl);
         }
+
+        // Check node values for arrays (vectors) to add vec imports
+        if (node.data.values) {
+            for (const value of Object.values(node.data.values)) {
+                if (Array.isArray(value)) {
+                    if (value.length === 2) imports.add('vec2');
+                    else if (value.length === 3) imports.add('vec3');
+                    else if (value.length === 4) imports.add('vec4');
+                }
+            }
+        }
     }
 
     return Array.from(imports).sort();
 }
+

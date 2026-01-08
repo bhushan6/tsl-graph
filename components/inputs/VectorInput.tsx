@@ -4,10 +4,6 @@ import { memo, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 
-// Reusing the debounce hook logic locally or importing if available.
-// Since it was inline in PropertiesPanel, I'll copy a simplified version here or assume I should move it to a shared hook.
-// For now, I'll implement a simple local debounce for the inputs.
-
 function useDebouncedCallback<T extends (...args: any[]) => void>(
     callback: T,
     delay: number
@@ -35,15 +31,18 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(
 }
 
 interface VectorInputProps {
-    value: unknown; // Expecting number[] or number (if size 1, though usually vec is >1)
+    value: unknown; // Expecting number[] or number
     onChange: (value: number[]) => void;
     size: 2 | 3 | 4;
     labels?: string[]; // Defaults to ['X', 'Y', 'Z', 'W']
 }
 
+const defaultLabels = ['X', 'Y', 'Z', 'W'];
+
 function VectorInputComponent({ value, onChange, size, labels }: VectorInputProps) {
     // Ensure value is an array of correct size
-    const safeValue = useMemo(() => {
+
+    const getSafeValue = (): number[] => {
         if (Array.isArray(value)) {
             // Pad or truncate
             const arr = [...value];
@@ -53,13 +52,14 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
         // If single number or undefined/null
         const num = Number(value ?? 0);
         return Array(size).fill(num);
-    }, [value, size]);
+    };
+
+    const safeValue = getSafeValue();
 
     // Keep a ref to track the latest value for use in handleChange
     const valueRef = useRef(safeValue);
     valueRef.current = safeValue;
 
-    const defaultLabels = ['X', 'Y', 'Z', 'W'];
     const currentLabels = labels || defaultLabels.slice(0, size);
 
     const handleChange = useCallback((index: number, newVal: number) => {
@@ -86,7 +86,6 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
     );
 }
 
-
 function NumberInput({ value, onChange, className }: { value: number; onChange: (val: number) => void; className?: string }) {
     const [localValue, setLocalValue] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
@@ -94,21 +93,6 @@ function NumberInput({ value, onChange, className }: { value: number; onChange: 
     useEffect(() => {
         setLocalValue(value);
     }, [value]);
-
-    const handleChange = useCallback((valStr: string) => {
-        const val = parseFloat(valStr);
-        // Allow typing intermediate states like "-", "."
-        // But for state we usually store number.
-        // For simple robust input:
-        if (!isNaN(val)) {
-            setLocalValue(val);
-            debouncedOnChange(val);
-        } else if (valStr === '' || valStr === '-') {
-            // Handle empty or negative sign as 0 or keep old?
-            // Here we might need a string state to handle typing properly.
-            // For simplicity, let's just assume valid number or revert.
-        }
-    }, [debouncedOnChange]);
 
     return (
         <Input

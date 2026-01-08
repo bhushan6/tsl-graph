@@ -1,15 +1,11 @@
 'use client';
 
-import { memo, useState, useEffect, useCallback } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { VectorInput } from './VectorInput';
 import { BooleanInput } from './BooleanInput';
 import { HexColorPicker } from 'react-colorful';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { ChevronDown } from 'lucide-react';
 
 interface AnyInputProps {
     value: unknown;
@@ -18,7 +14,7 @@ interface AnyInputProps {
 
 type InputType = 'float' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'bool';
 
-function inferType(value: unknown): InputType {
+export function inferType(value: unknown): InputType {
     if (typeof value === 'boolean') return 'bool';
     if (typeof value === 'string' && value.startsWith('#')) return 'color';
     if (Array.isArray(value)) {
@@ -30,28 +26,93 @@ function inferType(value: unknown): InputType {
     return 'float';
 }
 
-function convertValue(oldValue: unknown, newType: InputType): unknown {
+/**
+ * Parse a hex color string to RGB array [0-1 normalized]
+ */
+export function hexToRgb(hex: string): [number, number, number] {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (result) {
+        return [
+            parseInt(result[1], 16) / 255,
+            parseInt(result[2], 16) / 255,
+            parseInt(result[3], 16) / 255
+        ];
+    }
+    return [1, 1, 1]; // Default white
+}
+
+/**
+ * Convert RGB array [0-1 normalized] to hex string
+ */
+export function rgbToHex(r: number, g: number, b: number): string {
+    const toHex = (v: number) => {
+        const clamped = Math.max(0, Math.min(1, v));
+        const hex = Math.round(clamped * 255).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+    };
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/**
+ * Convert value from one type to another with proper component preservation.
+ * 
+ * Rules:
+ * - Vector → larger vector: Extend with 0s, except alpha (w) = 1 for vec4
+ * - Vector → smaller vector: Truncate (keep first N components)
+ * - Scalar → vector: Put scalar in first position, fill rest with 0 (alpha 1)
+ * - Vector → scalar: Take first component [x]
+ * - Color ↔ vectors: Convert RGB hex to/from normalized [0-1] values
+ */
+export function convertValue(oldValue: unknown, newType: InputType): unknown {
     const oldType = inferType(oldValue);
 
-    // Extract a base number to work with
-    let baseNum = 0;
-    if (oldType === 'float') baseNum = Number(oldValue);
-    else if (oldType === 'bool') baseNum = oldValue ? 1 : 0;
-    else if (oldType === 'color') baseNum = 0; // Keeping it simple for color -> num
-    else if (Array.isArray(oldValue)) baseNum = Number(oldValue[0] || 0);
+    // Same type - no conversion needed
+    if (oldType === newType) return oldValue;
 
-    // Helper for vector creation
-    const fillVec = (size: number) => Array(size).fill(baseNum);
+    // Get components as array (for any source type)
+    let components: number[] = [];
 
+    if (oldType === 'float') {
+        components = [Number(oldValue) || 0];
+    } else if (oldType === 'bool') {
+        components = [oldValue ? 1 : 0];
+    } else if (oldType === 'color') {
+        components = hexToRgb(String(oldValue));
+    } else if (Array.isArray(oldValue)) {
+        components = oldValue.map(v => Number(v) || 0);
+    }
+
+    // Convert to target type
     switch (newType) {
-        case 'float': return baseNum;
-        case 'bool': return Boolean(baseNum);
-        case 'vec2': return fillVec(2);
-        case 'vec3': return oldType === 'color' ? [1, 1, 1] : fillVec(3);
-        case 'vec4': return oldType === 'color' ? [1, 1, 1, 1] : fillVec(4);
-        case 'color': return '#ffffff';
+        case 'float':
+            return components[0] ?? 0;
+
+        case 'bool':
+            return components.some(v => v !== 0);
+
+        case 'vec2': {
+            const [x = 0, y = 0] = components;
+            return [x, y];
+        }
+
+        case 'vec3': {
+            const [x = 0, y = 0, z = 0] = components;
+            return [x, y, z];
+        }
+
+        case 'vec4': {
+            const [x = 0, y = 0, z = 0, w] = components;
+            // Default alpha to 1 if not present
+            return [x, y, z, w ?? 1];
+        }
+
+        case 'color': {
+            const [r = 1, g = 1, b = 1] = components;
+            return rgbToHex(r, g, b);
+        }
     }
 }
+
 
 function AnyInputComponent({ value, onChange }: AnyInputProps) {
     // Current active type state, defaults to inferred

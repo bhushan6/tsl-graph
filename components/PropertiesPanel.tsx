@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { HexColorPicker } from 'react-colorful';
 import { useEdges } from '@xyflow/react';
+import { VectorInput } from './inputs/VectorInput';
+import { BooleanInput } from './inputs/BooleanInput';
+import { AnyInput } from './inputs/AnyInput';
 
 // Debounce hook for input values
 function useDebouncedCallback<T extends (...args: unknown[]) => void>(
@@ -35,13 +38,25 @@ function useDebouncedCallback<T extends (...args: unknown[]) => void>(
     );
 }
 
+/**
+ * Hook to reactively get a node's input value from the store.
+ */
+function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: unknown) {
+    return useEditorStore((s) => {
+        const node = s.nodes.find((n) => n.id === nodeId);
+        return node?.data.values?.[inputKey] ?? defaultValue;
+    });
+}
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
-    const getSelectedNode = useEditorStore((s) => s.getSelectedNode);
+    // Subscribe to the selected node reactively
+    const node = useEditorStore((s) =>
+        s.nodes.find((n) => n.id === s.selectedNodeId)
+    );
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const edges = useEdges();
 
-    const node = getSelectedNode();
     const def = node ? registry.get(node.data.type) : null;
 
     if (!node || !def) {
@@ -84,19 +99,17 @@ function PropertiesPanelContent() {
                     <div className="flex flex-col gap-4">
                         {editableInputs.map((key) => {
                             const input = inputs[key];
-                            const value = node.data.values?.[key] ?? input.default;
 
                             return (
-                                <div key={key} className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                        {input.label}
-                                    </label>
-                                    <PropertyInput
-                                        type={input.type}
-                                        value={value}
-                                        onChange={(v) => updateNodeValue(node.id, key, v)}
-                                    />
-                                </div>
+                                <PropertyInputWrapper
+                                    key={key}
+                                    nodeId={node.id}
+                                    inputKey={key}
+                                    inputType={input.type}
+                                    inputLabel={input.label}
+                                    inputDefault={input.default}
+                                    onChange={(v) => updateNodeValue(node.id, key, v)}
+                                />
                             );
                         })}
                     </div>
@@ -106,15 +119,48 @@ function PropertiesPanelContent() {
     );
 }
 
+interface PropertyInputWrapperProps {
+    nodeId: string;
+    inputKey: string;
+    inputType: string;
+    inputLabel: string;
+    inputDefault: unknown;
+    onChange: (value: unknown) => void;
+}
+
+/**
+ * Wrapper that subscribes to the store for this specific input's value.
+ */
+function PropertyInputWrapper({
+    nodeId,
+    inputKey,
+    inputType,
+    inputLabel,
+    inputDefault,
+    onChange
+}: PropertyInputWrapperProps) {
+    // Subscribe reactively to this specific value
+    const value = useNodeInputValue(nodeId, inputKey, inputDefault);
+
+    return (
+        <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                {inputLabel}
+            </label>
+            <PropertyInput
+                type={inputType}
+                value={value}
+                onChange={onChange}
+            />
+        </div>
+    );
+}
+
 interface PropertyInputProps {
     type: string;
     value: unknown;
     onChange: (value: unknown) => void;
 }
-
-import { VectorInput } from './inputs/VectorInput';
-import { BooleanInput } from './inputs/BooleanInput';
-import { AnyInput } from './inputs/AnyInput';
 
 function PropertyInput({ type, value, onChange }: PropertyInputProps) {
     if (type === 'any') {
@@ -135,7 +181,6 @@ function PropertyInput({ type, value, onChange }: PropertyInputProps) {
     if (type === 'vec4') {
         return <VectorInput size={4} value={value} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} />;
     }
-    // Also handle color swizzle or specific vector types if needed, but basic mapping covers most.
 
     return (
         <NumberInput

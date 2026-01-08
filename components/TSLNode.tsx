@@ -155,7 +155,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     isMaterialNode={data.type.startsWith('material')}
                                 />
                                 {!connectedInputs.has(row.input[0]) && !row.input[1].connectionOnly && (
-                                    <div className="flex-1 mx-2" style={{
+                                    <div className="flex-1 mx-2 flex items-center" style={{
                                         // border: '1px solid red'
                                     }}>
                                         <ValuePreview
@@ -235,7 +235,7 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
     if (isVector) {
         const arr = Array.isArray(value) ? value : [Number(value ?? 0)];
         return (
-            <span className="text-[9px] text-gray-500 font-mono truncate max-w-[60px]">
+            <span className="text-[9px] text-gray-500 font-mono">
                 ({arr.map(n => typeof n === 'number' ? n.toFixed(1) : n).join(',')})
             </span>
         );
