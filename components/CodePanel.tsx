@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { Highlight, themes } from 'prism-react-renderer';
+import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
 import { compileGraph, getRequiredImports } from '@/lib/compiler';
 import { Button } from '@/components/ui/button';
@@ -19,8 +21,11 @@ interface CodePanelProps {
 
 export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const [copied, setCopied] = useState(false);
+    const { resolvedTheme } = useTheme();
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
+
+    const codeTheme = resolvedTheme === 'dark' ? themes.oneDark : themes.oneLight;
 
     const compiledCode = useMemo(() => {
         return compileGraph(nodes, edges);
@@ -77,10 +82,27 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                         </Button>
                     </div>
 
-                    {/* Code content */}
-                    <pre className="flex-1 px-4 py-3 overflow-auto text-sm font-mono text-foreground bg-muted/10">
-                        <code>{compiledCode}</code>
-                    </pre>
+                    {/* Code content with syntax highlighting */}
+                    <Highlight
+                        theme={codeTheme}
+                        code={compiledCode}
+                        language="tsx"
+                    >
+                        {({ style, tokens, getLineProps, getTokenProps }) => (
+                            <pre
+                                className="flex-1 px-4 py-3 overflow-auto text-sm font-mono !bg-transparent"
+                                style={{ ...style, background: 'transparent' }}
+                            >
+                                {tokens.map((line, i) => (
+                                    <div key={i} {...getLineProps({ line })}>
+                                        {line.map((token, key) => (
+                                            <span key={key} {...getTokenProps({ token })} />
+                                        ))}
+                                    </div>
+                                ))}
+                            </pre>
+                        )}
+                    </Highlight>
                 </div>
             </DialogContent>
         </Dialog>
