@@ -3,32 +3,7 @@
 import { memo, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-
-function useDebouncedCallback<T extends (...args: any[]) => void>(
-    callback: T,
-    delay: number
-): T {
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const callbackRef = useRef(callback);
-    callbackRef.current = callback;
-
-    useEffect(() => {
-        return () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        };
-    }, []);
-
-    return useMemo(
-        () =>
-            ((...args: any[]) => {
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-                timeoutRef.current = setTimeout(() => {
-                    callbackRef.current(...args);
-                }, delay);
-            }) as T,
-        [delay]
-    );
-}
+import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 
 interface VectorInputProps {
     value: unknown; // Expecting number[] or number

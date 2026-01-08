@@ -10,33 +10,7 @@ import { useEdges } from '@xyflow/react';
 import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
-
-// Debounce hook for input values
-function useDebouncedCallback<T extends (...args: unknown[]) => void>(
-    callback: T,
-    delay: number
-): T {
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const callbackRef = useRef(callback);
-    callbackRef.current = callback;
-
-    useEffect(() => {
-        return () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        };
-    }, []);
-
-    return useMemo(
-        () =>
-            ((...args: unknown[]) => {
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-                timeoutRef.current = setTimeout(() => {
-                    callbackRef.current(...args);
-                }, delay);
-            }) as T,
-        [delay]
-    );
-}
+import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 
 /**
  * Hook to reactively get a node's input value from the store.

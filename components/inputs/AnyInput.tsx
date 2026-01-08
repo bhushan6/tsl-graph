@@ -6,35 +6,7 @@ import { BooleanInput } from './BooleanInput';
 import { HexColorPicker } from 'react-colorful';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-// Debounce hook for input values
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function useDebouncedCallback<T extends (...args: any[]) => void>(
-    callback: T,
-    delay: number
-): T {
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const callbackRef = useRef(callback);
-    callbackRef.current = callback;
-
-    useEffect(() => {
-        return () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        };
-    }, []);
-
-    return useMemo(
-        () =>
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ((...args: any[]) => {
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-                timeoutRef.current = setTimeout(() => {
-                    callbackRef.current(...args);
-                }, delay);
-            }) as T,
-        [delay]
-    );
-}
+import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 
 interface AnyInputProps {
     value: unknown;
