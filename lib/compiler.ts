@@ -159,7 +159,8 @@ export function compileGraph(nodes: Node<TSLNodeData>[], edges: Edge[]): string 
         let code: string;
 
         if (def.pure && inputKeys.length === 0) {
-            code = def.tsl;
+            // Pure nodes are direct references, unless marked as callable
+            code = def.callable ? `${def.tsl}()` : def.tsl;
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {

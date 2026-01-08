@@ -74,6 +74,7 @@ export const geometryNodes = [
         outputs: vec2Outputs,
         tsl: 'uv',
         pure: true,
+        callable: true,  // uv() needs to be called as a function
     },
     // Time
     {

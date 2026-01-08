@@ -262,7 +262,8 @@ export function buildTSLMaterial(
         let result: TSLNode;
 
         if (pureValue !== undefined && def.pure) {
-            result = pureValue;
+            // Pure nodes are direct references, unless marked as callable
+            result = def.callable ? pureValue() : pureValue;
         } else if (tslFn) {
             const inputs = def.inputs ?? {};
             const inputKeys = Object.keys(inputs);

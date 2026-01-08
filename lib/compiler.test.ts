@@ -110,6 +110,7 @@ const mockDefs: NodeDef[] = [
         category: 'Geometry',
         tsl: 'uv',
         pure: true,
+        callable: true,
         outputs: { out: { type: 'vec2', label: 'XY' } }
     },
     {
@@ -256,10 +257,10 @@ describe('compileGraph', () => {
     });
 
     describe('Pure nodes (no inputs)', () => {
-        it('should compile UV node without parentheses', () => {
+        it('should compile UV node with parentheses', () => {
             const nodes = [createNode('uv1', 'geo/uv')];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('const _node0 = uv;');
+            expect(code).toContain('const _node0 = uv();');
         });
 
         it('should compile time node without parentheses', () => {

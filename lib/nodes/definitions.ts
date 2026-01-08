@@ -29,4 +29,5 @@ export interface BaseNodeDef {
     readonly outputs?: Record<string, Port>;
     readonly tsl: string;           // TSL function name
     readonly pure?: boolean;        // No inputs = source node
+    readonly callable?: boolean;    // If true, pure node needs to be called as function (e.g., uv())
 }
