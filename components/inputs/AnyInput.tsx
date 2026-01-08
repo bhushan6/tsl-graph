@@ -1,11 +1,40 @@
 'use client';
 
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { VectorInput } from './VectorInput';
 import { BooleanInput } from './BooleanInput';
 import { HexColorPicker } from 'react-colorful';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+// Debounce hook for input values
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function useDebouncedCallback<T extends (...args: any[]) => void>(
+    callback: T,
+    delay: number
+): T {
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const callbackRef = useRef(callback);
+    callbackRef.current = callback;
+
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+    }, []);
+
+    return useMemo(
+        () =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ((...args: any[]) => {
+                if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                timeoutRef.current = setTimeout(() => {
+                    callbackRef.current(...args);
+                }, delay);
+            }) as T,
+        [delay]
+    );
+}
 
 interface AnyInputProps {
     value: unknown;
@@ -159,12 +188,9 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
             case 'float':
             default:
                 return (
-                    <Input
-                        type="number"
+                    <DebouncedFloatInput
                         value={Number(value ?? 0)}
-                        onChange={e => onChange(parseFloat(e.target.value))}
-                        step={0.1}
-                        className="h-8 text-xs font-mono"
+                        onChange={onChange}
                     />
                 );
         }
@@ -197,14 +223,57 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
     );
 }
 
-// Simple color input for usage here
+// Debounced float input with local state
+function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v: unknown) => void }) {
+    const [localValue, setLocalValue] = useState(value);
+    const debouncedOnChange = useDebouncedCallback(onChange, 100);
+
+    useEffect(() => {
+        setLocalValue(value);
+    }, [value]);
+
+    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const parsed = parseFloat(e.target.value);
+        const newValue = isNaN(parsed) ? 0 : parsed;
+        setLocalValue(newValue);
+        debouncedOnChange(newValue);
+    }, [debouncedOnChange]);
+
+    return (
+        <Input
+            type="number"
+            value={localValue}
+            onChange={handleChange}
+            step={0.1}
+            className="h-8 text-xs font-mono"
+        />
+    );
+}
+
+// Simple color input for usage here with debouncing
 function SimpleColorInput({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+    const [localColor, setLocalColor] = useState(value);
+    const debouncedOnChange = useDebouncedCallback(onChange, 100);
+
+    useEffect(() => {
+        setLocalColor(value);
+    }, [value]);
+
+    const handleColorChange = useCallback((newColor: string) => {
+        setLocalColor(newColor);
+        debouncedOnChange(newColor);
+    }, [debouncedOnChange]);
+
     return (
         <div className="flex flex-col gap-2">
-            <HexColorPicker color={value} onChange={onChange} style={{ width: '100%', height: '100px' }} />
+            <HexColorPicker color={localColor} onChange={handleColorChange} style={{ width: '100%', height: '100px' }} />
             <div className="flex gap-2 items-center">
-                <div className="w-6 h-6 rounded border shrink-0" style={{ backgroundColor: value }} />
-                <Input value={value} onChange={e => onChange(e.target.value)} className="h-6 text-xs font-mono uppercase" />
+                <div className="w-6 h-6 rounded border shrink-0" style={{ backgroundColor: localColor }} />
+                <Input
+                    value={localColor}
+                    onChange={e => handleColorChange(e.target.value)}
+                    className="h-6 text-xs font-mono uppercase"
+                />
             </div>
         </div>
     );
