@@ -346,6 +346,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             e => selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target)
         );
 
+        // Filter out edges that connect selected nodes to non-selected nodes
+        const edgesToKeep = edges.filter(e => {
+            const sourceSelected = selectedNodeIds.includes(e.source);
+            const targetSelected = selectedNodeIds.includes(e.target);
+            // Keep internal edges (both selected) or completely external edges (neither selected)
+            return (sourceSelected && targetSelected) || (!sourceSelected && !targetSelected);
+        });
+
         // Calculate bounding box of selected nodes using React Flow helper
         const NODE_WIDTH = 180; // Approximate anchor node width
         const PADDING = 100; // Padding between anchor nodes and content
@@ -376,6 +384,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         set({
             subgraphs: { ...get().subgraphs, [id]: subgraph },
+            edges: edgesToKeep,
         });
 
         return id;
