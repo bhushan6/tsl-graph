@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { Download, Upload, Trash2, Code, Layers, Plus } from 'lucide-react';
+import { useCallback, useRef, useState, useEffect } from 'react';
+import { Download, Upload, Trash2, Code, Layers, Plus, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { registry } from '@/lib/registry';
+import { toast } from 'sonner';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
@@ -23,10 +26,13 @@ export function Toolbar({ onOpenCodePanel, onToggleNodePicker }: ToolbarProps) {
         enterSubgraphEditor,
         editorMode,
         exitSubgraphEditor,
+        editingSubgraphId,
+        subgraphs,
+        updateSubgraphDefinition,
     } = useEditorStore();
 
-    const [showSubgraphDialog, setShowSubgraphDialog] = useState(false);
-    const [subgraphName, setSubgraphName] = useState('');
+    // Ref to track subgraph name without causing re-renders
+    const subgraphNameRef = useRef<HTMLInputElement>(null);
 
     // Download as JSON file
     const handleSaveFile = useCallback(() => {
@@ -75,43 +81,78 @@ export function Toolbar({ onOpenCodePanel, onToggleNodePicker }: ToolbarProps) {
     // Create subgraph from selected nodes
     const handleCreateSubgraph = useCallback(() => {
         if (selectedNodeIds.length < 1) return;
-        setSubgraphName('');
-        setShowSubgraphDialog(true);
-    }, [selectedNodeIds.length]);
 
-    const handleConfirmSubgraph = useCallback(() => {
-        const name = subgraphName.trim() || 'Custom Node';
-        const subgraphId = createSubgraph(name, selectedNodeIds);
+        const defaultName = 'Subgraph';
+        const subgraphId = createSubgraph(defaultName, selectedNodeIds);
         if (subgraphId) {
             enterSubgraphEditor(subgraphId);
         }
-        setShowSubgraphDialog(false);
-    }, [subgraphName, selectedNodeIds, createSubgraph, enterSubgraphEditor]);
-
-    const handleCancelSubgraph = useCallback(() => {
-        setShowSubgraphDialog(false);
-    }, []);
+    }, [selectedNodeIds.length, createSubgraph, enterSubgraphEditor, selectedNodeIds]);
 
     // Exit subgraph mode
     const handleExitSubgraph = useCallback((save: boolean) => {
-        exitSubgraphEditor(save);
-    }, [exitSubgraphEditor]);
+        let nameOverride: string | undefined = undefined;
+
+        if (save && editingSubgraphId && subgraphNameRef.current) {
+            const rawName = subgraphNameRef.current.value;
+            const normalizedName = rawName.trim();
+
+            if (!normalizedName) {
+                toast.error('Subgraph name cannot be empty.');
+                return;
+            }
+
+            // Uniqueness Check
+            // 1. Check against built-in nodes
+            const registryConfict = registry.all().some(def => def.label.toLowerCase() === normalizedName.toLowerCase());
+            if (registryConfict) {
+                toast.error(`Name "${normalizedName}" is reserved by a built-in node.`);
+                return;
+            }
+
+            // 2. Check against other subgraphs
+            const otherSubgraphs = Object.values(subgraphs).filter(sg => sg.id !== editingSubgraphId);
+            const subgraphConflict = otherSubgraphs.some(sg => sg.name.toLowerCase() === normalizedName.toLowerCase());
+            if (subgraphConflict) {
+                toast.error(`A subgraph with the name "${normalizedName}" already exists.`);
+                return;
+            }
+
+            nameOverride = rawName;
+        }
+
+        exitSubgraphEditor(save, nameOverride);
+    }, [exitSubgraphEditor, editingSubgraphId, subgraphs]);
+
+    // Removed handleNameChange as we're using ref now
 
     // Subgraph mode toolbar
     if (editorMode === 'subgraph') {
         return (
-            <div className="pointer-events-auto flex items-center gap-1 bg-card/95 backdrop-blur-sm border-2 border-primary rounded-xl p-1.5 shadow-lg">
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    handleExitSubgraph(true);
+                }}
+                className="pointer-events-auto flex items-center gap-1 bg-card/95 backdrop-blur-sm border-2 border-primary rounded-xl p-1.5 shadow-lg"
+            >
                 <div className="px-3 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-medium text-primary">Editing Subgraph</span>
+                    <Input
+                        ref={subgraphNameRef}
+                        key={editingSubgraphId} // Force re-render when switching subgraphs to update defaultValue
+                        defaultValue={editingSubgraphId ? subgraphs[editingSubgraphId]?.name : ''}
+                        className="h-7 w-40 px-2 text-xs border-transparent hover:border-border focus:border-border bg-transparent focus:bg-background transition-colors font-medium"
+                        placeholder="Subgraph Name"
+                    />
                 </div>
 
                 <div className="w-px h-4 bg-border" />
 
                 <Button
+                    type="submit"
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleExitSubgraph(true)}
                     className="h-8 px-3 gap-2 text-primary hover:text-primary"
                     title="Save and exit"
                 >
@@ -119,6 +160,7 @@ export function Toolbar({ onOpenCodePanel, onToggleNodePicker }: ToolbarProps) {
                 </Button>
 
                 <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => handleExitSubgraph(false)}
@@ -127,7 +169,7 @@ export function Toolbar({ onOpenCodePanel, onToggleNodePicker }: ToolbarProps) {
                 >
                     <span className="text-xs">Cancel</span>
                 </Button>
-            </div>
+            </form>
         );
     }
 
@@ -230,37 +272,6 @@ export function Toolbar({ onOpenCodePanel, onToggleNodePicker }: ToolbarProps) {
                 />
             </div>
 
-            {/* Create Subgraph Dialog */}
-            {showSubgraphDialog && (
-                <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/50 pointer-events-auto">
-                    <div className="bg-card border border-border rounded-xl p-6 shadow-xl max-w-sm w-full mx-4">
-                        <h3 className="text-lg font-semibold mb-4">Create Subgraph</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Creating subgraph from {selectedNodeIds.length} selected node{selectedNodeIds.length > 1 ? 's' : ''}.
-                        </p>
-                        <input
-                            type="text"
-                            placeholder="Subgraph name..."
-                            value={subgraphName}
-                            onChange={(e) => setSubgraphName(e.target.value)}
-                            className="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm mb-4"
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleConfirmSubgraph();
-                                if (e.key === 'Escape') handleCancelSubgraph();
-                            }}
-                        />
-                        <div className="flex gap-2 justify-end">
-                            <Button variant="ghost" size="sm" onClick={handleCancelSubgraph}>
-                                Cancel
-                            </Button>
-                            <Button size="sm" onClick={handleConfirmSubgraph}>
-                                Create
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     );
 }

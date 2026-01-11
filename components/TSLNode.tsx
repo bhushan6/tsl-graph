@@ -16,6 +16,7 @@ type TSLNodeProps = NodeProps<AppNode>;
 function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const def = registry.get(data.type);
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
     const edges = useEdges();
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
@@ -89,7 +90,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         }
         // Extract name from type (custom/name-timestamp)
         const namePart = data.type.replace('custom/', '').split('-')[0];
-        nodeLabel = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
+        // Try to get dynamic name from store, fallback to parsed name from type
+        nodeLabel = subgraphs[data.type]?.name || namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
     } else if (isAnchorNode && data.dynamicPorts) {
         // Subgraph Input: dynamic ports become outputs (to connect to internal nodes)
         // Subgraph Output: dynamic ports become inputs (to receive from internal nodes)

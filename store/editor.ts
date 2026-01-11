@@ -72,7 +72,7 @@ interface EditorState {
     // Subgraph actions
     createSubgraph: (name: string, selectedNodeIds: string[]) => string | null;
     enterSubgraphEditor: (subgraphId: string) => boolean;
-    exitSubgraphEditor: (save: boolean) => void;
+    exitSubgraphEditor: (save: boolean, nameOverride?: string) => void;
     updateSubgraphDefinition: (subgraphId: string, updates: Partial<SubgraphDefinition>) => void;
     deleteSubgraph: (subgraphId: string) => void;
     addDynamicPort: (nodeId: string, port: SubgraphPort) => void;
@@ -379,7 +379,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return true;
     },
 
-    exitSubgraphEditor: (save: boolean) => {
+    exitSubgraphEditor: (save: boolean, nameOverride?: string) => {
         const { mainGraphBackup, editingSubgraphId, nodes, edges, subgraphs } = get();
 
         if (!mainGraphBackup || !editingSubgraphId) return;
@@ -438,6 +438,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 outputNodePosition: outputNode?.position,
                 updatedAt: Date.now(),
             };
+
+            if (nameOverride) {
+                updatedSubgraph.name = nameOverride;
+            }
 
             // First, save the subgraph definition and exit editor mode
             // This updates the subgraphs state which triggers nodeTypes to update
