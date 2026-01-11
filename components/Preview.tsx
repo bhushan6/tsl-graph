@@ -181,11 +181,11 @@ export function Preview() {
         <div
             className={cn(
                 'pointer-events-auto relative bg-card border border-border rounded-xl shadow-lg overflow-hidden transition-all duration-200',
-                isExpanded ? 'w-80 h-80' : 'w-48 h-48'
+                isExpanded ? 'w-96 h-96' : 'w-72 h-72'
             )}
         >
             {/* Controls - Expand button on left */}
-            <div className="absolute top-2 left-2 z-10 flex gap-1">
+            {/* <div className="absolute top-2 left-2 z-10 flex gap-1">
                 <Button
                     variant="ghost"
                     size="sm"
@@ -198,7 +198,7 @@ export function Preview() {
                         <Maximize2 className="w-3 h-3" />
                     )}
                 </Button>
-            </div>
+            </div> */}
 
             {/* Geometry selector on right */}
             <div className="absolute top-2 right-2 z-10 flex gap-1">

@@ -14,6 +14,12 @@ import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import { SubgraphPort, TSLType } from '@/lib/types';
 import { Layers, Plus, Trash2 } from 'lucide-react';
+import {
+    SidebarGroup,
+    SidebarGroupContent,
+    SidebarInput,
+    SidebarSeparator,
+} from '@/components/ui/sidebar';
 
 // Type options for port type selector
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -55,9 +61,9 @@ function AnchorNodePortEditor({
     }, [isInputAnchor, dynamicPorts.length, onAddPort]);
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-border">
+            <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">
                     {isInputAnchor ? 'Subgraph Inputs' : 'Subgraph Outputs'}
                 </h3>
@@ -75,50 +81,52 @@ function AnchorNodePortEditor({
                         No ports defined. Add ports to create the subgraph interface.
                     </p>
                 ) : (
-                    <div className="flex flex-col gap-3 mb-4">
-                        {dynamicPorts.map((port, index) => (
-                            <div
-                                key={port.id}
-                                className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground w-4">
-                                        {index + 1}
-                                    </span>
-                                    <Input
-                                        type="text"
-                                        value={port.label}
-                                        onChange={(e) =>
-                                            onUpdatePort(port.id, { label: e.target.value })
-                                        }
-                                        placeholder="Port name"
-                                        className="h-8 flex-1 text-sm"
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => onRemovePort(port.id)}
-                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                                <select
-                                    value={port.type}
-                                    onChange={(e) =>
-                                        onUpdatePort(port.id, { type: e.target.value as TSLType })
-                                    }
-                                    className="h-8 px-2 text-sm bg-background border border-border rounded-md"
+                    <SidebarGroup className="p-0">
+                        <SidebarGroupContent className="gap-2">
+                            {dynamicPorts.map((port, index) => (
+                                <div
+                                    key={port.id}
+                                    className="flex flex-col gap-2 p-3 rounded-lg border border-sidebar-border bg-sidebar-accent/50"
                                 >
-                                    {PORT_TYPES.map((type) => (
-                                        <option key={type.value} value={type.value}>
-                                            {type.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        ))}
-                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground w-4 font-mono">
+                                            #{index + 1}
+                                        </span>
+                                        <SidebarInput
+                                            type="text"
+                                            value={port.label}
+                                            onChange={(e) =>
+                                                onUpdatePort(port.id, { label: e.target.value })
+                                            }
+                                            placeholder="Port name"
+                                            className="h-7 text-xs"
+                                        />
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onRemovePort(port.id)}
+                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
+                                    <select
+                                        value={port.type}
+                                        onChange={(e) =>
+                                            onUpdatePort(port.id, { type: e.target.value as TSLType })
+                                        }
+                                        className="h-7 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                                    >
+                                        {PORT_TYPES.map((type) => (
+                                            <option key={type.value} value={type.value}>
+                                                {type.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ))}
+                        </SidebarGroupContent>
+                    </SidebarGroup>
                 )}
 
                 {/* For outputs, limit to 1 port (single output restriction) */}
@@ -189,7 +197,7 @@ function PropertiesPanelContent() {
         return (
             <div className="flex flex-col h-full">
                 {/* Header */}
-                <div className="px-4 py-3 border-b border-border">
+                <div className="px-4 py-3 border-b border-sidebar-border">
                     <h3 className="font-semibold text-sm">{subgraph.name}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                         Custom Subgraph
@@ -252,7 +260,7 @@ function PropertiesPanelContent() {
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-border">
+            <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">{def.label}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                     {node.data.localName || node.id}
@@ -317,7 +325,7 @@ function PropertyInputWrapper({
 
     return (
         <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                 {inputLabel}
             </label>
             <PropertyInput
@@ -388,14 +396,14 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: unkn
             </div>
             <div className="flex items-center gap-2">
                 <div
-                    className="w-8 h-8 rounded-md border border-border shadow-sm shrink-0"
+                    className="w-8 h-8 rounded-md border border-sidebar-border shadow-sm shrink-0"
                     style={{ backgroundColor: localColor }}
                 />
-                <Input
+                <SidebarInput
                     type="text"
                     value={localColor}
                     onChange={(e) => handleColorChange(e.target.value)}
-                    className="h-8 font-mono uppercase text-sm"
+                    className="h-8 font-mono uppercase text-xs"
                     maxLength={7}
                 />
             </div>
@@ -417,12 +425,12 @@ function NumberInput({ value, onChange, step }: { value: number; onChange: (valu
     }, [debouncedOnChange]);
 
     return (
-        <Input
+        <SidebarInput
             type="number"
             value={localValue}
             onChange={(e) => handleValueChange(parseFloat(e.target.value) || 0)}
             step={step}
-            className="h-9 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs"
         />
     );
 }
@@ -438,8 +446,8 @@ function PropertiesPanelComponent() {
     return (
         <div
             className={cn(
-                'pointer-events-auto w-72 max-h-[calc(100vh-20rem)]',
-                'bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-lg',
+                'pointer-events-auto w-72 shrink min-h-0',
+                'bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg',
                 'flex flex-col overflow-hidden'
             )}
         >

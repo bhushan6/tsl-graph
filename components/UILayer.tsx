@@ -34,11 +34,10 @@ const UILayerRoot = memo(({ children }: UILayerProps) => {
             style={{
                 display: 'grid',
                 gridTemplateColumns: 'auto 1fr auto',
-                gridTemplateRows: 'auto 1fr auto',
+                gridTemplateRows: 'auto minmax(0, 1fr)',
                 gridTemplateAreas: `
                     "topbar topbar topbar"
                     "left center right"
-                    "bottombar bottombar bottombar"
                 `,
                 padding: '1rem',
                 gap: '0.5rem',
@@ -73,7 +72,7 @@ LeftPanel.displayName = 'LeftPanel';
 const RightPanel = memo(({ children, className = '' }: SlotProps) => (
     <div
         style={{ gridArea: 'right' }}
-        className={`pointer-events-none flex flex-col items-end justify-start gap-2 ${className}`}
+        className={`pointer-events-none flex flex-col items-end justify-start gap-2 h-full min-h-0 ${className}`}
     >
         {children}
     </div>
@@ -82,7 +81,13 @@ RightPanel.displayName = 'RightPanel';
 
 const BottomBar = memo(({ children, className = '' }: SlotProps) => (
     <div
-        style={{ gridArea: 'bottombar' }}
+        style={{
+            position: 'absolute',
+            bottom: '1.5rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 50
+        }}
         className={`pointer-events-none flex items-center justify-center ${className}`}
     >
         {children}

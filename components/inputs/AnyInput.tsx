@@ -4,7 +4,7 @@ import { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { VectorInput } from './VectorInput';
 import { BooleanInput } from './BooleanInput';
 import { HexColorPicker } from 'react-colorful';
-import { Input } from '@/components/ui/input';
+import { SidebarInput } from '@/components/ui/sidebar';
 import { Label } from '@/components/ui/label';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 
@@ -176,7 +176,7 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
                     Type
                 </Label>
                 <select
-                    className="h-6 text-[10px] border rounded bg-background px-1 py-0"
+                    className="h-6 text-[10px] border border-sidebar-border rounded bg-sidebar-accent text-sidebar-foreground px-1 py-0 outline-none focus:ring-1 focus:ring-sidebar-ring cursor-pointer"
                     value={currentType}
                     onChange={(e) => handleTypeChange(e.target.value as InputType)}
                 >
@@ -212,12 +212,12 @@ function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v:
     }, [debouncedOnChange]);
 
     return (
-        <Input
+        <SidebarInput
             type="number"
             value={localValue}
             onChange={handleChange}
             step={0.1}
-            className="h-8 text-xs font-mono"
+            className="h-7 text-xs font-mono"
         />
     );
 }
@@ -241,7 +241,7 @@ function SimpleColorInput({ value, onChange }: { value: string, onChange: (v: st
             <HexColorPicker color={localColor} onChange={handleColorChange} style={{ width: '100%', height: '100px' }} />
             <div className="flex gap-2 items-center">
                 <div className="w-6 h-6 rounded border shrink-0" style={{ backgroundColor: localColor }} />
-                <Input
+                <SidebarInput
                     value={localColor}
                     onChange={e => handleColorChange(e.target.value)}
                     className="h-6 text-xs font-mono uppercase"

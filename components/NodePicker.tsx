@@ -195,7 +195,7 @@ export function NodePicker({ onClose }: NodePickerProps) {
     );
 
     return (
-        <div className="pointer-events-auto nowheel bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg w-52 max-h-[calc(100vh-8rem)] flex flex-col overflow-hidden">
+        <div className="pointer-events-auto nowheel bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg w-52 h-fit flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-3 py-2 border-b border-sidebar-border shrink-0 space-y-2">
                 <div className="flex items-center justify-between">

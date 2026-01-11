@@ -18,6 +18,7 @@ import { useEditorStore } from '@/store/editor';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import { NodePicker } from './NodePicker';
+import { Navbar } from '@/components/Navbar';
 import { registry } from '@/lib/registry';
 import { initializeNodes } from '@/lib/nodes';
 import { UILayer } from './UILayer';
@@ -151,6 +152,10 @@ function EditorCanvas() {
 
             {/* UI Layer */}
             <UILayer>
+                <UILayer.TopBar>
+                    <Navbar />
+                </UILayer.TopBar>
+
                 <UILayer.LeftPanel>
                     {isNodePickerOpen && <NodePicker onClose={() => setIsNodePickerOpen(false)} />}
                 </UILayer.LeftPanel>

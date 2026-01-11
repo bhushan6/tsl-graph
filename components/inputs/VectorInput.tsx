@@ -1,8 +1,8 @@
 'use client';
 
-import { memo, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { memo, useEffect, useState, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+import { SidebarInput } from '@/components/ui/sidebar';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 
 interface VectorInputProps {
@@ -70,7 +70,7 @@ function NumberInput({ value, onChange, className }: { value: number; onChange: 
     }, [value]);
 
     return (
-        <Input
+        <SidebarInput
             type="number"
             value={localValue}
             onChange={(e) => {
@@ -80,7 +80,7 @@ function NumberInput({ value, onChange, className }: { value: number; onChange: 
             }}
             step={0.1}
             className={cn(
-                "h-8 text-xs px-2 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                "h-7 text-xs px-2 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                 className
             )}
         />
