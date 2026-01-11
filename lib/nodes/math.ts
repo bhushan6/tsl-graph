@@ -1,0 +1,258 @@
+import { BaseNodeDef } from './definitions';
+
+export const mathNodes = [
+    // Basic arithmetic
+    {
+        type: 'math/add',
+        label: 'Add',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 0 },
+            b: { label: 'B', type: 'any', default: 0 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'add',
+    },
+    {
+        type: 'math/sub',
+        label: 'Subtract',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 0 },
+            b: { label: 'B', type: 'any', default: 0 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'sub',
+    },
+    {
+        type: 'math/mul',
+        label: 'Multiply',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 1 },
+            b: { label: 'B', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'mul',
+    },
+    {
+        type: 'math/div',
+        label: 'Divide',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 1 },
+            b: { label: 'B', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'div',
+    },
+    // Trigonometry
+    {
+        type: 'math/sin',
+        label: 'Sin',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 0 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'sin',
+    },
+    {
+        type: 'math/cos',
+        label: 'Cos',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 0 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'cos',
+    },
+    // Utility
+    {
+        type: 'math/abs',
+        label: 'Abs',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 0 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'abs',
+    },
+    {
+        type: 'math/pow',
+        label: 'Power',
+        category: 'Math',
+        inputs: {
+            x: { label: 'Base', type: 'any', default: 2 },
+            y: { label: 'Exp', type: 'any', default: 2 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'pow',
+    },
+    {
+        type: 'math/sqrt',
+        label: 'Sqrt',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 1 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'sqrt',
+    },
+    {
+        type: 'math/fract',
+        label: 'Fract',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 0 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'fract',
+    },
+    {
+        type: 'math/floor',
+        label: 'Floor',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 0 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'floor',
+    },
+    {
+        type: 'math/ceil',
+        label: 'Ceil',
+        category: 'Math',
+        inputs: { x: { label: 'X', type: 'any', default: 0 } },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'ceil',
+    },
+    {
+        type: 'math/mod',
+        label: 'Mod',
+        category: 'Math',
+        inputs: {
+            x: { label: 'X', type: 'any', default: 0 },
+            y: { label: 'Y', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'mod',
+    },
+    {
+        type: 'math/min',
+        label: 'Min',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 0 },
+            b: { label: 'B', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'min',
+    },
+    {
+        type: 'math/max',
+        label: 'Max',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 0 },
+            b: { label: 'B', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'max',
+    },
+    {
+        type: 'math/mix',
+        label: 'Mix',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: 0 },
+            b: { label: 'B', type: 'any', default: 1 },
+            t: { label: 'T', type: 'any', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'mix',
+    },
+    {
+        type: 'math/clamp',
+        label: 'Clamp',
+        category: 'Math',
+        inputs: {
+            x: { label: 'X', type: 'any', default: 0 },
+            min: { label: 'Min', type: 'any', default: 0 },
+            max: { label: 'Max', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'clamp',
+    },
+    {
+        type: 'math/step',
+        label: 'Step',
+        category: 'Math',
+        inputs: {
+            edge: { label: 'Edge', type: 'any', default: 0.5 },
+            x: { label: 'X', type: 'any', default: 0 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'step',
+    },
+    {
+        type: 'math/smoothstep',
+        label: 'Smoothstep',
+        category: 'Math',
+        inputs: {
+            edge0: { label: 'Edge0', type: 'any', default: 0 },
+            edge1: { label: 'Edge1', type: 'any', default: 1 },
+            x: { label: 'X', type: 'any', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'smoothstep',
+    },
+    // Vector operations
+    {
+        type: 'math/length',
+        label: 'Length',
+        category: 'Math',
+        inputs: { x: { label: 'Vec', type: 'any', default: [0, 0, 0] } },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'length',
+    },
+    {
+        type: 'math/normalize',
+        label: 'Normalize',
+        category: 'Math',
+        inputs: { x: { label: 'Vec', type: 'any', default: [1, 0, 0] } },
+        outputs: {
+            out: { label: 'Vec', type: 'any' },
+        },
+        tsl: 'normalize',
+    },
+    {
+        type: 'math/dot',
+        label: 'Dot',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'any', default: [0, 0, 0] },
+            b: { label: 'B', type: 'any', default: [0, 1, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'dot',
+    },
+    {
+        type: 'math/cross',
+        label: 'Cross',
+        category: 'Math',
+        inputs: {
+            a: { label: 'A', type: 'vec3', default: [0, 0, 0] },
+            b: { label: 'B', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: {
+            out: { label: 'XYZ', type: 'vec3' },
+        },
+        tsl: 'cross',
+    },
+    {
+        type: 'math/reflect',
+        label: 'Reflect',
+        category: 'Math',
+        inputs: {
+            i: { label: 'I', type: 'any', default: [0, -1, 0] },
+            n: { label: 'N', type: 'any', default: [0, 1, 0] },
+        },
+        outputs: {
+            out: { label: 'Vec', type: 'any' },
+        },
+        tsl: 'reflect',
+    },
+] as const;
+
+// Type check
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _mathNodesCheck: readonly BaseNodeDef[] = mathNodes;

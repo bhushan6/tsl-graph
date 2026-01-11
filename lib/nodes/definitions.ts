@@ -1,0 +1,33 @@
+
+// TSL Type System
+export type TSLScalar = 'float' | 'int' | 'uint' | 'bool';
+export type TSLVector =
+    | 'vec2' | 'vec3' | 'vec4'
+    | 'ivec2' | 'ivec3' | 'ivec4'
+    | 'uvec2' | 'uvec3' | 'uvec4'
+    | 'bvec2' | 'bvec3' | 'bvec4';
+export type TSLMatrix = 'mat2' | 'mat3' | 'mat4';
+export type TSLOther = 'color' | 'sampler2D' | 'any';
+export type TSLType = TSLScalar | TSLVector | TSLMatrix | TSLOther;
+
+// Port definitions
+export type TSLValueType = number | number[] | string | boolean;
+
+export interface Port {
+    readonly label: string;
+    readonly type: TSLType;
+    readonly default?: number | readonly number[] | string;
+    readonly connectionOnly?: boolean; // If true, input must be connected (no inline value)
+}
+
+// Base Node definition (loose types for definition files)
+export interface BaseNodeDef {
+    readonly type: string;          // Unique ID: "math/add"
+    readonly label: string;         // Display name: "Add"
+    readonly category: string;      // For grouping: "Math"
+    readonly inputs?: Record<string, Port>;
+    readonly outputs?: Record<string, Port>;
+    readonly tsl: string;           // TSL function name
+    readonly pure?: boolean;        // No inputs = source node
+    readonly callable?: boolean;    // If true, pure node needs to be called as function (e.g., uv())
+}
