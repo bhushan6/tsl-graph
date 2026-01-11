@@ -45,6 +45,7 @@ function EditorCanvas() {
 
     const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
+    const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -151,7 +152,7 @@ function EditorCanvas() {
             {/* UI Layer */}
             <UILayer>
                 <UILayer.LeftPanel>
-                    <NodePicker />
+                    {isNodePickerOpen && <NodePicker onClose={() => setIsNodePickerOpen(false)} />}
                 </UILayer.LeftPanel>
 
                 <UILayer.RightPanel>
@@ -160,7 +161,10 @@ function EditorCanvas() {
                 </UILayer.RightPanel>
 
                 <UILayer.BottomBar>
-                    <Toolbar onOpenCodePanel={() => setIsCodePanelOpen(true)} />
+                    <Toolbar
+                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                        onToggleNodePicker={() => setIsNodePickerOpen((prev) => !prev)}
+                    />
                 </UILayer.BottomBar>
             </UILayer>
 

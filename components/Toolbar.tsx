@@ -1,16 +1,17 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { Download, Upload, Trash2, Code, Layers } from 'lucide-react';
+import { Download, Upload, Trash2, Code, Layers, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useEditorStore } from '@/store/editor';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
+    onToggleNodePicker?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
+export function Toolbar({ onOpenCodePanel, onToggleNodePicker }: ToolbarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const {
         saveToJSON,
@@ -133,6 +134,21 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
     return (
         <>
             <div className="pointer-events-auto flex items-center gap-1 bg-card/95 backdrop-blur-sm border border-border rounded-xl p-1.5 shadow-lg">
+                {onToggleNodePicker && (
+                    <>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onToggleNodePicker}
+                            className="h-8 px-3 gap-2"
+                            title="Toggle Node Picker"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span className="text-xs">Nodes</span>
+                        </Button>
+                        <div className="w-px h-4 bg-border" />
+                    </>
+                )}
                 <Button
                     variant="ghost"
                     size="sm"
