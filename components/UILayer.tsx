@@ -30,7 +30,7 @@ type SlotProps = {
 const UILayerRoot = memo(({ children }: UILayerProps) => {
     return (
         <div
-            className="fixed inset-0 z-[10000] pointer-events-none"
+            className="fixed inset-0 z-40 pointer-events-none"
             style={{
                 display: 'grid',
                 gridTemplateColumns: 'auto 1fr auto',

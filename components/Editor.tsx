@@ -26,6 +26,8 @@ import { Preview } from './Preview';
 import { Toolbar } from './Toolbar';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
+import { Button } from '@/components/ui/button';
+import { PanelLeft } from 'lucide-react';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -157,7 +159,19 @@ function EditorCanvas() {
                 </UILayer.TopBar>
 
                 <UILayer.LeftPanel>
-                    {isNodePickerOpen && <NodePicker onClose={() => setIsNodePickerOpen(false)} />}
+                    {isNodePickerOpen ? (
+                        <NodePicker onClose={() => setIsNodePickerOpen(false)} />
+                    ) : (
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsNodePickerOpen(true)}
+                            className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-9 w-9 mt-2 ml-2 pointer-events-auto"
+                            title="Open Node Picker"
+                        >
+                            <PanelLeft className="h-4 w-4" />
+                        </Button>
+                    )}
                 </UILayer.LeftPanel>
 
                 <UILayer.RightPanel>
@@ -168,7 +182,6 @@ function EditorCanvas() {
                 <UILayer.BottomBar>
                     <Toolbar
                         onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                        onToggleNodePicker={() => setIsNodePickerOpen((prev) => !prev)}
                     />
                 </UILayer.BottomBar>
             </UILayer>

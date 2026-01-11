@@ -1,23 +1,123 @@
-'use client';
-
+import { useRef, useCallback } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, FileText, Download, Upload, Trash2, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { useEditorStore } from '@/store/editor';
 
 export function Navbar() {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const {
+        saveToJSON,
+        loadFromJSON,
+        clearGraph,
+        nodes,
+    } = useEditorStore();
+
+    // Download as JSON file
+    const handleSaveFile = useCallback(() => {
+        const json = saveToJSON();
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tsl-shader-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, [saveToJSON]);
+
+    // Open file picker
+    const handleLoadClick = useCallback(() => {
+        fileInputRef.current?.click();
+    }, []);
+
+    // Load from file
+    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const json = event.target?.result as string;
+            const success = loadFromJSON(json);
+            if (!success) {
+                alert('Failed to load graph. Invalid format.');
+            }
+        };
+        reader.readAsText(file);
+
+        // Reset input so same file can be loaded again
+        e.target.value = '';
+    }, [loadFromJSON]);
+
+    // Clear graph with confirmation
+    const handleClear = useCallback(() => {
+        if (nodes.length === 0) return;
+        if (confirm('Clear all nodes? This cannot be undone.')) {
+            clearGraph();
+        }
+    }, [clearGraph, nodes.length]);
+
     return (
         <div className="w-full flex items-center justify-between px-3 h-10 bg-card border-b border-border pointer-events-auto rounded-md">
             <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 font-medium text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-default select-none">
+                <div className="flex items-center gap-2 font-medium text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-default select-none mr-2">
                     <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-primary">
                         <Sparkles className="w-3 h-3" />
                     </div>
                     <span>TSL Editor</span>
                 </div>
+
+                <div className="h-4 w-px bg-border mx-1" />
+
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="text-xs">File</span>
+                            <ChevronDown className="w-3 h-3 opacity-50" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-48">
+                        <DropdownMenuItem onClick={handleSaveFile} className="gap-2">
+                            <Download className="w-4 h-4 text-muted-foreground" />
+                            <span>Save to JSON</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleLoadClick} className="gap-2">
+                            <Upload className="w-4 h-4 text-muted-foreground" />
+                            <span>Load from output</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            onClick={handleClear}
+                            disabled={nodes.length === 0}
+                            className="gap-2 text-destructive focus:text-destructive"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Clear Graph</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             <div className="flex items-center gap-2">
                 <ThemeToggle />
             </div>
+
+            {/* Hidden file input */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileChange}
+                className="hidden"
+            />
         </div>
     );
 }
