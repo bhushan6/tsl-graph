@@ -29,6 +29,14 @@ export type EditorMode = 'main' | 'subgraph';
 const GRAPH_VERSION = 1;
 const STORAGE_KEY = 'tsl-editor-graph';
 
+
+interface SubgraphStackItem {
+    nodes: Node<TSLNodeData>[];
+    edges: Edge[];
+    originalNodeIds: string[];
+    subgraphId: string | null; // The ID of the subgraph we were editing (or null for main graph)
+}
+
 interface EditorState {
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
@@ -39,12 +47,9 @@ interface EditorState {
     subgraphs: Record<string, SubgraphDefinition>;
     editorMode: EditorMode;
     editingSubgraphId: string | null;
-    // When editing, store the main graph state and which nodes were selected
-    mainGraphBackup: {
-        nodes: Node<TSLNodeData>[];
-        edges: Edge[];
-        originalNodeIds: string[];  // Nodes to be replaced with subgraph instance
-    } | null;
+
+    // Stack for nested subgraph editing
+    subgraphStack: SubgraphStackItem[];
 
     onNodesChange: OnNodesChange<Node<TSLNodeData>>;
     onEdgesChange: OnEdgesChange;
@@ -92,7 +97,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     subgraphs: {},
     editorMode: 'main',
     editingSubgraphId: null,
-    mainGraphBackup: null,
+    subgraphStack: [],
 
     onNodesChange: (changes) => {
         // Prevent deletion of subgraph anchor nodes
@@ -335,11 +340,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const subgraph = get().subgraphs[subgraphId];
         if (!subgraph) return false;
 
-        // Backup current main graph
-        const { nodes, edges } = get();
+        // Backup current context to stack
+        const { nodes, edges, editingSubgraphId, subgraphStack } = get();
 
-        // Get the IDs of the original nodes that will be replaced
+        // Get the IDs of the original nodes that might be replaced
+        // Note: This logic assumes we are entering from a "create subgraph" flow where 
+        // the original nodes are still in the graph and match the subgraph nodes.
+        // If we are just "drilling down", this list will be irrelevant for retrieval later, which is fine.
         const originalNodeIds = subgraph.nodes.map(n => n.id);
+
+        const stackItem: SubgraphStackItem = {
+            nodes,
+            edges,
+            originalNodeIds,
+            subgraphId: editingSubgraphId,
+        };
 
         // Create input anchor node (use stored position or calculate fallback)
         const inputNode: Node<TSLNodeData> = {
@@ -368,7 +383,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         };
 
         set({
-            mainGraphBackup: { nodes, edges, originalNodeIds },
+            subgraphStack: [...subgraphStack, stackItem],
             editorMode: 'subgraph',
             editingSubgraphId: subgraphId,
             nodes: [inputNode, outputNode, ...subgraph.nodes],
@@ -380,9 +395,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     exitSubgraphEditor: (save: boolean, nameOverride?: string) => {
-        const { mainGraphBackup, editingSubgraphId, nodes, edges, subgraphs } = get();
+        const { editingSubgraphId, nodes, edges, subgraphs, subgraphStack } = get();
 
-        if (!mainGraphBackup || !editingSubgraphId) return;
+        if (subgraphStack.length === 0 || !editingSubgraphId) {
+            // Fallback for safety, though stack should not be empty if we are in subgraph mode
+            set({
+                editorMode: 'main',
+                editingSubgraphId: null,
+            });
+            return;
+        }
+
+        // Pop last item
+        const stackItem = subgraphStack[subgraphStack.length - 1];
+        const newStack = subgraphStack.slice(0, -1);
 
         if (save) {
             // Save the current editor state back to subgraph definition
@@ -443,20 +469,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 updatedSubgraph.name = nameOverride;
             }
 
-            // First, save the subgraph definition and exit editor mode
-            // This updates the subgraphs state which triggers nodeTypes to update
+            // Update subgraphs first
             set({
                 subgraphs: { ...subgraphs, [editingSubgraphId]: updatedSubgraph },
-                editorMode: 'main',
-                editingSubgraphId: null,
             });
 
             // Prepare instance node data for deferred creation
-            const originalNodeIds = mainGraphBackup.originalNodeIds;
-            const originalNodes = mainGraphBackup.nodes.filter(n => originalNodeIds.includes(n.id));
+            const originalNodeIds = stackItem.originalNodeIds;
+            const originalNodes = stackItem.nodes.filter(n => originalNodeIds.includes(n.id));
             const subgraphIdForInstance = editingSubgraphId;
-            const backupNodes = mainGraphBackup.nodes;
-            const backupEdges = mainGraphBackup.edges;
+            const restoredNodes = stackItem.nodes;
+            const restoredEdges = stackItem.edges;
+
+            // Determine previous mode based on stack item
+            const previousMode = stackItem.subgraphId ? 'subgraph' : 'main';
+            const previousSubgraphId = stackItem.subgraphId;
 
             if (originalNodes.length > 0) {
                 // Calculate center position of original nodes
@@ -478,12 +505,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     },
                 };
 
-                // Filter out original nodes
-                const newNodes = backupNodes.filter(n => !originalNodeIds.includes(n.id));
+                // Filter out original nodes from the restored state
+                const newNodes = restoredNodes.filter(n => !originalNodeIds.includes(n.id));
                 newNodes.push(instanceNode);
 
                 // Rewire external edges to the instance node
-                const newEdges = backupEdges
+                const newEdges = restoredEdges
                     .filter(e => {
                         const sourceIsOriginal = originalNodeIds.includes(e.source);
                         const targetIsOriginal = originalNodeIds.includes(e.target);
@@ -511,37 +538,43 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     });
 
                 // Use setTimeout to defer adding the instance node
-                // This ensures React Flow has registered the new nodeType first
                 setTimeout(() => {
                     set({
                         nodes: newNodes,
                         edges: newEdges,
-                        mainGraphBackup: null,
+                        subgraphStack: newStack,
                         selectedNodeId: null,
                         selectedNodeIds: [],
+                        editorMode: previousMode,
+                        editingSubgraphId: previousSubgraphId,
                     });
                 }, 0);
                 return;
             }
 
-            // No original nodes - just restore backup and clear
+            // No original nodes - just restore backup
             set({
-                nodes: backupNodes,
-                edges: backupEdges,
-                mainGraphBackup: null,
+                nodes: restoredNodes,
+                edges: restoredEdges,
+                subgraphStack: newStack,
                 selectedNodeId: null,
                 selectedNodeIds: [],
+                editorMode: previousMode,
+                editingSubgraphId: previousSubgraphId,
             });
             return;
         }
 
-        // Restore main graph (fallback for cancel)
+        // Restore graph (fallback for cancel)
+        const previousMode = stackItem.subgraphId ? 'subgraph' : 'main';
+        const previousSubgraphId = stackItem.subgraphId;
+
         set({
-            nodes: mainGraphBackup.nodes,
-            edges: mainGraphBackup.edges,
-            mainGraphBackup: null,
-            editorMode: 'main',
-            editingSubgraphId: null,
+            nodes: stackItem.nodes,
+            edges: stackItem.edges,
+            subgraphStack: newStack,
+            editorMode: previousMode,
+            editingSubgraphId: previousSubgraphId,
             selectedNodeId: null,
             selectedNodeIds: [],
         });
