@@ -28,19 +28,20 @@ export function Preview() {
 
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
 
     // Build material from graph
     const material = useMemo(() => {
         if (!isReady) return null;
         try {
             setError(null);
-            return buildTSLMaterial(nodes, edges);
+            return buildTSLMaterial(nodes, edges, subgraphs);
         } catch (e) {
             console.error('Material build error:', e);
             setError(e instanceof Error ? e.message : 'Failed to build material');
             return new THREE.MeshStandardMaterial({ color: 0x888888 });
         }
-    }, [nodes, edges, isReady]);
+    }, [nodes, edges, subgraphs, isReady]);
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {

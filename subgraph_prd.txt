@@ -1,0 +1,299 @@
+📄 PRD: Subgraph Editor & Custom Node Creation
+📌 Feature Name
+
+Subgraph Editor — Design, Create, and Reuse Custom Shader Nodes (Visual Subgraph Interface)
+
+🎯 Goal
+
+Enable users to select a set of nodes, define a subgraph with explicit inputs/outputs, and convert it into a reusable custom node type that can be placed from the node picker and edited later.
+
+🎯 User Value
+
+Encourages modular shader creation
+
+Reduces visual clutter in complex graphs
+
+Enables reuse and sharing of shader logic
+
+Offers control over node interfaces (with named, typed inputs/outputs)
+
+🧠 High-Level Workflow
+
+Select nodes → “Create Subgraph”
+
+Subgraph Editor opens in isolation
+
+Add/rename Subgraph Input nodes and Output nodes with explicit types
+
+Connect internal logic to those anchors
+
+Save → subgraph becomes a custom reusable node
+
+Main graph is updated with the new node instance
+
+📊 Feature Scope
+In Scope	Out of Scope
+Subgraph editor UI	Vertex stage graph support (later)
+Input/Output anchor node creation	Automatic input/output inference only (no UI)
+Custom node registry + picker	Marketplace / shared library distribution
+Editing existing subgraphs	Live GLSL editing
+Saving subgraph definitions in project file	Automatic macro dependency management
+📈 User Stories
+User Story 1 — Create a Subgraph
+
+As a user,
+I want to select several nodes and open them in a focused subgraph editor,
+so that I can build a reusable custom node with explicit inputs/outputs.
+
+User Story 2 — Define Subgraph Inputs/Outputs
+
+As a user,
+I want to add named inputs/outputs with types,
+so that I can control the interface of my custom node.
+
+User Story 3 — Save and Use Custom Node
+
+As a user,
+I want to save a subgraph definition and see it in the node picker,
+so that I can reuse that functionality elsewhere.
+
+User Story 4 — Edit Subgraph
+
+As a user,
+I want to edit an existing custom node’s internal graph and UI interface,
+so that I can improve it without remaking it manually.
+
+🚀 Feature Components
+Component	Description
+Subgraph Mode UI	Editor switches to isolated mode showing only selected nodes
+Input/Output Anchor Nodes	Special nodes that define the subgraph interface
+Subgraph Definition Persistence	Store and serialize subgraph definitions
+Custom Node Registry	Add custom subgraphs to the global node picker
+Replace Graph Logic	Remove original nodes and insert the custom node instance
+Edit Subgraph	Reopen custom node’s internal definition for editing
+🗂️ Task Breakdown & Test Cases
+🧩 Task 1 — Subgraph Mode Entry
+Description
+
+Implement a mechanism to:
+
+Capture selected nodes
+
+Open a new editor canvas showing those nodes only
+
+Include placeholder Input/Output anchor nodes
+
+Subtasks
+
+Add UI option: “Create Subgraph”
+
+Store selected nodes + their edges
+
+Initialize subgraph editor with those nodes cloned
+
+Always show Input & Output anchors (even if not connected)
+
+Acceptance Criteria
+
+✔ Subgraph editor opens in isolation
+✔ Original graph is not modified until save
+✔ Users can see internal nodes + anchor nodes
+
+Validation / Test Cases
+
+Select nodes → click create subgraph → editor shows only those nodes
+
+If no nodes selected, “Create Subgraph” should be disabled
+
+🖇 Task 2 — Input & Output Anchor Nodes
+Description
+
+Provide two special nodes:
+
+Subgraph Input
+
+Subgraph Output
+
+Users add typed sockets from these.
+
+Subtasks
+
+Visual components for anchor nodes
+
+Ability to add named sockets dynamically
+
+User can specify types (dropdown) and optional name
+
+Acceptance Criteria
+
+✔ Anchor nodes allow adding multiple sockets
+✔ Each socket has a type picker (float, vec3, color, texture, custom)
+✔ Names are optional but editable
+
+Validation / Test Cases
+
+Add inputs → type dropdown works → selected type is stored
+
+Anchor node displays sockets properly
+
+If no name provided, default placeholder like “Input 1” is shown
+
+🔌 Task 3 — Subgraph Linking & Save Validation
+Description
+
+Users must connect internal nodes to Input/Output anchors correctly.
+
+Subtasks
+
+Detect connections from internal nodes to anchor nodes
+
+Validate that no internal floating logic is ignored
+
+Prompt user on issues (unconnected internal node, unused outputs, etc.)
+
+Acceptance Criteria
+
+✔ Must have ≥ 1 input & ≥ 1 output connected before save
+✔ Warnings shown if internal nodes aren’t connected to interface
+✔ Inputs must have valid types
+
+Validation / Test Cases
+
+Try saving with no outputs → prevent save + error
+
+Try saving with internal nodes unconnected → warning
+
+📦 Task 4 — Subgraph Definition & Serialization
+Description
+
+Generate a definition for the subgraph, storing:
+
+Input definitions
+
+Output definitions
+
+Internal graph
+
+Compiler builder code (eventually)
+
+Subtasks
+
+Create SubgraphDefinition data structure
+
+Persist internal graph + I/O definitions
+
+Save to project JSON
+
+Acceptance Criteria
+
+✔ Definition stored in project file
+✔ Custom node appears in local registry
+
+Validation / Test Cases
+
+Save project JSON → contains custom node definitions
+
+Reload project → custom nodes reappear in picker
+
+➕ Task 5 — Replace Original Nodes
+Description
+
+Delete original selected nodes + edges and add a single custom node instance.
+
+Subtasks
+
+Remove nodes safely
+
+Re-connect external wires from original graph to new node’s sockets
+
+Acceptance Criteria
+
+✔ No dangling edges
+✔ Inputs/outputs wired correctly
+
+Validation / Test Cases
+
+Example: A, B → add node → create subgraph → test connections are preserved
+
+🧠 Task 6 — Compiler Integration
+Description
+
+Integrate subgraph definitions into your shader code generation:
+
+Emit builder function above main code
+
+Use node builder invocation instead of expanded logic
+
+Subtasks
+
+Extend compiler to declare custom subgraphs as TSL functions
+
+Detect subgraph nodes and emit calls accordingly
+
+Acceptance Criteria
+
+✔ Generated code contains a function for each subgraph
+✔ Main code uses that function
+
+Validation / Test Cases
+
+Given a subgraph with a known internal graph:
+
+Code calls function
+
+Function performs correct operations
+
+✏️ Task 7 — Edit Subgraph Workflow
+Description
+
+When the user chooses “Edit Subgraph” on an existing custom node:
+
+Load internal graph
+
+Allow interface modification
+
+Subtasks
+
+Add context menu “Edit Subgraph”
+
+Load associated internal graph
+
+Persist updated definition
+
+Acceptance Criteria
+
+✔ Subgraph can be edited and re-saved
+✔ All instances update accordingly (interface migration)
+
+Validation / Test Cases
+
+Edit existing subgraph, rename inputs → graph updates
+
+Add output, test code generation
+
+🧪 Overall Validation & Test Coverage
+🧪 UI Tests
+Feature	Test
+Subgraph mode entry	Fails if no nodes selected
+Anchor node usability	Dropdown for types works
+Save block validation	Blocks save when missing I/O
+🧪 Integration Tests
+Scenario	Expected
+Simple subgraph used	Code calls custom function
+Nested subgraph (subgraph inside subgraph)	Editor detects cycle, warns
+Project reload	Custom nodes restored from JSON
+🎯 Success Metrics (Qualitative)
+
+✔ Users can build reusable nodes visually
+✔ Main graph cleaner with subgraphs
+✔ Less time spent debugging large node clusters
+
+📌 Summary Checklist
+
+✅ Subgraph mode with isolated editor
+✅ Anchor nodes with typed inputs/outputs
+✅ Persistent custom node definitions
+✅ Node picker integration
+✅ Replace original nodes with subgraph instance
+✅ Code compiler support
+✅ Edit subgraph interface

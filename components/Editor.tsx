@@ -39,6 +39,8 @@ function EditorCanvas() {
         loadFromLocalStorage,
         saveToLocalStorage,
         setSelectedNode,
+        setSelectedNodes,
+        editorMode,
     } = useEditorStore();
 
     const isInitialized = useRef(false);
@@ -66,23 +68,35 @@ function EditorCanvas() {
     // Handle selection change
     const onSelectionChange = useCallback(
         ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+            // Track multi-selection for subgraph creation
+            setSelectedNodes(selectedNodes.map(n => n.id));
+
+            // Also track single selection for properties panel
             if (selectedNodes.length === 1) {
                 setSelectedNode(selectedNodes[0].id);
             } else {
                 setSelectedNode(null);
             }
         },
-        [setSelectedNode]
+        [setSelectedNode, setSelectedNodes]
     );
 
-    // Generate node types from registry - all use the same TSLNode component
+    // Get subgraph types from store
+    const subgraphs = useEditorStore((s) => s.subgraphs);
+
+    // Generate node types from registry + subgraphs - all use the same TSLNode component
     const nodeTypes: NodeTypes = useMemo(() => {
         const types: NodeTypes = {};
+        // Add registry types
         for (const def of registry.all()) {
             types[def.type] = TSLNode;
         }
+        // Add subgraph types
+        for (const subgraphId of Object.keys(subgraphs)) {
+            types[subgraphId] = TSLNode;
+        }
         return types;
-    }, []);
+    }, [subgraphs]);
 
     const { getNodes, getEdges } = useReactFlow();
 
@@ -141,7 +155,7 @@ function EditorCanvas() {
                 </UILayer.LeftPanel>
 
                 <UILayer.RightPanel>
-                    <Preview />
+                    {editorMode === 'main' && <Preview />}
                     <PropertiesPanel />
                 </UILayer.RightPanel>
 

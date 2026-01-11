@@ -1,5 +1,5 @@
-import type { Node } from '@xyflow/react';
-import { BaseNodeDef, Port, TSLValueType } from './nodes/definitions';
+import type { Node, Edge } from '@xyflow/react';
+import { BaseNodeDef, Port, TSLValueType, TSLType } from './nodes/definitions';
 import { NodeType, NodeCategory, TSLFunction } from './nodes/inferred-types';
 
 export * from './nodes/definitions';
@@ -15,12 +15,42 @@ export interface NodeDef extends BaseNodeDef {
     readonly outputs?: Record<string, Port>;
 }
 
+// Dynamic port for subgraph anchor nodes
+export interface SubgraphPort {
+    id: string;
+    label: string;
+    type: TSLType;
+}
+
 // Node data structure
 export interface TSLNodeData extends Record<string, unknown> {
     type: NodeType;
     values: Record<string, TSLValueType>;
     connected: Record<string, boolean>;
     localName?: string;
+    // Dynamic ports for subgraph anchor nodes
+    dynamicPorts?: SubgraphPort[];
 }
 
 export type AppNode = Node<TSLNodeData>;
+
+// Subgraph definition - stored in project and used to create custom nodes
+export interface SubgraphDefinition {
+    // Unique ID for this subgraph (e.g., 'custom/my-blur')
+    id: string;
+    // Display name (e.g., 'My Blur Effect')
+    name: string;
+    // Input ports that become inputs on the custom node
+    inputs: SubgraphPort[];
+    // Output ports that become outputs on the custom node
+    outputs: SubgraphPort[];
+    // The internal graph: nodes and edges
+    nodes: Node<TSLNodeData>[];
+    edges: Edge[];
+    // Anchor node positions (calculated from bounding box on create)
+    inputNodePosition?: { x: number; y: number };
+    outputNodePosition?: { x: number; y: number };
+    // Timestamp for tracking updates
+    createdAt: number;
+    updatedAt: number;
+}
