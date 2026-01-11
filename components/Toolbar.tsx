@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { Code, Layers } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
@@ -22,6 +22,9 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         exitSubgraphEditor,
         editingSubgraphId,
         subgraphs,
+        undo,
+        redo,
+        history,
     } = useEditorStore();
 
     // Ref to track subgraph name without causing re-renders
@@ -96,6 +99,33 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
 
                 <div className="w-px h-4 bg-border" />
 
+                <div className="flex items-center gap-0.5">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={undo}
+                        disabled={history.past.length === 0}
+                        className="h-8 w-8 text-primary hover:text-primary"
+                        title="Undo (Ctrl+Z)"
+                    >
+                        <Undo2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={redo}
+                        disabled={history.future.length === 0}
+                        className="h-8 w-8 text-primary hover:text-primary"
+                        title="Redo (Ctrl+Y)"
+                    >
+                        <Redo2 className="w-4 h-4" />
+                    </Button>
+                </div>
+
+                <div className="w-px h-4 bg-border" />
+
                 <Button
                     type="submit"
                     variant="ghost"
@@ -133,6 +163,31 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 <Layers className="w-4 h-4" />
                 <span className="text-xs">Subgraph</span>
             </Button>
+
+            <div className="w-px h-4 bg-border" />
+
+            <div className="flex items-center gap-0.5">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={undo}
+                    disabled={history.past.length === 0}
+                    className="h-8 w-8"
+                    title="Undo (Ctrl+Z)"
+                >
+                    <Undo2 className="w-4 h-4" />
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={redo}
+                    disabled={history.future.length === 0}
+                    className="h-8 w-8"
+                    title="Redo (Ctrl+Y)"
+                >
+                    <Redo2 className="w-4 h-4" />
+                </Button>
+            </div>
 
             {onOpenCodePanel && (
                 <>

@@ -44,6 +44,9 @@ function EditorCanvas() {
         setSelectedNode,
         setSelectedNodes,
         editorMode,
+        undo,
+        redo,
+        takeSnapshot,
     } = useEditorStore();
 
     const isInitialized = useRef(false);
@@ -68,6 +71,69 @@ function EditorCanvas() {
 
         return () => clearTimeout(timeoutId);
     }, [nodes, edges, saveToLocalStorage]);
+
+    // Keyboard shortcuts for Undo/Redo
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            // Ignore if focus is in an input or textarea
+            if (
+                event.target instanceof HTMLInputElement ||
+                event.target instanceof HTMLTextAreaElement ||
+                (event.target as HTMLElement).isContentEditable
+            ) {
+                return;
+            }
+
+            const isMod = event.ctrlKey || event.metaKey;
+            const key = event.key.toLowerCase();
+
+            if (isMod && key === "z") {
+                event.preventDefault();
+                if (event.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+            }
+
+            if (isMod && key === "y") {
+                event.preventDefault();
+                redo();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [undo, redo]);
+
+    // Snapshot triggers for ReactFlow events
+
+    // 1. Dragging: Snapshot when drag starts to capture original position
+    const onNodeDragStart = useCallback(() => {
+        takeSnapshot();
+    }, [takeSnapshot]);
+
+    // 2. Nodes Change: Snapshot only on Add/Remove
+    const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+        const hasStructuralChange = changes.some(
+            (c) => c.type === 'add' || c.type === 'remove'
+        );
+        if (hasStructuralChange) {
+            takeSnapshot();
+        }
+        onNodesChange(changes);
+    }, [onNodesChange, takeSnapshot]);
+
+    // 3. Edges Change: Snapshot only on Add/Remove
+    const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
+        const hasStructuralChange = changes.some(
+            (c) => c.type === 'add' || c.type === 'remove'
+        );
+        if (hasStructuralChange) {
+            takeSnapshot();
+        }
+        onEdgesChange(changes);
+    }, [onEdgesChange, takeSnapshot]);
 
     // Handle selection change
     const onSelectionChange = useCallback(
@@ -131,9 +197,10 @@ function EditorCanvas() {
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={handleEdgesChange}
                     onConnect={onConnect}
+                    onNodeDragStart={onNodeDragStart}
                     onSelectionChange={onSelectionChange}
                     nodeTypes={nodeTypes}
                     isValidConnection={isValidConnection}

@@ -35,7 +35,28 @@ interface SubgraphStackItem {
     edges: Edge[];
     originalNodeIds: string[];
     subgraphId: string | null; // The ID of the subgraph we were editing (or null for main graph)
+    history: HistoryState; // Preserve history of the parent graph
 }
+
+interface Snapshot {
+    nodes: Node<TSLNodeData>[];
+    edges: Edge[];
+    subgraphs: Record<string, SubgraphDefinition>;
+}
+
+interface HistoryState {
+    past: Snapshot[];
+    future: Snapshot[];
+}
+
+// Strip transient fields (like selection) from nodes for history
+const stripTransientFields = (nodes: Node<TSLNodeData>[]): Node<TSLNodeData>[] => {
+    return nodes.map(node => ({
+        ...node,
+        selected: false, // Don't store selection state
+    }));
+};
+
 
 interface EditorState {
     nodes: Node<TSLNodeData>[];
@@ -47,6 +68,10 @@ interface EditorState {
     subgraphs: Record<string, SubgraphDefinition>;
     editorMode: EditorMode;
     editingSubgraphId: string | null;
+
+    // History state
+    history: HistoryState;
+    isUndoRedoInProgress: boolean;
 
     // Stack for nested subgraph editing
     subgraphStack: SubgraphStackItem[];
@@ -74,6 +99,13 @@ interface EditorState {
     hasMaterialNode: () => boolean;
     getMaterialNode: () => Node<TSLNodeData> | undefined;
 
+    // History actions
+    takeSnapshot: () => void;
+    undo: () => void;
+    redo: () => void;
+    clearHistory: () => void;
+
+
     // Subgraph actions
     createSubgraph: (name: string, selectedNodeIds: string[]) => string | null;
     enterSubgraphEditor: (subgraphId: string) => boolean;
@@ -99,6 +131,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     editingSubgraphId: null,
     subgraphStack: [],
 
+    // History initialization
+    history: { past: [], future: [] },
+    isUndoRedoInProgress: false,
+
     onNodesChange: (changes) => {
         // Prevent deletion of subgraph anchor nodes
         const filteredChanges = changes.filter(change => {
@@ -122,6 +158,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     onConnect: (connection: Connection) => {
+        // Snapshot before connecting
+        get().takeSnapshot();
+
         const { edges } = get();
 
         // Remove any existing connection to the same target handle
@@ -136,6 +175,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     addNode: (type, position, data = {}) => {
+        get().takeSnapshot();
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
 
         // If trying to add a material node, check if one already exists
@@ -172,6 +212,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     updateNodeValue: (nodeId, key, value) => {
+        get().takeSnapshot();
         set({
             nodes: get().nodes.map((node) =>
                 node.id === nodeId
@@ -188,6 +229,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     deleteNode: (nodeId) => {
+        get().takeSnapshot();
         set({
             nodes: get().nodes.filter((node) => node.id !== nodeId),
             edges: get().edges.filter(
@@ -265,7 +307,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     // Clear the graph
+    // Clear the graph
     clearGraph: () => {
+        get().takeSnapshot();
         set({ nodes: [], edges: [] });
     },
 
@@ -282,6 +326,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     createSubgraph: (name: string, selectedNodeIds: string[]) => {
         if (selectedNodeIds.length === 0) return null;
 
+        get().takeSnapshot();
         const { nodes, edges } = get();
         const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
 
@@ -354,6 +399,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges,
             originalNodeIds,
             subgraphId: editingSubgraphId,
+            history: get().history, // Save current history
         };
 
         // Create input anchor node (use stored position or calculate fallback)
@@ -389,6 +435,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: [inputNode, outputNode, ...subgraph.nodes],
             edges: [...subgraph.edges],
             selectedNodeId: null,
+            history: { past: [], future: [] }, // Reset history for new context
         });
 
         return true;
@@ -470,6 +517,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
 
             // Update subgraphs first
+            // Note: We don't snapshot here because exitSubgraphEditor is a meta-action
+            // that restores previous state + new node. The new node addition will be the "change"
+            // in the PARENT history if we wanted to support undoing "Create Subgraph".
+            // But here we are just saving internally.
+
+            // Actually, we SHOULD update the subgraphs definition in the parent context's history
+            // or just let it be. For now, we update the store.
             set({
                 subgraphs: { ...subgraphs, [editingSubgraphId]: updatedSubgraph },
             });
@@ -547,6 +601,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         selectedNodeIds: [],
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
+                        history: stackItem.history, // Restore parent history
                     });
                 }, 0);
                 return;
@@ -561,6 +616,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 selectedNodeIds: [],
                 editorMode: previousMode,
                 editingSubgraphId: previousSubgraphId,
+                history: stackItem.history, // Restore parent history
             });
             return;
         }
@@ -577,10 +633,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             editingSubgraphId: previousSubgraphId,
             selectedNodeId: null,
             selectedNodeIds: [],
+            history: stackItem.history, // Restore parent history
         });
     },
 
     updateSubgraphDefinition: (subgraphId: string, updates: Partial<SubgraphDefinition>) => {
+        get().takeSnapshot();
         const subgraph = get().subgraphs[subgraphId];
         if (!subgraph) return;
 
@@ -598,6 +656,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     addDynamicPort: (nodeId: string, port: SubgraphPort) => {
+        get().takeSnapshot();
         set({
             nodes: get().nodes.map(node =>
                 node.id === nodeId
@@ -614,6 +673,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     removeDynamicPort: (nodeId: string, portId: string) => {
+        get().takeSnapshot();
         set({
             nodes: get().nodes.map(node =>
                 node.id === nodeId
@@ -630,6 +690,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     updateDynamicPort: (nodeId: string, portId: string, updates: Partial<SubgraphPort>) => {
+        get().takeSnapshot();
         set({
             nodes: get().nodes.map(node =>
                 node.id === nodeId
@@ -653,5 +714,94 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     isSubgraphMode: () => {
         return get().editorMode === 'subgraph';
+    },
+
+    // History Implementation
+
+    takeSnapshot: () => {
+        const { nodes, edges, subgraphs, history, isUndoRedoInProgress } = get();
+
+        if (isUndoRedoInProgress) return;
+
+        const snapshot: Snapshot = {
+            nodes: stripTransientFields(nodes),
+            edges,
+            subgraphs, // Tracking subgraphs changes too
+        };
+
+        const newPast = [...history.past, snapshot];
+        // Limit history size
+        if (newPast.length > 50) {
+            newPast.shift();
+        }
+
+        set({
+            history: {
+                past: newPast,
+                future: [],
+            },
+        });
+    },
+
+    undo: () => {
+        const { history, nodes, edges, subgraphs } = get();
+        if (history.past.length === 0) return;
+
+        const previous = history.past[history.past.length - 1];
+        const newPast = history.past.slice(0, -1);
+
+        const currentSnapshot: Snapshot = {
+            nodes: stripTransientFields(nodes),
+            edges,
+            subgraphs,
+        };
+
+        // Don't trigger snapshot during undo
+        set({ isUndoRedoInProgress: true });
+
+        set({
+            nodes: previous.nodes,
+            edges: previous.edges,
+            subgraphs: previous.subgraphs,
+            history: {
+                past: newPast,
+                future: [currentSnapshot, ...history.future],
+            },
+        });
+
+        // Use setTimeout to ensure we don't block render with flag
+        setTimeout(() => set({ isUndoRedoInProgress: false }), 0);
+    },
+
+    redo: () => {
+        const { history, nodes, edges, subgraphs } = get();
+        if (history.future.length === 0) return;
+
+        const next = history.future[0];
+        const newFuture = history.future.slice(1);
+
+        const currentSnapshot: Snapshot = {
+            nodes: stripTransientFields(nodes),
+            edges,
+            subgraphs,
+        };
+
+        set({ isUndoRedoInProgress: true });
+
+        set({
+            nodes: next.nodes,
+            edges: next.edges,
+            subgraphs: next.subgraphs,
+            history: {
+                past: [...history.past, currentSnapshot],
+                future: newFuture,
+            },
+        });
+
+        setTimeout(() => set({ isUndoRedoInProgress: false }), 0);
+    },
+
+    clearHistory: () => {
+        set({ history: { past: [], future: [] } });
     },
 }));
