@@ -18,6 +18,7 @@ import { useEditorStore } from '@/store/editor';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import { NodePicker } from './NodePicker';
+import { Navbar } from '@/components/Navbar';
 import { registry } from '@/lib/registry';
 import { initializeNodes } from '@/lib/nodes';
 import { UILayer } from './UILayer';
@@ -39,10 +40,13 @@ function EditorCanvas() {
         loadFromLocalStorage,
         saveToLocalStorage,
         setSelectedNode,
+        setSelectedNodes,
+        editorMode,
     } = useEditorStore();
 
     const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
+    const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -66,23 +70,35 @@ function EditorCanvas() {
     // Handle selection change
     const onSelectionChange = useCallback(
         ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+            // Track multi-selection for subgraph creation
+            setSelectedNodes(selectedNodes.map(n => n.id));
+
+            // Also track single selection for properties panel
             if (selectedNodes.length === 1) {
                 setSelectedNode(selectedNodes[0].id);
             } else {
                 setSelectedNode(null);
             }
         },
-        [setSelectedNode]
+        [setSelectedNode, setSelectedNodes]
     );
 
-    // Generate node types from registry - all use the same TSLNode component
+    // Get subgraph types from store
+    const subgraphs = useEditorStore((s) => s.subgraphs);
+
+    // Generate node types from registry + subgraphs - all use the same TSLNode component
     const nodeTypes: NodeTypes = useMemo(() => {
         const types: NodeTypes = {};
+        // Add registry types
         for (const def of registry.all()) {
             types[def.type] = TSLNode;
         }
+        // Add subgraph types
+        for (const subgraphId of Object.keys(subgraphs)) {
+            types[subgraphId] = TSLNode;
+        }
         return types;
-    }, []);
+    }, [subgraphs]);
 
     const { getNodes, getEdges } = useReactFlow();
 
@@ -136,17 +152,24 @@ function EditorCanvas() {
 
             {/* UI Layer */}
             <UILayer>
+                <UILayer.TopBar>
+                    <Navbar />
+                </UILayer.TopBar>
+
                 <UILayer.LeftPanel>
-                    <NodePicker />
+                    {isNodePickerOpen && <NodePicker onClose={() => setIsNodePickerOpen(false)} />}
                 </UILayer.LeftPanel>
 
                 <UILayer.RightPanel>
-                    <Preview />
+                    {editorMode === 'main' && <Preview />}
                     <PropertiesPanel />
                 </UILayer.RightPanel>
 
                 <UILayer.BottomBar>
-                    <Toolbar onOpenCodePanel={() => setIsCodePanelOpen(true)} />
+                    <Toolbar
+                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                        onToggleNodePicker={() => setIsNodePickerOpen((prev) => !prev)}
+                    />
                 </UILayer.BottomBar>
             </UILayer>
 

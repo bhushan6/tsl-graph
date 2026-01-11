@@ -3,6 +3,7 @@ import { constantNodes } from './constants';
 import { mathNodes } from './math';
 import { geometryNodes } from './geometry';
 import { materialNodes, MATERIAL_NODE_TYPES } from './output';
+import { subgraphNodes } from './subgraph';
 
 // Register all nodes
 export function initializeNodes() {
@@ -10,7 +11,9 @@ export function initializeNodes() {
     registry.registerMany(mathNodes);
     registry.registerMany(geometryNodes);
     registry.registerMany(materialNodes);
+    registry.registerMany(subgraphNodes);
 }
 
 // Re-export for convenience
-export { constantNodes, mathNodes, geometryNodes, materialNodes, MATERIAL_NODE_TYPES };
+export { constantNodes, mathNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES };
+

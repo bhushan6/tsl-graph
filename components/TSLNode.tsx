@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
 
-import { AppNode } from '@/lib/types';
+import { AppNode, TSLType } from '@/lib/types';
 import { NodeProps } from '@xyflow/react';
 
 type TSLNodeProps = NodeProps<AppNode>;
@@ -51,7 +51,12 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         [handleNameSubmit, storedName]
     );
 
-    if (!def) {
+    // Check if this is a subgraph instance (custom node)
+    const isSubgraphInstance = data.type.startsWith('custom/');
+
+    // For subgraph instances, we don't need a registry definition
+    // We'll use the dynamicPorts from node data
+    if (!def && !isSubgraphInstance) {
         return (
             <div className="min-w-[200px] bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 p-3 rounded-xl">
                 Unknown node: {data.type}
@@ -59,8 +64,48 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         );
     }
 
-    const inputs = def.inputs ?? {};
-    const outputs = def.outputs ?? {};
+    // Check if this is a subgraph anchor node with dynamic ports
+    const isSubgraphInput = data.type === 'subgraph/input';
+    const isSubgraphOutput = data.type === 'subgraph/output';
+    const isAnchorNode = isSubgraphInput || isSubgraphOutput;
+
+    // Port type that matches what we need
+    type PortDef = { label: string; type: string; default?: unknown; connectionOnly?: boolean };
+
+    // Get ports - for anchor nodes and subgraph instances, use dynamic ports from data
+    let inputs: Record<string, PortDef> = {};
+    let outputs: Record<string, PortDef> = {};
+    let nodeLabel = def?.label || 'Custom Node';
+
+    if (isSubgraphInstance && data.dynamicPorts) {
+        // Subgraph instance: dynamicPorts contains both inputs and outputs
+        // Inputs have ids starting with 'in_', outputs with 'out_'
+        for (const port of data.dynamicPorts) {
+            if (port.id.startsWith('in_')) {
+                inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
+            } else if (port.id.startsWith('out_')) {
+                outputs[port.id] = { label: port.label, type: port.type };
+            }
+        }
+        // Extract name from type (custom/name-timestamp)
+        const namePart = data.type.replace('custom/', '').split('-')[0];
+        nodeLabel = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
+    } else if (isAnchorNode && data.dynamicPorts) {
+        // Subgraph Input: dynamic ports become outputs (to connect to internal nodes)
+        // Subgraph Output: dynamic ports become inputs (to receive from internal nodes)
+        for (const port of data.dynamicPorts) {
+            if (isSubgraphInput) {
+                outputs[port.id] = { label: port.label, type: port.type };
+            } else {
+                inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
+            }
+        }
+    } else if (def) {
+        inputs = (def.inputs ?? {}) as Record<string, PortDef>;
+        outputs = (def.outputs ?? {}) as Record<string, PortDef>;
+        nodeLabel = def.label;
+    }
+
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
     const pairedOutputKeys = new Set<string>();
@@ -108,7 +153,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                 )}
             >
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90">
-                    {def.label}
+                    {nodeLabel}
                 </span>
                 {isEditingName ? (
                     <input
@@ -148,7 +193,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     id={row.input[0]}
                                     type="target"
                                     position={Position.Left}
-                                    dataType={row.input[1].type}
+                                    dataType={row.input[1].type as TSLType}
                                     label={row.input[1].label}
                                     isConnected={connectedInputs.has(row.input[0])}
                                     isDark={isDark}
@@ -177,7 +222,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     id={row.output[0]}
                                     type="source"
                                     position={Position.Right}
-                                    dataType={row.output[1].type}
+                                    dataType={row.output[1].type as TSLType}
                                     label={row.output[1].label}
                                     isConnected={connectedOutputs.has(row.output[0])}
                                     // isHovered={hoveredPort === row.output[0]}
@@ -196,7 +241,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                             id="out"
                             type="source"
                             position={Position.Right}
-                            dataType={outputs['out'].type}
+                            dataType={outputs['out'].type as TSLType}
                             label={outputs['out'].label}
                             isConnected={connectedOutputs.has('out')}
                             // isHovered={hoveredPort === 'out'}

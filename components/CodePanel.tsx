@@ -24,16 +24,17 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const { resolvedTheme } = useTheme();
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
 
     const codeTheme = resolvedTheme === 'dark' ? themes.oneDark : themes.oneLight;
 
     const compiledCode = useMemo(() => {
-        return compileGraph(nodes, edges);
-    }, [nodes, edges]);
+        return compileGraph(nodes, edges, subgraphs);
+    }, [nodes, edges, subgraphs]);
 
     const imports = useMemo(() => {
-        return getRequiredImports(nodes);
-    }, [nodes]);
+        return getRequiredImports(nodes, subgraphs);
+    }, [nodes, subgraphs]);
 
     const handleCopy = useCallback(async () => {
         const fullCode = imports.length > 0
@@ -46,8 +47,8 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     }, [compiledCode, imports]);
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-            <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
+            <DialogContent className="max-h-[80vh] flex flex-col sm:max-w-fit z-[10000]">
                 <DialogHeader>
                     <DialogTitle className="flex flex-col gap-1">
                         <span>TSL Output</span>
@@ -57,7 +58,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg">
+                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg w-fit">
                     {/* Imports line */}
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border shrink-0">
                         <span className="text-xs text-muted-foreground font-mono truncate">

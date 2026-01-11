@@ -28,19 +28,20 @@ export function Preview() {
 
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
 
     // Build material from graph
     const material = useMemo(() => {
         if (!isReady) return null;
         try {
             setError(null);
-            return buildTSLMaterial(nodes, edges);
+            return buildTSLMaterial(nodes, edges, subgraphs);
         } catch (e) {
             console.error('Material build error:', e);
             setError(e instanceof Error ? e.message : 'Failed to build material');
             return new THREE.MeshStandardMaterial({ color: 0x888888 });
         }
-    }, [nodes, edges, isReady]);
+    }, [nodes, edges, subgraphs, isReady]);
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {
@@ -180,11 +181,11 @@ export function Preview() {
         <div
             className={cn(
                 'pointer-events-auto relative bg-card border border-border rounded-xl shadow-lg overflow-hidden transition-all duration-200',
-                isExpanded ? 'w-80 h-80' : 'w-48 h-48'
+                isExpanded ? 'w-96 h-96' : 'w-72 h-72'
             )}
         >
             {/* Controls - Expand button on left */}
-            <div className="absolute top-2 left-2 z-10 flex gap-1">
+            {/* <div className="absolute top-2 left-2 z-10 flex gap-1">
                 <Button
                     variant="ghost"
                     size="sm"
@@ -197,7 +198,7 @@ export function Preview() {
                         <Maximize2 className="w-3 h-3" />
                     )}
                 </Button>
-            </div>
+            </div> */}
 
             {/* Geometry selector on right */}
             <div className="absolute top-2 right-2 z-10 flex gap-1">
