@@ -131,7 +131,9 @@ function getMaterialInputVar(
  */
 function compileSubgraphDefinition(
     subgraph: SubgraphDefinition,
-    functionName: string
+    functionName: string,
+    usedSubgraphs: Map<string, string>,
+    subgraphsMap?: Record<string, SubgraphDefinition>
 ): string[] {
     const lines: string[] = [];
     const internalNodes = subgraph.nodes;
@@ -161,8 +163,63 @@ function compileSubgraphDefinition(
         const node = internalNodes.find(n => n.id === nodeId);
         if (!node) continue;
 
+        // Handle Subgraph Instance inside Subgraph
+        if (node.data.type.startsWith('custom/')) {
+            const funcName = usedSubgraphs.get(node.data.type);
+            const nestedSubgraph = subgraphsMap?.[node.data.type];
+
+            if (funcName && nestedSubgraph) {
+                // Generate unique name for this instance output
+                const instanceName = `_subgraph_node${nodeIndex}`;
+                let displayName = instanceName;
+                let suffix = 1;
+                while (usedNames.has(displayName)) {
+                    displayName = `${instanceName}_${suffix++}`;
+                }
+                usedNames.add(displayName);
+                nodeIndex++;
+
+                // Collect arguments
+                const args: string[] = [];
+                for (const inputPort of nestedSubgraph.inputs) {
+                    // Check for connection from internal edges or argsMap
+                    const edge = internalEdges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
+                    if (edge) {
+                        if (edge.source === 'subgraph-input' && argsMap && edge.sourceHandle) {
+                            args.push(argsMap[edge.sourceHandle] || 'float(0)');
+                        } else {
+                            const upstream = compiledNodes.get(edge.source);
+                            if (upstream) {
+                                const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
+                                args.push(`${upstream.varName}${swizzle}`);
+                            } else {
+                                args.push('float(0)');
+                            }
+                        }
+                    } else {
+                        args.push('float(0)');
+                    }
+                }
+
+                lines.push(`    const ${displayName} = ${funcName}(${args.join(', ')});`);
+
+                const isSingleOutput = nestedSubgraph.outputs.length === 1;
+
+                compiledNodes.set(nodeId, {
+                    id: nodeId,
+                    varName: displayName,
+                    code: `/* ${funcName} call */`,
+                    singleOutput: isSingleOutput
+                });
+                continue;
+            }
+        }
+
         const def = registry.get(node.data.type);
-        if (!def) continue;
+        if (!def) {
+            // Skip if strictly unknown, but custom/ handled above
+            continue;
+        }
 
         // Ensure unique name
         const baseName = `_subgraph_node${nodeIndex}`;
@@ -204,12 +261,16 @@ function compileSubgraphDefinition(
         const outputPort = subgraph.outputs[0];
         const edge = internalEdges.find(e => e.target === 'subgraph-output' && e.targetHandle === outputPort.id);
         if (edge) {
-            const upstream = compiledNodes.get(edge.source);
-            if (upstream) {
-                const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
-                lines.push(`    return ${upstream.varName}${swizzle};`);
+            if (edge.source === 'subgraph-input' && argsMap && edge.sourceHandle) {
+                lines.push(`    return ${argsMap[edge.sourceHandle] || 'float(0)'};`);
             } else {
-                lines.push(`    return float(0);`);
+                const upstream = compiledNodes.get(edge.source);
+                if (upstream) {
+                    const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
+                    lines.push(`    return ${upstream.varName}${swizzle};`);
+                } else {
+                    lines.push(`    return float(0);`);
+                }
             }
         } else {
             lines.push(`    return float(0);`);
@@ -222,6 +283,35 @@ function compileSubgraphDefinition(
     return lines;
 }
 
+/**
+ * recursively collect used subgraphs
+ */
+function collectSubgraphDependencies(
+    nodes: Node<TSLNodeData>[],
+    subgraphs: Record<string, SubgraphDefinition>,
+    usedSubgraphs: Map<string, string>
+) {
+    for (const node of nodes) {
+        if (node.data.type.startsWith('custom/')) {
+            const subgraphId = node.data.type;
+            if (subgraphs[subgraphId] && !usedSubgraphs.has(subgraphId)) {
+                // Sanitize name
+                const rawName = subgraphs[subgraphId].name;
+                const safeName = rawName.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&');
+                // Ensure unique function name
+                let funcName = safeName;
+                let i = 1;
+                while ([...usedSubgraphs.values()].includes(funcName)) {
+                    funcName = `${safeName}_${i++}`;
+                }
+                usedSubgraphs.set(subgraphId, funcName);
+
+                // Recurse into the subgraph's nodes to find nested dependencies
+                collectSubgraphDependencies(subgraphs[subgraphId].nodes, subgraphs, usedSubgraphs);
+            }
+        }
+    }
+}
 
 /**
  * Compile a graph of nodes and edges into TSL code.
@@ -241,34 +331,56 @@ export function compileGraph(
     const lines: string[] = [];
     const usedSubgraphs = new Map<string, string>(); // subgraphId -> functionName
 
-    // 1. Identify used subgraphs
+    // 1. Identify used subgraphs (Recursive)
     if (subgraphs) {
-        for (const node of nodes) {
-            if (node.data.type.startsWith('custom/')) {
-                const subgraphId = node.data.type;
-                if (subgraphs[subgraphId] && !usedSubgraphs.has(subgraphId)) {
-                    // Sanitize name
-                    const rawName = subgraphs[subgraphId].name;
-                    const safeName = rawName.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&');
-                    // Ensure unique function name if multiple subgraphs translate to same name?
-                    let funcName = safeName;
-                    let i = 1;
-                    while ([...usedSubgraphs.values()].includes(funcName)) {
-                        funcName = `${safeName}_${i++}`;
-                    }
-                    usedSubgraphs.set(subgraphId, funcName);
-                }
-            }
-        }
+        collectSubgraphDependencies(nodes, subgraphs, usedSubgraphs);
     }
 
     // 2. Generate Subgraph Definitions
+    // Reverse the order so dependencies are defined first?
+    // Actually, function hoisting might handle it in JS, but TSL construction creates variables.
+    // Variables must be defined before use.
+    // So we need to topologically sort the usedSubgraphs based on dependency.
     if (usedSubgraphs.size > 0) {
         lines.push('// Subgraph Definitions');
-        for (const [subgraphId, funcName] of usedSubgraphs) {
+
+        // Simple sort: defined subgraphs that don't use others first?
+        // Or just let JS output them.
+        // If Subgraph A uses Subgraph B, B must be defined before A.
+        // collectSubgraphDependencies pushes to map in pre-order (root first, then children).
+        // But we need children defined first (post-order).
+        // Let's re-collect in post-order or just reverse if it's simple tree. It's a DAG.
+
+        // Better: explicit topological sort of the used subgraphs.
+        // Build dependency graph of subgraphs
+        const subgraphIds = Array.from(usedSubgraphs.keys());
+        const visited = new Set<string>();
+        const sortedIds: string[] = [];
+
+        const visit = (id: string) => {
+            if (visited.has(id)) return;
+            visited.add(id);
+            const def = subgraphs?.[id];
+            if (def) {
+                for (const n of def.nodes) {
+                    if (n.data.type.startsWith('custom/') && subgraphs?.[n.data.type]) {
+                        visit(n.data.type);
+                    }
+                }
+            }
+            sortedIds.push(id);
+        };
+
+        subgraphIds.forEach(visit);
+
+        for (const subgraphId of sortedIds) {
+            if (!usedSubgraphs.has(subgraphId)) continue; // Should be there
+            const funcName = usedSubgraphs.get(subgraphId)!;
+            // re-fetch def
             const subgraph = subgraphs![subgraphId];
+
             lines.push(`// Subgraph: ${subgraph.name}`);
-            const defLines = compileSubgraphDefinition(subgraph, funcName);
+            const defLines = compileSubgraphDefinition(subgraph, funcName, usedSubgraphs, subgraphs);
             lines.push(...defLines);
             lines.push('');
         }
@@ -423,6 +535,7 @@ export function compileGraph(
                     wrappedVal = `bool(${valExpression})`;
                 }
                 // vec2, vec3, vec4 are already wrapped by getInputValue
+                // NOTE: Switched to explicit vecN() in getInputValue
 
                 lines.push(`material.${key} = ${wrappedVal};`);
             }
@@ -431,6 +544,7 @@ export function compileGraph(
 
     return lines.join('\n');
 }
+
 
 /**
  * Get a list of TSL imports needed for the compiled code.
