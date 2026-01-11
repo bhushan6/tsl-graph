@@ -391,10 +391,40 @@ export function compileGraph(
 
             const inputKeys = Object.keys(materialDef.inputs ?? {});
             for (const key of inputKeys) {
+                const inputDef = materialDef.inputs![key];
+
+                // 1. Check for connection
                 const varName = getMaterialInputVar(materialNode, key, edges, compiledNodes);
                 if (varName) {
                     lines.push(`material.${key} = ${varName};`);
+                    continue;
                 }
+
+                // 2. Use local value (properties panel)
+                // Skip connection-only inputs that aren't connected
+                if (inputDef.connectionOnly) continue;
+
+                const valExpression = getInputValue(materialNode, key, edges, compiledNodes, inputDef);
+
+                // Wrap values in TSL constructors if they are primitives (to ensure they are Nodes)
+                let wrappedVal = valExpression;
+
+                if (inputDef.type === 'color') {
+                    // getInputValue returns quoted string for color, wrap in color()
+                    wrappedVal = `color(${valExpression})`;
+                } else if (inputDef.type === 'float') {
+                    // getInputValue returns number string, wrap in float()
+                    wrappedVal = `float(${valExpression})`;
+                } else if (inputDef.type === 'int' || inputDef.type === 'uint') {
+                    // getInputValue returns number string
+                    wrappedVal = `int(${valExpression})`;
+                } else if (inputDef.type === 'bool') {
+                    // getInputValue returns true/false
+                    wrappedVal = `bool(${valExpression})`;
+                }
+                // vec2, vec3, vec4 are already wrapped by getInputValue
+
+                lines.push(`material.${key} = ${wrappedVal};`);
             }
         }
     }
