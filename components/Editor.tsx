@@ -15,6 +15,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
+import { AppNode } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import GroupNode from './GroupNode';
@@ -29,9 +30,14 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
 import { Button } from '@/components/ui/button';
 import { PanelLeft } from 'lucide-react';
+import TSLEdge from './TSLEdge';
 
 // Initialize nodes on module load
 initializeNodes();
+
+const edgeTypes = {
+    default: TSLEdge,
+}
 
 function EditorCanvas() {
     const {
@@ -172,7 +178,7 @@ function EditorCanvas() {
         return types;
     }, [subgraphs]);
 
-    const { getNodes, getEdges } = useReactFlow();
+    const { getNodes, getEdges } = useReactFlow<AppNode>();
 
     const isValidConnection = useCallback(
         (connection: Connection | Edge) => {
@@ -207,12 +213,13 @@ function EditorCanvas() {
                     onNodeDragStart={onNodeDragStart}
                     onSelectionChange={onSelectionChange}
                     nodeTypes={nodeTypes}
+                    edgeTypes={edgeTypes}
                     isValidConnection={isValidConnection}
                     fitView
                     className="bg-background"
-                    defaultEdgeOptions={{
-                        type: 'smoothstep',
-                    }}
+                    // defaultEdgeOptions={{
+                    //     type: 'smoothstep',
+                    // }}
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
                     selectionKeyCode={null} // Disable keyboard shortcut so it's mode-only (optional, but good UX if we have explicit modes)
