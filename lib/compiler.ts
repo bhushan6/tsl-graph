@@ -170,11 +170,15 @@ function compileSubgraphDefinition(
 
             if (funcName && nestedSubgraph) {
                 // Generate unique name for this instance output
-                const instanceName = `_subgraph_node${nodeIndex}`;
-                let displayName = instanceName;
+                const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+                const baseName = localName
+                    ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                    : `_subgraph_node${nodeIndex}`;
+
+                let displayName = baseName;
                 let suffix = 1;
                 while (usedNames.has(displayName)) {
-                    displayName = `${instanceName}_${suffix++}`;
+                    displayName = `${baseName}_${suffix++}`;
                 }
                 usedNames.add(displayName);
                 nodeIndex++;
@@ -222,7 +226,11 @@ function compileSubgraphDefinition(
         }
 
         // Ensure unique name
-        const baseName = `_subgraph_node${nodeIndex}`;
+        const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+        const baseName = localName
+            ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+            : `_subgraph_node${nodeIndex}`;
+
         let displayName = baseName;
         let suffix = 1;
         while (usedNames.has(displayName)) {
@@ -413,8 +421,17 @@ export function compileGraph(
 
             if (funcName && subgraph) {
                 // Generate unique name for this instance output
-                const instanceName = `_subgraph_inst_${nodeIndex}`;
-                usedNames.add(instanceName);
+                const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+                const baseName = localName
+                    ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                    : `_subgraph_inst_${nodeIndex}`;
+
+                let displayName = baseName;
+                let suffix = 1;
+                while (usedNames.has(displayName)) {
+                    displayName = `${baseName}_${suffix++}`;
+                }
+                usedNames.add(displayName);
                 nodeIndex++;
 
                 // Collect arguments
@@ -434,13 +451,13 @@ export function compileGraph(
                     }
                 }
 
-                lines.push(`const ${instanceName} = ${funcName}(${args.join(', ')});`);
+                lines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
 
                 const isSingleOutput = subgraph.outputs.length === 1;
 
                 compiledNodes.set(nodeId, {
                     id: nodeId,
-                    varName: instanceName,
+                    varName: displayName,
                     code: `/* ${funcName} call */`,
                     singleOutput: isSingleOutput
                 });
