@@ -3,6 +3,11 @@
 import { Handle, HandleProps } from '@xyflow/react';
 import { TSLType } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // Color mapping for TSL types
 export const TYPE_COLORS: Partial<Record<TSLType, string>> = {
@@ -63,25 +68,25 @@ export function TSLHandle({
             )}
         >
             {/* Handle styled as indicator */}
-            <div className={cn('relative', isOutput ? 'ml-2' : 'mr-2')}>
-                <Handle
-                    {...props}
-                    isConnectable={true}
-                    className="!relative !transform-none !inset-auto !w-4 !h-4 !rounded !border-0 transition-colors duration-150"
-                    style={{
-                        '--handle-bg': defaultBg,
-                        '--handle-hover-bg': handleColor,
-                        backgroundColor: 'var(--handle-bg)',
-                    } as React.CSSProperties}
-                />
-                {/* Icon overlay */}
-                {/* <div
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none text-[10px] font-medium select-none transition-colors duration-150"
-                    style={{ color: textColor }}
-                >
-                    =
-                </div> */}
-            </div>
+            <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                    <div className={cn('relative', isOutput ? 'ml-2' : 'mr-2')}>
+                        <Handle
+                            {...props}
+                            isConnectable={true}
+                            className="!relative !transform-none !inset-auto !w-4 !h-4 !rounded !border-0 transition-colors duration-150"
+                            style={{
+                                '--handle-bg': defaultBg,
+                                '--handle-hover-bg': handleColor,
+                                backgroundColor: 'var(--handle-bg)',
+                            } as React.CSSProperties}
+                        />
+                    </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs rounded-sm">
+                    <p>{dataType}</p>
+                </TooltipContent>
+            </Tooltip>
 
             {/* Label */}
             <span className={cn(
