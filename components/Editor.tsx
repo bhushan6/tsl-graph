@@ -7,6 +7,7 @@ import {
     BackgroundVariant,
     ReactFlowProvider,
     type NodeTypes,
+    type EdgeTypes,
     type OnSelectionChangeParams,
     useReactFlow,
     type Connection,
@@ -17,6 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { useEditorStore } from '@/store/editor';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
+import TSLEdge from './TSLEdge';
 import { NodePicker } from './NodePicker';
 import { Navbar } from '@/components/Navbar';
 import { registry } from '@/lib/registry';
@@ -168,6 +170,13 @@ function EditorCanvas() {
         return types;
     }, [subgraphs]);
 
+    // Generate edge types - use TSLEdge for all edges
+    const edgeTypes: EdgeTypes = useMemo(() => {
+        return {
+            default: TSLEdge,
+        };
+    }, []);
+
     const { getNodes, getEdges } = useReactFlow();
 
     const isValidConnection = useCallback(
@@ -203,6 +212,7 @@ function EditorCanvas() {
                     onNodeDragStart={onNodeDragStart}
                     onSelectionChange={onSelectionChange}
                     nodeTypes={nodeTypes}
+                    edgeTypes={edgeTypes}
                     isValidConnection={isValidConnection}
                     fitView
                     className="bg-background"

@@ -50,6 +50,12 @@ export function TSLHandle({
     const handleColor = TYPE_COLORS[dataType] ?? DEFAULT_HANDLE_COLOR;
     const isOutput = props.type === 'source';
 
+    // Generate handle ID that includes data type for edge coloring
+    // Preserves original ID if provided, otherwise generates based on type and dataType
+    const handleId = props.id 
+        ? `${props.id}-${dataType}` 
+        : `${isOutput ? 'output' : 'input'}-${dataType}`;
+
     // Background color based on state
     const defaultBg = isConnected
         ? handleColor
@@ -65,6 +71,7 @@ export function TSLHandle({
             {/* Handle styled as indicator */}
             <div className={cn('relative', isOutput ? 'ml-2' : 'mr-2')}>
                 <Handle
+                    id={handleId}
                     {...props}
                     isConnectable={true}
                     className="!relative !transform-none !inset-auto !w-4 !h-4 !rounded !border-0 transition-colors duration-150"
