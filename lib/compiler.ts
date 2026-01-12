@@ -503,6 +503,10 @@ export function compileGraph(
 
         if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
+        } else if (def.type === 'geo/uv') {
+            // Special handling for UV node with index
+            const index = Number(node.data.values?.['index'] ?? 0);
+            code = `uv(${index})`;
         } else if (def.type === 'texture/sample') {
             // Special handling for texture node
             const url = getStringValue(node, 'url', inputs['url']);

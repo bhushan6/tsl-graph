@@ -288,6 +288,7 @@ function PropertiesPanelContent() {
                                     inputType={input.type}
                                     inputLabel={input.label}
                                     inputDefault={input.default}
+                                    inputOptions={input.options}
                                     onChange={(v) => updateNodeValue(node.id, key, v)}
                                 />
                             );
@@ -305,6 +306,7 @@ interface PropertyInputWrapperProps {
     inputType: string;
     inputLabel: string;
     inputDefault: unknown;
+    inputOptions?: readonly { label: string; value: any }[];
     onChange: (value: unknown) => void;
 }
 
@@ -317,6 +319,7 @@ function PropertyInputWrapper({
     inputType,
     inputLabel,
     inputDefault,
+    inputOptions,
     onChange
 }: PropertyInputWrapperProps) {
     // Subscribe reactively to this specific value
@@ -330,6 +333,7 @@ function PropertyInputWrapper({
             <PropertyInput
                 type={inputType}
                 value={value}
+                options={inputOptions}
                 onChange={onChange}
             />
         </div>
@@ -339,10 +343,32 @@ function PropertyInputWrapper({
 interface PropertyInputProps {
     type: string;
     value: unknown;
+    options?: readonly { label: string; value: any }[];
     onChange: (value: unknown) => void;
 }
 
-function PropertyInput({ type, value, onChange }: PropertyInputProps) {
+function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
+    if (options && options.length > 0) {
+        return (
+            <select
+                value={String(value ?? options[0].value)}
+                onChange={(e) => {
+                    // Try to preserve type if original values were numbers
+                    const val = e.target.value;
+                    const originalOption = options.find(o => String(o.value) === val);
+                    onChange(originalOption ? originalOption.value : val);
+                }}
+                className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+            >
+                {options.map((opt) => (
+                    <option key={String(opt.value)} value={String(opt.value)}>
+                        {opt.label}
+                    </option>
+                ))}
+            </select>
+        );
+    }
+
     if (type === 'any') {
         return <AnyInput value={value} onChange={onChange} />;
     }

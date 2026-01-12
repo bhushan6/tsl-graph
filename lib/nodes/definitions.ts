@@ -19,6 +19,7 @@ export interface Port {
     readonly default?: number | readonly number[] | string;
     readonly connectionOnly?: boolean; // If true, input must be connected (no inline value)
     readonly propertyOnly?: boolean; // If true, input is hidden on node (property panel only)
+    readonly options?: readonly { label: string; value: any }[]; // Dropdown options
 }
 
 // Base Node definition (loose types for definition files)
