@@ -43,7 +43,6 @@ interface AnchorNodePortEditorProps {
 }
 
 function AnchorNodePortEditor({
-    nodeId,
     dynamicPorts,
     isInputAnchor,
     onAddPort,

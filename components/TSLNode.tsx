@@ -326,12 +326,6 @@ function NumberPreview({ value }: { value: number }) {
 function StringPreview({ value }: { value: string }) {
     if (!value) return <span className="text-[9px] text-muted-foreground italic">Empty</span>;
 
-    // Simple check if it might be an image
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const isImage = value.startsWith('blob:') || value.match(/\.(jpeg|jpg|gif|png)$/) != null || value.startsWith('data:image');
-
-    // For now, always try to render as image if it's a string in this context (Texture node)
-    // We can show a small thumbnail
     return (
         <div className="w-16 h-16 rounded overflow-hidden border border-gray-200 dark:border-white/10 bg-checkered">
             {/* eslint-disable-next-line @next/next/no-img-element */}
