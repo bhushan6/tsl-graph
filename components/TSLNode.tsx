@@ -21,19 +21,11 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
 
-    // Helper function to extract base handle ID (remove data type suffix)
-    const getBaseHandleId = (handleId: string | null | undefined): string | null => {
-        if (!handleId) return null;
-        const parts = handleId.split('-');
-        // Remove the last part (data type) to get the base ID
-        return parts.slice(0, -1).join('-') || handleId;
-    };
-
     const connectedInputs = new Set(
-        edges.filter((e) => e.target === id).map((e) => getBaseHandleId(e.targetHandle)).filter(Boolean) as string[]
+        edges.filter((e) => e.target === id).map((e) => e.targetHandle)
     );
     const connectedOutputs = new Set(
-        edges.filter((e) => e.source === id).map((e) => getBaseHandleId(e.sourceHandle)).filter(Boolean) as string[]
+        edges.filter((e) => e.source === id).map((e) => e.sourceHandle)
     );
 
     const storedName = (data.values?.localName as string | undefined) || '';

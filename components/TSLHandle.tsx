@@ -51,10 +51,8 @@ export function TSLHandle({
     const isOutput = props.type === 'source';
 
     // Generate handle ID that includes data type for edge coloring
-    // Preserves original ID if provided, otherwise generates based on type and dataType
-    const handleId = props.id 
-        ? `${props.id}-${dataType}` 
-        : `${isOutput ? 'output' : 'input'}-${dataType}`;
+    // Only auto-generate when no explicit ID is provided
+    const handleId = props.id || `${isOutput ? 'output' : 'input'}-${dataType}`;
 
     // Background color based on state
     const defaultBg = isConnected
