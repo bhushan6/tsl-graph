@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2 } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
@@ -27,6 +27,8 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         history,
         canvasMode,
         setCanvasMode,
+        groupNodes,
+        ungroupNodes,
     } = useEditorStore();
 
     // Ref to track subgraph name without causing re-renders
@@ -215,6 +217,34 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 <Layers className="w-4 h-4" />
                 <span className="text-xs">Subgraph</span>
             </Button>
+
+            <div className="w-px h-4 bg-border" />
+
+            <div className="flex items-center gap-0.5">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={groupNodes}
+                    className="h-8 px-2 gap-2"
+                    title="Group selected nodes"
+                    disabled={selectedNodeIds.length < 1}
+                >
+                    <Group className="w-4 h-4" />
+                    <span className="text-xs">Group</span>
+                </Button>
+                {selectedNodeIds.length > 0 && nodes.filter(n => selectedNodeIds.includes(n.id)).every(n => n.type === 'group') && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={ungroupNodes}
+                        className="h-8 px-2 gap-2"
+                        title="Ungroup selected groups"
+                    >
+                        <Ungroup className="w-4 h-4" />
+                        <span className="text-xs">Ungroup</span>
+                    </Button>
+                )}
+            </div>
 
             <div className="w-px h-4 bg-border" />
 

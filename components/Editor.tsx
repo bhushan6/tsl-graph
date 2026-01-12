@@ -17,6 +17,7 @@ import '@xyflow/react/dist/style.css';
 import { useEditorStore } from '@/store/editor';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
+import GroupNode from './GroupNode';
 import { NodePicker } from './NodePicker';
 import { Navbar } from '@/components/Navbar';
 import { registry } from '@/lib/registry';
@@ -157,7 +158,9 @@ function EditorCanvas() {
 
     // Generate node types from registry + subgraphs - all use the same TSLNode component
     const nodeTypes: NodeTypes = useMemo(() => {
-        const types: NodeTypes = {};
+        const types: NodeTypes = {
+            group: GroupNode as any,
+        };
         // Add registry types
         for (const def of registry.all()) {
             types[def.type] = TSLNode;

@@ -11,6 +11,7 @@ import {
     type Connection,
     getNodesBounds,
 } from '@xyflow/react';
+import { getAbsolutePosition } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort } from '@/lib/types';
 
@@ -108,6 +109,10 @@ interface EditorState {
     undo: () => void;
     redo: () => void;
     clearHistory: () => void;
+
+    // Group actions
+    groupNodes: () => void;
+    ungroupNodes: () => void;
 
 
     // Subgraph actions
@@ -336,7 +341,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         get().takeSnapshot();
         const { nodes, edges } = get();
-        const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+        // 1. Expand selection to include children of selected groups
+        let expandedNodeIds = [...selectedNodeIds];
+        const initialSelectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+
+        // Find all groups in selection
+        const selectedGroups = initialSelectedNodes.filter(n => n.type === 'group');
+
+        // Add all children of selected groups to the selection
+        if (selectedGroups.length > 0) {
+            const groupIds = selectedGroups.map(g => g.id);
+            const children = nodes.filter(n => n.parentId && groupIds.includes(n.parentId));
+            const childrenIds = children.map(c => c.id);
+            // Add unique children IDs
+            expandedNodeIds = [...new Set([...expandedNodeIds, ...childrenIds])];
+        }
+
+        const selectedNodes = nodes.filter(n => expandedNodeIds.includes(n.id));
 
         if (selectedNodes.length === 0) return null;
 
@@ -363,12 +384,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         // Calculate bounding box of selected nodes using React Flow helper
+        // Using getAbsolutePosition from utils to ensure correct bounds for nested nodes
+        const nodesForBounds = selectedNodes.map(n => ({
+            ...n,
+            position: getAbsolutePosition(n, nodes),
+        }));
+
+        const bounds = getNodesBounds(nodesForBounds);
+
+        // Position anchor nodes based on bounding box
         const NODE_WIDTH = 180; // Approximate anchor node width
         const PADDING = 100; // Padding between anchor nodes and content
 
-        const bounds = getNodesBounds(selectedNodes);
-
-        // Position anchor nodes based on bounding box
         const centerY = bounds.y + bounds.height / 2 - 50; // Center vertically (50 = half node height)
         const inputNodePosition = { x: bounds.x - NODE_WIDTH - PADDING, y: centerY };
         const outputNodePosition = { x: bounds.x + bounds.width + PADDING, y: centerY };
@@ -382,7 +409,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             name,
             inputs: [{ id: 'in_0', label: 'Input 1', type: 'any' }],
             outputs: [{ id: 'out_0', label: 'Output 1', type: 'any' }],
-            nodes: selectedNodes.map(n => ({ ...n })), // Clone nodes
+            nodes: selectedNodes.map(n => {
+                const newNode = { ...n };
+                // Check if parent is also selected
+                if (newNode.parentId && !expandedNodeIds.includes(newNode.parentId)) {
+                    // Parent is not moving to subgraph, so orphan this node
+                    delete newNode.parentId;
+                    delete newNode.extent;
+                    // Position needs to be absolute now? 
+                    // React Flow might handle this, but usually child positions are relative.
+                    // If we remove parentId, we should convert relative position to absolute.
+                    // BUT, inside the subgraph, the coordinate system is new (0,0 based on bounding box?).
+                    // Actually, we are resetting positions based on the new subgraph context.
+                    // Wait, usually subgraphs have their own coordinate system.
+                    // If we just copy nodes, they keep their positions.
+                    // If we orphan a node, its position is currently relative to the group.
+                    // We need to make it relative to the subgraph origin.
+                    // However, `selectedNodes` still has the original nodes with original positions.
+                    // We need to calculate absolute positions for ALL nodes relative to the subgraph anchor?
+                    // Or does the subgraph just assume the positions are absolute world coordinates?
+                    // Currently TSL Editor seems to use absolute coordinates for everything in proper "main" graph.
+                    // If `parentId` exists, position is relative.
+                    // So if we remove `parentId`, we MUST update `position` to be absolute (world).
+                    // Calculation: absolute = parent.position + child.position
+                    // Position needs to be absolute now
+                    // Use helper to get strictly world coordinates
+                    const absPos = getAbsolutePosition(n, nodes);
+                    newNode.position = absPos;
+                }
+                return newNode;
+            }), // Clone nodes and fix hierarchy
             edges: internalEdges.map(e => ({ ...e })), // Clone edges
             inputNodePosition,
             outputNodePosition,
@@ -820,5 +876,138 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     clearHistory: () => {
         set({ history: { past: [], future: [] } });
+    },
+
+    groupNodes: () => {
+        const { nodes, selectedNodeIds } = get();
+
+        // 1. Get all selected nodes
+        const allSelectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+
+        // 2. Filter to find the "roots" of the selection.
+        // If a node is selected, but its parent is ALSO selected, we ignore the child
+        // because it will move along with the parent group.
+        // Also, we DO allow groups to be selected now (nesting).
+        const selectedRoots = allSelectedNodes.filter(node => {
+            if (!node.parentId) return true; // No parent, so it's a root
+            return !selectedNodeIds.includes(node.parentId); // Parent is NOT selected, so this is a top-level selection
+        });
+
+        if (selectedRoots.length === 0) return;
+
+        get().takeSnapshot();
+
+        // Calculate bounding box of selected roots using absolute positions
+        const nodesForBounds = selectedRoots.map(n => ({
+            ...n,
+            position: getAbsolutePosition(n, nodes),
+        }));
+
+        const bounds = getNodesBounds(nodesForBounds);
+
+        // Add padding (Reference uses 40)
+        const PADDING = 40;
+        const width = bounds.width + PADDING * 2;
+        const height = bounds.height + PADDING * 2;
+        const x = bounds.x - PADDING;
+        const y = bounds.y - PADDING;
+
+        const groupId = `group-${Date.now()}`;
+
+        // Create the group node
+        const groupNode: Node<TSLNodeData> = {
+            id: groupId,
+            type: 'group',
+            position: { x, y },
+            style: { width, height },
+            data: {
+                type: 'group',
+                values: { label: 'Group' },
+                connected: {},
+            },
+            selected: true,
+        };
+
+        // Update selected nodes to be children of the group
+        const newNodes = nodes.map(node => {
+            // Check if this node is one of the ROOTS we are grouping
+            const isRoot = selectedRoots.some(root => root.id === node.id);
+
+            if (isRoot) {
+                return {
+                    ...node,
+                    parentId: groupId,
+                    extent: 'parent' as const, // Constrain to parent
+                    position: {
+                        x: getAbsolutePosition(node, nodes).x - x, // Relative position from world coords
+                        y: getAbsolutePosition(node, nodes).y - y,
+                    },
+                    selected: false, // Deselect children
+                };
+            }
+            return { ...node, selected: false }; // Clear other selections
+        });
+
+        // Insert group at the position of the first selected root, then add all other nodes
+        const firstRootIndex = newNodes.findIndex(
+            (n) => selectedRoots.some((root) => root.id === n.id)
+        );
+        const insertIndex = firstRootIndex >= 0 ? firstRootIndex : 0;
+
+        const finalNodes = [
+            ...newNodes.slice(0, insertIndex),
+            groupNode,
+            ...newNodes.slice(insertIndex),
+        ];
+
+        set({
+            nodes: finalNodes,
+            selectedNodeIds: [groupId], // Select ONLY the new group
+            selectedNodeId: groupId,
+        });
+    },
+
+    ungroupNodes: () => {
+        const { nodes, selectedNodeIds } = get();
+        if (selectedNodeIds.length === 0) return;
+
+        get().takeSnapshot();
+
+        // Find groups to ungroup (only selected groups)
+        const groupsToUngroup = nodes.filter(n =>
+            selectedNodeIds.includes(n.id) && n.type === 'group'
+        );
+
+        if (groupsToUngroup.length === 0) return;
+
+        const groupIds = groupsToUngroup.map(g => g.id);
+
+        // Update nodes: remove parentId and convert to absolute positions
+        const updatedNodes = nodes
+            .filter((node) => !groupIds.includes(node.id)) // Remove group nodes
+            .map((node) => {
+                if (node.parentId && groupIds.includes(node.parentId)) {
+                    // Calculate absolute position
+                    const parentGroup = groupsToUngroup.find((g) => g.id === node.parentId);
+                    if (parentGroup) {
+                        return {
+                            ...node,
+                            parentId: undefined, // Remove parent relationship
+                            extent: undefined,
+                            position: {
+                                x: node.position.x + parentGroup.position.x,
+                                y: node.position.y + parentGroup.position.y,
+                            },
+                        };
+                    }
+                }
+                return node;
+            });
+
+        set({
+            nodes: updatedNodes,
+            selectedNodeIds: [], // Clear selection
+            selectedNodeId: null,
+        });
     },
 }));
