@@ -7,7 +7,15 @@ import { useEditorStore } from '@/store/editor';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
 
@@ -170,11 +178,11 @@ export function Preview() {
         };
     }, [geometry, material]);
 
-    const meshOptions: { value: PreviewMesh; label: string }[] = [
-        { value: 'sphere', label: '●' },
-        { value: 'cube', label: '■' },
-        { value: 'torus', label: '◎' },
-        { value: 'plane', label: '▭' },
+    const meshOptions: { value: PreviewMesh; name: string }[] = [
+        { value: 'sphere', name: 'Sphere' },
+        { value: 'cube', name: 'Cube' },
+        { value: 'torus', name: 'Torus' },
+        { value: 'plane', name: 'Plane' },
     ];
 
     return (
@@ -184,35 +192,28 @@ export function Preview() {
                 isExpanded ? 'w-96 h-96' : 'w-72 h-72'
             )}
         >
-            {/* Controls - Expand button on left */}
-            {/* <div className="absolute top-2 left-2 z-10 flex gap-1">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={() => setIsExpanded(!isExpanded)}
-                >
-                    {isExpanded ? (
-                        <Minimize2 className="w-3 h-3" />
-                    ) : (
-                        <Maximize2 className="w-3 h-3" />
-                    )}
-                </Button>
-            </div> */}
-
-            {/* Geometry selector on right */}
-            <div className="absolute top-2 right-2 z-10 flex gap-1">
-                {meshOptions.map((opt) => (
-                    <Button
-                        key={opt.value}
-                        variant={currentMesh === opt.value ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 w-6 p-0 text-xs"
-                        onClick={() => setCurrentMesh(opt.value)}
-                    >
-                        {opt.label}
-                    </Button>
-                ))}
+            <div className="absolute top-2 right-2 z-10">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-auto px-2 text-xs">
+                            {meshOptions.find((opt) => opt.value === currentMesh)?.name}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Geometry</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                            {meshOptions.map((opt) => (
+                                <DropdownMenuItem
+                                    key={opt.value}
+                                    onClick={() => setCurrentMesh(opt.value)}
+                                >
+                                    <span>{opt.name}</span>
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             {/* Error display */}
