@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useState } from 'react';
-import * as THREE from 'three/webgpu';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { useEditorStore } from '@/store/editor';
+import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,9 +34,13 @@ export function Preview() {
     const [error, setError] = useState<string | null>(null);
     const [isReady, setIsReady] = useState(false);
 
-    const nodes = useEditorStore((s) => s.nodes);
-    const edges = useEditorStore((s) => s.edges);
-    const subgraphs = useEditorStore((s) => s.subgraphs);
+
+    const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+    const nodes = useEditorStore((state) => state.nodes);
+    const edges = useEditorStore((state) => state.edges);
+    const subgraphs = useEditorStore((state) => state.subgraphs);
+
+
 
     // Build material from graph
     const material = useMemo(() => {
@@ -49,7 +53,7 @@ export function Preview() {
             setError(e instanceof Error ? e.message : 'Failed to build material');
             return new THREE.MeshStandardMaterial({ color: 0x888888 });
         }
-    }, [nodes, edges, subgraphs, isReady]);
+    }, [graphStructureVersion, isReady]);
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {

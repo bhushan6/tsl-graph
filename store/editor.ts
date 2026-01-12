@@ -64,6 +64,7 @@ interface EditorState {
     edges: Edge[];
     selectedNodeId: string | null;
     selectedNodeIds: string[]; // For multi-selection
+    graphStructureVersion: number;
 
     // Subgraph state
     subgraphs: Record<string, SubgraphDefinition>;
@@ -133,6 +134,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     edges: [],
     selectedNodeId: null,
     selectedNodeIds: [],
+    graphStructureVersion: 0,
 
     // Subgraph state initialization
     subgraphs: {},
@@ -149,6 +151,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     isUndoRedoInProgress: false,
 
     onNodesChange: (changes) => {
+        const hasStructuralChange = changes.some(change => {
+            console.log('change', change);
+            if (change.type === 'remove') return true;
+            if (change.type === 'add') return true;
+            // if (change.type === 'reset') return true;
+            // Position and selection don't count as structural changes
+            if (change.type === 'position' || change.type === 'select') return false;
+            // Dimensions changes might affect layout but not material building
+            if (change.type === 'dimensions') return false;
+            return true; // Other changes (like data updates) are structural
+        });
+
         // Prevent deletion of subgraph anchor nodes
         const filteredChanges = changes.filter(change => {
             if (change.type === 'remove') {
@@ -161,12 +175,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
         set({
             nodes: applyNodeChanges(filteredChanges, get().nodes),
+            graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
     },
 
     onEdgesChange: (changes) => {
+        const hasStructuralChange = changes.some(change => {
+            return change.type !== 'select';
+        });
         set({
             edges: applyEdgeChanges(changes, get().edges),
+            graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
     },
 
@@ -182,8 +201,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             (edge) => !(edge.target === connection.target && edge.targetHandle === connection.targetHandle)
         );
 
+
         set({
             edges: addEdge(connection, filteredEdges),
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
     },
 
@@ -220,7 +241,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 ...data,
             },
         };
-        set({ nodes: [...get().nodes, newNode] });
+        set({ nodes: [...get().nodes, newNode], graphStructureVersion: get().graphStructureVersion + 1 });
         return true;
     },
 
@@ -238,6 +259,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     }
                     : node
             ),
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
     },
 
@@ -250,6 +272,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ),
             // Clear selection if the deleted node was selected
             selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
     },
 
