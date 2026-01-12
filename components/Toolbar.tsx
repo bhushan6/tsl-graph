@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { Code, Layers, Undo2, Redo2 } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
@@ -25,6 +25,8 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         undo,
         redo,
         history,
+        canvasMode,
+        setCanvasMode,
     } = useEditorStore();
 
     // Ref to track subgraph name without causing re-renders
@@ -97,6 +99,33 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                     />
                 </div>
 
+
+
+                <div className="w-px h-4 bg-border" />
+
+                <div className="flex items-center gap-0.5">
+                    <Button
+                        type="button"
+                        variant={canvasMode === 'pan' ? 'secondary' : 'ghost'}
+                        size="icon"
+                        onClick={() => setCanvasMode('pan')}
+                        className="h-8 w-8"
+                        title="Pan Mode"
+                    >
+                        <Hand className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant={canvasMode === 'select' ? 'secondary' : 'ghost'}
+                        size="icon"
+                        onClick={() => setCanvasMode('select')}
+                        className="h-8 w-8"
+                        title="Selection Mode"
+                    >
+                        <MousePointer2 className="w-4 h-4" />
+                    </Button>
+                </div>
+
                 <div className="w-px h-4 bg-border" />
 
                 <div className="flex items-center gap-0.5">
@@ -146,12 +175,35 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 >
                     <span className="text-xs">Cancel</span>
                 </Button>
-            </form>
+            </form >
         );
     }
 
     return (
         <div className="pointer-events-auto flex items-center gap-1 bg-card/95 backdrop-blur-sm border border-border rounded-xl p-1.5 shadow-lg">
+            <div className="flex items-center gap-0.5">
+                <Button
+                    variant={canvasMode === 'pan' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    onClick={() => setCanvasMode('pan')}
+                    className="h-8 w-8"
+                    title="Pan Mode"
+                >
+                    <Hand className="w-4 h-4" />
+                </Button>
+                <Button
+                    variant={canvasMode === 'select' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    onClick={() => setCanvasMode('select')}
+                    className="h-8 w-8"
+                    title="Selection Mode"
+                >
+                    <MousePointer2 className="w-4 h-4" />
+                </Button>
+            </div>
+
+            <div className="w-px h-4 bg-border" />
+
             <Button
                 variant="ghost"
                 size="sm"

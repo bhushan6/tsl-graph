@@ -69,6 +69,10 @@ interface EditorState {
     editorMode: EditorMode;
     editingSubgraphId: string | null;
 
+    // Canvas Mode
+    canvasMode: 'pan' | 'select';
+    setCanvasMode: (mode: 'pan' | 'select') => void;
+
     // History state
     history: HistoryState;
     isUndoRedoInProgress: boolean;
@@ -130,6 +134,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     editorMode: 'main',
     editingSubgraphId: null,
     subgraphStack: [],
+
+    // Canvas Mode
+    canvasMode: 'pan',
+    setCanvasMode: (mode) => set({ canvasMode: mode }),
 
     // History initialization
     history: { past: [], future: [] },

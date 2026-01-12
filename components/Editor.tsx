@@ -47,6 +47,7 @@ function EditorCanvas() {
         undo,
         redo,
         takeSnapshot,
+        canvasMode, // Add this
     } = useEditorStore();
 
     const isInitialized = useRef(false);
@@ -209,6 +210,10 @@ function EditorCanvas() {
                     defaultEdgeOptions={{
                         type: 'smoothstep',
                     }}
+                    panOnDrag={canvasMode === 'pan'}
+                    selectionOnDrag={canvasMode === 'select'}
+                    selectionKeyCode={null} // Disable keyboard shortcut so it's mode-only (optional, but good UX if we have explicit modes)
+                    multiSelectionKeyCode="Shift" // Keep Shift for multi-selection additions
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                     {/* <Controls /> */}
@@ -217,10 +222,10 @@ function EditorCanvas() {
                         nodeColor="#525252"
                     /> */}
                 </ReactFlow>
-            </div>
+            </div >
 
             {/* UI Layer */}
-            <UILayer>
+            < UILayer >
                 <UILayer.TopBar>
                     <Navbar />
                 </UILayer.TopBar>
@@ -251,12 +256,13 @@ function EditorCanvas() {
                         onOpenCodePanel={() => setIsCodePanelOpen(true)}
                     />
                 </UILayer.BottomBar>
-            </UILayer>
+            </UILayer >
 
             {/* Code Panel Modal */}
-            <CodePanel
+            < CodePanel
                 isOpen={isCodePanelOpen}
-                onClose={() => setIsCodePanelOpen(false)}
+                onClose={() => setIsCodePanelOpen(false)
+                }
             />
         </>
     );
