@@ -241,7 +241,7 @@ function EditorCanvas() {
                             variant="outline"
                             size="icon"
                             onClick={() => setIsNodePickerOpen(true)}
-                            className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-9 w-9 mt-2 ml-2 pointer-events-auto"
+                            className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-10 w-10 pointer-events-auto"
                             title="Open Node Picker"
                         >
                             <PanelLeft className="h-4 w-4" />

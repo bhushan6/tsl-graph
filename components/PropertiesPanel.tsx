@@ -446,7 +446,7 @@ function PropertiesPanelComponent() {
     return (
         <div
             className={cn(
-                'pointer-events-auto w-72 shrink min-h-0',
+                'pointer-events-auto w-72 shrink flex-1 min-h-0',
                 'bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg',
                 'flex flex-col overflow-hidden'
             )}

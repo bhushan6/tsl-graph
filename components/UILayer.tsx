@@ -34,9 +34,9 @@ const UILayerRoot = memo(({ children }: UILayerProps) => {
             style={{
                 display: 'grid',
                 gridTemplateColumns: 'auto 1fr auto',
-                gridTemplateRows: 'auto minmax(0, 1fr)',
+                gridTemplateRows: 'auto 1fr',
                 gridTemplateAreas: `
-                    "topbar topbar topbar"
+                    "left topbar right"
                     "left center right"
                 `,
                 padding: '1rem',
@@ -52,7 +52,7 @@ UILayerRoot.displayName = 'UILayerRoot';
 const TopBar = memo(({ children, className = '' }: SlotProps) => (
     <div
         style={{ gridArea: 'topbar' }}
-        className={`pointer-events-none flex items-center justify-between ${className}`}
+        className={`pointer-events-none flex items-center justify-between min-h-[40px] ${className}`}
     >
         {children}
     </div>
