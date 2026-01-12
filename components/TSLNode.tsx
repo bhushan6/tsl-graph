@@ -71,7 +71,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const isAnchorNode = isSubgraphInput || isSubgraphOutput;
 
     // Port type that matches what we need
-    type PortDef = { label: string; type: string; default?: unknown; connectionOnly?: boolean };
+    type PortDef = { label: string; type: string; default?: unknown; connectionOnly?: boolean; propertyOnly?: boolean };
 
     // Get ports - for anchor nodes and subgraph instances, use dynamic ports from data
     let inputs: Record<string, PortDef> = {};
@@ -191,18 +191,27 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                             <div className="flex items-center flex-1 min-w-0" style={{
                                 // border: '1px solid red'
                             }}>
-                                <TSLHandle
-                                    id={row.input[0]}
-                                    type="target"
-                                    position={Position.Left}
-                                    dataType={row.input[1].type as TSLType}
-                                    label={row.input[1].label}
-                                    isConnected={connectedInputs.has(row.input[0])}
-                                    isDark={isDark}
-                                    isMaterialNode={data.type.startsWith('material')}
-                                />
+                                {!row.input[1].propertyOnly && (
+                                    <TSLHandle
+                                        id={row.input[0]}
+                                        type="target"
+                                        position={Position.Left}
+                                        dataType={row.input[1].type as TSLType}
+                                        label={row.input[1].label}
+                                        isConnected={connectedInputs.has(row.input[0])}
+                                        isDark={isDark}
+                                        isMaterialNode={data.type.startsWith('material')}
+                                    />
+                                )}
+
+                                {row.input[1].propertyOnly && (
+                                    <span className="text-[9px] text-gray-500 dark:text-gray-400 mr-2 font-mono uppercase tracking-wider ml-1">
+                                        {row.input[1].label}
+                                    </span>
+                                )}
+
                                 {!connectedInputs.has(row.input[0]) && !row.input[1].connectionOnly && (
-                                    <div className="flex-1 mx-2 flex items-center" style={{
+                                    <div className={cn("flex-1 mx-2 flex items-center", row.input[1].propertyOnly && "justify-end")} style={{
                                         // border: '1px solid red'
                                     }}>
                                         <ValuePreview
@@ -273,6 +282,9 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
     // Check if value looks like a color string if type is any?
     const looksLikeColor = type === 'any' && typeof value === 'string' && value.startsWith('#');
 
+    if (type === 'string') {
+        return <StringPreview value={String(value ?? '')} />;
+    }
     if (isColor || looksLikeColor) {
         return <ColorInputPreview value={String(value ?? '#ffffff')} />;
     }
@@ -301,12 +313,39 @@ function ColorInputPreview({ value }: { value: string }) {
 }
 
 
+
 function NumberPreview({ value }: { value: number }) {
     return (
         //vertically center the text
         <span className="text-[9px] text-gray-500 font-mono tabular-nums flex items-center">
             {Number.isInteger(value) ? value : value.toFixed(2)}
         </span>
+    );
+}
+
+function StringPreview({ value }: { value: string }) {
+    if (!value) return <span className="text-[9px] text-muted-foreground italic">Empty</span>;
+
+    // Simple check if it might be an image
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const isImage = value.startsWith('blob:') || value.match(/\.(jpeg|jpg|gif|png)$/) != null || value.startsWith('data:image');
+
+    // For now, always try to render as image if it's a string in this context (Texture node)
+    // We can show a small thumbnail
+    return (
+        <div className="w-16 h-16 rounded overflow-hidden border border-gray-200 dark:border-white/10 bg-checkered">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+                src={value}
+                alt="tex"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                    (e.target as HTMLImageElement).parentElement!.innerText = 'Img Err';
+                    (e.target as HTMLImageElement).parentElement!.className = "w-16 h-16 text-[8px] flex items-center justify-center text-red-500 border border-red-200 bg-red-50";
+                }}
+            />
+        </div>
     );
 }
 

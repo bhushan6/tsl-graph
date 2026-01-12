@@ -13,7 +13,7 @@ import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import { SubgraphPort, TSLType } from '@/lib/types';
-import { Layers, Plus, Trash2 } from 'lucide-react';
+import { Layers, Plus, Trash2, Upload } from 'lucide-react';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -347,6 +347,9 @@ function PropertyInput({ type, value, onChange }: PropertyInputProps) {
     if (type === 'any') {
         return <AnyInput value={value} onChange={onChange} />;
     }
+    if (type === 'string') {
+        return <StringInput value={String(value ?? '')} onChange={onChange} />;
+    }
     if (type === 'color') {
         return <ColorInput value={String(value ?? '#ffffff')} onChange={onChange} />;
     }
@@ -369,6 +372,56 @@ function PropertyInput({ type, value, onChange }: PropertyInputProps) {
             onChange={onChange}
             step={type === 'int' || type === 'uint' ? 1 : 0.1}
         />
+    );
+}
+
+function StringInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            onChange(url);
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+                <SidebarInput
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="h-8 text-xs flex-1"
+                    placeholder="Image URL..."
+                />
+                <div className="relative">
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        title="Upload image"
+                    />
+                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0">
+                        <Upload className="h-4 w-4" />
+                    </Button>
+                </div>
+            </div>
+
+            {value && (
+                <div className="relative w-full aspect-square rounded-md overflow-hidden border border-sidebar-border bg-checkered">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src={value}
+                        alt="Preview"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                    />
+                </div>
+            )}
+        </div>
     );
 }
 

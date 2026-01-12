@@ -106,6 +106,18 @@ function getInputValue(
 }
 
 /**
+ * Get the string value for an input, evaluating node values or defaults.
+ */
+function getStringValue(
+    node: Node<TSLNodeData>,
+    inputKey: string,
+    inputDef: { default?: number | readonly number[] | string }
+): string {
+    const value = node.data.values?.[inputKey] ?? inputDef.default;
+    return String(value ?? '');
+}
+
+/**
  * Get the connected variable name for a material input.
  * Handles swizzling.
  */
@@ -491,10 +503,30 @@ export function compileGraph(
 
         if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
+        } else if (def.type === 'texture/sample') {
+            // Special handling for texture node
+            const url = getStringValue(node, 'url', inputs['url']);
+
+            // 1. Create Texture
+            const texVarName = `${baseName}_tex`;
+            lines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
+            lines.push(`${texVarName}.colorSpace = THREE.SRGBColorSpace;`);
+
+            // 2. Get UV input
+            const uvInput = inputs['uv'];
+            const uvEdge = edges.find(e => e.target === node.id && e.targetHandle === 'uv');
+
+            let uvCode = '';
+            if (uvEdge) {
+                const uvVar = getInputValue(node, 'uv', edges, compiledNodes, uvInput);
+                uvCode = `, ${uvVar}`;
+            }
+
+            code = `texture(${texVarName}${uvCode})`;
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
-            const args = inputKeys.map(key =>
+            const args = inputKeys.filter(k => !inputs[k].propertyOnly).map(key =>
                 getInputValue(node, key, edges, compiledNodes, inputs[key])
             );
             code = `${def.tsl}(${args.join(', ')})`;
