@@ -31,6 +31,8 @@ import { CodePanel } from './CodePanel';
 import { Button } from '@/components/ui/button';
 import { PanelLeft } from 'lucide-react';
 import TSLEdge from './TSLEdge';
+import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
+import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -56,6 +58,9 @@ function EditorCanvas() {
         takeSnapshot,
         canvasMode, // Add this
     } = useEditorStore();
+
+    const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
+    const { screenToFlowPosition } = useReactFlow();
 
     const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
@@ -200,6 +205,49 @@ function EditorCanvas() {
         [getNodes, getEdges]
     );
 
+    const onConnectEnd = useCallback(
+        (event: MouseEvent | TouchEvent, connectionState: any) => {
+            if (!connectionState.isValid && connectionState.fromHandle && connectionState.fromNode) {
+                const { clientX, clientY } =
+                    'changedTouches' in event ? (event as any).changedTouches[0] : event;
+
+                const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
+
+                const handleId = connectionState.fromHandle.id || '';
+                const node = connectionState.fromNode;
+                const nodeType = node.type || node.data?.type;
+                const def = registry.get(nodeType);
+
+                let dataType = 'any';
+                let direction: 'input' | 'output' = 'output';
+
+                if (connectionState.fromHandle.type === 'target') {
+                    direction = 'input';
+                    if (def && def.inputs) {
+                        const port = def.inputs[handleId];
+                        if (port) dataType = port.type;
+                    }
+                } else {
+                    direction = 'output';
+                    if (def && def.outputs) {
+                        const port = def.outputs[handleId];
+                        if (port) dataType = port.type;
+                    }
+                }
+
+                openEdgeDropPicker({
+                    screenPosition: { x: clientX, y: clientY },
+                    flowPosition,
+                    sourceDataType: dataType,
+                    sourceNodeId: node.id,
+                    sourceHandleId: handleId,
+                    handleDirection: direction,
+                });
+            }
+        },
+        [screenToFlowPosition, openEdgeDropPicker]
+    );
+
     return (
         <>
             {/* Canvas Layer */}
@@ -210,6 +258,7 @@ function EditorCanvas() {
                     onNodesChange={handleNodesChange}
                     onEdgesChange={handleEdgesChange}
                     onConnect={onConnect}
+                    onConnectEnd={onConnectEnd}
                     onNodeDragStart={onNodeDragStart}
                     onSelectionChange={onSelectionChange}
                     nodeTypes={nodeTypes}
@@ -227,6 +276,8 @@ function EditorCanvas() {
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>
+                {/* Edge Drop Picker Layer */}
+                <CanvasEdgeDropPicker />
             </div >
 
             {/* UI Layer */}

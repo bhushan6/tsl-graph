@@ -24,6 +24,7 @@ export function buildTSLMaterial(
         MeshStandardNodeMaterial: THREE.MeshStandardNodeMaterial,
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
         MeshPhysicalNodeMaterial: THREE.MeshPhysicalNodeMaterial,
+        MeshPhongNodeMaterial: THREE.MeshPhongNodeMaterial,
         THREE: THREE, // Expose THREE namespace for TextureLoader
     };
 

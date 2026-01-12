@@ -6,7 +6,7 @@ export const textureNodes = [
         label: 'Texture',
         category: 'Texture',
         inputs: {
-            url: { label: 'URL', type: 'string', default: "/uv-checker.jpeg", propertyOnly: true },
+            url: { label: 'URL', type: 'string', default: "/uv.png", propertyOnly: true },
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
         },
         outputs: { out: { label: 'Out', type: 'vec4' } },
