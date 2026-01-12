@@ -38,7 +38,7 @@ const TSLEdge = ({
 
     const sourceDefination = type ? registry.get(type) : null;
 
-    const sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId ? sourceDefination.outputs[sourceHandleId].type : null
+    const sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId ? sourceDefination.outputs[sourceHandleId]?.type : null
 
 
     // target data type 
@@ -49,7 +49,7 @@ const TSLEdge = ({
 
     const targetDefination = targetType ? registry.get(targetType) : null;
 
-    const targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId ? targetDefination.inputs[targetHandleId].type : null
+    const targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId ? targetDefination.inputs[targetHandleId]?.type : null
 
 
     const sourceColor = sourceDataType ? TYPE_COLORS[sourceDataType] : DEFAULT_HANDLE_COLOR
