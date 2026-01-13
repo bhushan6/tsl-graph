@@ -334,6 +334,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     edges: data.edges,
                     subgraphs: data.subgraphs || {},
                     codeNodes: data.codeNodes || {},
+                    graphStructureVersion: get().graphStructureVersion + 1,
                 });
                 return true;
             }
@@ -366,7 +367,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Clear the graph
     clearGraph: () => {
         get().takeSnapshot();
-        set({ nodes: [], edges: [] });
+        set({
+            nodes: [],
+            edges: [],
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
     },
 
     hasMaterialNode: () => {

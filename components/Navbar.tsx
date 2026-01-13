@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Sparkles, FileText, Download, Upload, Trash2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,14 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { useEditorStore } from '@/store/editor';
 
 export function Navbar() {
@@ -56,13 +64,20 @@ export function Navbar() {
         e.target.value = '';
     }, [loadFromJSON]);
 
-    // Clear graph with confirmation
-    const handleClear = useCallback(() => {
+    // Clear graph dialog state
+    const [showClearDialog, setShowClearDialog] = useState(false);
+
+    // Initial check before showing dialog
+    const handleClearClick = useCallback(() => {
         if (nodes.length === 0) return;
-        if (confirm('Clear all nodes? This cannot be undone.')) {
-            clearGraph();
-        }
-    }, [clearGraph, nodes.length]);
+        setShowClearDialog(true);
+    }, [nodes.length]);
+
+    // Actual clear action
+    const handleConfirmClear = useCallback(() => {
+        clearGraph();
+        setShowClearDialog(false);
+    }, [clearGraph]);
 
     return (
         <div className="w-full flex items-center justify-between px-3 h-10 bg-card border-b border-border pointer-events-auto rounded-md">
@@ -95,7 +110,7 @@ export function Navbar() {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                            onClick={handleClear}
+                            onClick={handleClearClick}
                             disabled={nodes.length === 0}
                             className="gap-2 text-destructive focus:text-destructive"
                         >
@@ -118,6 +133,26 @@ export function Navbar() {
                 onChange={handleFileChange}
                 className="hidden"
             />
+
+            {/* Clear Graph Confirmation Dialog */}
+            <Dialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Clear Graph?</DialogTitle>
+                        <DialogDescription>
+                            This will remove all nodes and edges from the canvas. This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowClearDialog(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleConfirmClear}>
+                            Clear Graph
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
