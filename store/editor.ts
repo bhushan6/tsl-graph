@@ -337,6 +337,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     loadFromLocalStorage: () => {
         const json = localStorage.getItem(STORAGE_KEY);
         if (json) {
+            const parsed = JSON.parse(json);
+            if (parsed.nodes && parsed.nodes.length < 1 && parsed.edges && parsed.edges.length < 1 && parsed.subgraphs && Object.keys(parsed.subgraphs).length < 1) {
+                return false;
+            }
             return get().loadFromJSON(json);
         }
         return false;

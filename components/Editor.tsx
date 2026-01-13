@@ -48,6 +48,7 @@ function EditorCanvas() {
         onNodesChange,
         onEdgesChange,
         onConnect,
+        loadFromJSON,
         loadFromLocalStorage,
         saveToLocalStorage,
         setSelectedNode,
@@ -70,9 +71,18 @@ function EditorCanvas() {
     useEffect(() => {
         if (!isInitialized.current) {
             isInitialized.current = true;
-            loadFromLocalStorage();
+            const loaded = loadFromLocalStorage();
+            if (!loaded) {
+                fetch('/demo.json')
+                    .then(response => response.text())
+                    .then(json => {
+                        console.log({ json });
+                        loadFromJSON(json);
+                    })
+                    .catch(err => console.error('Failed to load demo graph:', err));
+            }
         }
-    }, [loadFromLocalStorage]);
+    }, [loadFromLocalStorage, loadFromJSON]);
 
     // Auto-save to localStorage on changes (debounced)
     useEffect(() => {

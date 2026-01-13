@@ -1,0 +1,393 @@
+{
+    "version": 1,
+    "nodes": [
+        {
+            "id": "geo/positionLocal-1768292447801",
+            "type": "geo/positionLocal",
+            "position": {
+                "x": 623.613104923592,
+                "y": 430.54415711497313
+            },
+            "data": {
+                "type": "geo/positionLocal",
+                "values": {},
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 197
+            },
+            "selected": false,
+            "dragging": false
+        },
+        {
+            "id": "math/mul-1768292458636",
+            "type": "math/mul",
+            "position": {
+                "x": 935.6324296171865,
+                "y": 501.29993236809077
+            },
+            "selected": false,
+            "data": {
+                "type": "math/mul",
+                "values": {
+                    "a": 1,
+                    "b": 5
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 169
+            },
+            "dragging": false
+        },
+        {
+            "id": "math/fract-1768292469342",
+            "type": "math/fract",
+            "position": {
+                "x": 1271.6750768728582,
+                "y": 574.7073067686017
+            },
+            "selected": false,
+            "data": {
+                "type": "math/fract",
+                "values": {
+                    "x": 0
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 141
+            },
+            "dragging": false
+        },
+        {
+            "id": "math/sub-1768292474841",
+            "type": "math/sub",
+            "position": {
+                "x": 1547.3605496214432,
+                "y": 610.595356475518
+            },
+            "selected": false,
+            "data": {
+                "type": "math/sub",
+                "values": {
+                    "a": 0,
+                    "b": 0.5
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 169
+            },
+            "dragging": false
+        },
+        {
+            "id": "math/length-1768292489692",
+            "type": "math/length",
+            "position": {
+                "x": 1831.2023973034184,
+                "y": 653.0085061291464
+            },
+            "selected": false,
+            "data": {
+                "type": "math/length",
+                "values": {
+                    "x": [
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 141
+            }
+        },
+        {
+            "id": "math/mul-1768292499619",
+            "type": "math/mul",
+            "position": {
+                "x": 2092.206395171901,
+                "y": 731.3097054896914
+            },
+            "selected": false,
+            "data": {
+                "type": "math/mul",
+                "values": {
+                    "a": 1,
+                    "b": 10
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 169
+            }
+        },
+        {
+            "id": "math/add-1768292508243",
+            "type": "math/add",
+            "position": {
+                "x": 2362.998042960452,
+                "y": 853.6553294905426
+            },
+            "selected": false,
+            "data": {
+                "type": "math/add",
+                "values": {
+                    "a": 0,
+                    "b": 0
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 169
+            }
+        },
+        {
+            "id": "geo/time-1768292513284",
+            "type": "geo/time",
+            "position": {
+                "x": 1949.8877174766853,
+                "y": 949.3086616696066
+            },
+            "data": {
+                "type": "geo/time",
+                "values": {},
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 113
+            },
+            "selected": false,
+            "dragging": false
+        },
+        {
+            "id": "math/sin-1768292528276",
+            "type": "math/sin",
+            "position": {
+                "x": 2640.314790695715,
+                "y": 956.4256536512578
+            },
+            "selected": false,
+            "data": {
+                "type": "math/sin",
+                "values": {
+                    "x": 0
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 141
+            }
+        },
+        {
+            "id": "math/abs-1768292538560",
+            "type": "math/abs",
+            "position": {
+                "x": 2925.7879133643687,
+                "y": 989.0511533848181
+            },
+            "selected": false,
+            "data": {
+                "type": "math/abs",
+                "values": {
+                    "x": 0
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 141
+            }
+        },
+        {
+            "id": "math/step-1768292545054",
+            "type": "math/step",
+            "position": {
+                "x": 3203.1046610996314,
+                "y": 971.1071285313599
+            },
+            "selected": false,
+            "data": {
+                "type": "math/step",
+                "values": {
+                    "edge": 0.5,
+                    "x": 0
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 169
+            },
+            "dragging": false
+        },
+        {
+            "id": "material/standard-1768292571316",
+            "type": "material/standard",
+            "position": {
+                "x": 3824.119776579898,
+                "y": 1099.930601214176
+            },
+            "data": {
+                "type": "material/standard",
+                "values": {},
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 300
+            },
+            "selected": false,
+            "dragging": false
+        },
+        {
+            "id": "const/color-1768292599999",
+            "type": "const/color",
+            "position": {
+                "x": 2771.00964996804,
+                "y": 1198.4425432623016
+            },
+            "data": {
+                "type": "const/color",
+                "values": {
+                    "value": "#0be941"
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 225
+            },
+            "selected": false,
+            "dragging": false
+        },
+        {
+            "id": "math/mul-1768292608425",
+            "type": "math/mul",
+            "position": {
+                "x": 3527.5053715547074,
+                "y": 1083.4634143461292
+            },
+            "selected": false,
+            "data": {
+                "type": "math/mul",
+                "values": {
+                    "a": 1,
+                    "b": 1
+                },
+                "connected": {}
+            },
+            "measured": {
+                "width": 220,
+                "height": 169
+            },
+            "dragging": false
+        }
+    ],
+    "edges": [
+        {
+            "id": "edge-geo/positionLocal-1768292447801-out-math/mul-1768292458636-a",
+            "source": "geo/positionLocal-1768292447801",
+            "sourceHandle": "out",
+            "target": "math/mul-1768292458636",
+            "targetHandle": "a"
+        },
+        {
+            "id": "edge-math/mul-1768292458636-out-math/fract-1768292469342-x",
+            "source": "math/mul-1768292458636",
+            "sourceHandle": "out",
+            "target": "math/fract-1768292469342",
+            "targetHandle": "x"
+        },
+        {
+            "id": "edge-math/fract-1768292469342-out-math/sub-1768292474841-a",
+            "source": "math/fract-1768292469342",
+            "sourceHandle": "out",
+            "target": "math/sub-1768292474841",
+            "targetHandle": "a"
+        },
+        {
+            "id": "edge-math/sub-1768292474841-out-math/length-1768292489692-x",
+            "source": "math/sub-1768292474841",
+            "sourceHandle": "out",
+            "target": "math/length-1768292489692",
+            "targetHandle": "x"
+        },
+        {
+            "id": "edge-math/length-1768292489692-out-math/mul-1768292499619-a",
+            "source": "math/length-1768292489692",
+            "sourceHandle": "out",
+            "target": "math/mul-1768292499619",
+            "targetHandle": "a"
+        },
+        {
+            "id": "edge-math/mul-1768292499619-out-math/add-1768292508243-a",
+            "source": "math/mul-1768292499619",
+            "sourceHandle": "out",
+            "target": "math/add-1768292508243",
+            "targetHandle": "a"
+        },
+        {
+            "source": "geo/time-1768292513284",
+            "sourceHandle": "out",
+            "target": "math/add-1768292508243",
+            "targetHandle": "b",
+            "id": "xy-edge__geo/time-1768292513284out-math/add-1768292508243b"
+        },
+        {
+            "id": "edge-math/add-1768292508243-out-math/sin-1768292528276-x",
+            "source": "math/add-1768292508243",
+            "sourceHandle": "out",
+            "target": "math/sin-1768292528276",
+            "targetHandle": "x"
+        },
+        {
+            "id": "edge-math/sin-1768292528276-out-math/abs-1768292538560-x",
+            "source": "math/sin-1768292528276",
+            "sourceHandle": "out",
+            "target": "math/abs-1768292538560",
+            "targetHandle": "x"
+        },
+        {
+            "source": "math/abs-1768292538560",
+            "sourceHandle": "out",
+            "target": "math/step-1768292545054",
+            "targetHandle": "x",
+            "id": "xy-edge__math/abs-1768292538560out-math/step-1768292545054x",
+            "selected": false
+        },
+        {
+            "id": "edge-const/color-1768292599999-out-math/mul-1768292608425-a",
+            "source": "const/color-1768292599999",
+            "sourceHandle": "out",
+            "target": "math/mul-1768292608425",
+            "targetHandle": "a"
+        },
+        {
+            "source": "math/step-1768292545054",
+            "sourceHandle": "out",
+            "target": "math/mul-1768292608425",
+            "targetHandle": "b",
+            "id": "xy-edge__math/step-1768292545054out-math/mul-1768292608425b"
+        },
+        {
+            "source": "math/mul-1768292608425",
+            "sourceHandle": "out",
+            "target": "material/standard-1768292571316",
+            "targetHandle": "colorNode",
+            "id": "xy-edge__math/mul-1768292608425out-material/standard-1768292571316colorNode"
+        }
+    ],
+    "subgraphs": {}
+}
