@@ -251,6 +251,22 @@ export const mathNodes = [
         },
         tsl: 'reflect',
     },
+    {
+        type: 'math/split',
+        label: 'Split',
+        category: 'Math',
+        inputs: {
+            in: { label: 'In', type: 'any', default: 0 },
+        },
+        outputs: {
+            x: { label: 'X', type: 'float' },
+            y: { label: 'Y', type: 'float' },
+            z: { label: 'Z', type: 'float' },
+            w: { label: 'W', type: 'float' },
+            out: { label: 'Out', type: 'any' },
+        },
+        tsl: 'split',
+    },
 ] as const;
 
 // Type check

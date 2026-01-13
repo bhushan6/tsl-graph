@@ -5,6 +5,7 @@ import { geometryNodes } from './geometry';
 import { materialNodes } from './output';
 import { subgraphNodes } from './subgraph';
 import { textureNodes } from './texture';
+import { modelNodes } from './model';
 
 // Aggregate all nodes
 export const allNodes = [
@@ -14,6 +15,7 @@ export const allNodes = [
     ...materialNodes,
     ...subgraphNodes,
     ...textureNodes,
+    ...modelNodes,
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread

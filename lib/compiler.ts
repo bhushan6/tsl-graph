@@ -507,6 +507,10 @@ export function compileGraph(
             // Special handling for UV node with index
             const index = Number(node.data.values?.['index'] ?? 0);
             code = `uv(${index})`;
+        } else if (def.type === 'math/split') {
+            // Special handling for Split node - pass through the input value
+            // The compiler's swizzling logic will handle the output access (e.g. .x, .y)
+            code = getInputValue(node, 'in', edges, compiledNodes, inputs['in']);
         } else if (def.type === 'texture/sample') {
             // Special handling for texture node
             const url = getStringValue(node, 'url', inputs['url']);
