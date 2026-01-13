@@ -1,5 +1,5 @@
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData, SubgraphDefinition } from '@/lib/types';
+import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
@@ -145,7 +145,9 @@ function compileSubgraphDefinition(
     subgraph: SubgraphDefinition,
     functionName: string,
     usedSubgraphs: Map<string, string>,
-    subgraphsMap?: Record<string, SubgraphDefinition>
+    subgraphsMap?: Record<string, SubgraphDefinition>,
+    usedCodeNodes?: Map<string, string>,
+    codeNodesMap?: Record<string, CodeNodeDefinition>
 ): string[] {
     const lines: string[] = [];
     const internalNodes = subgraph.nodes;
@@ -226,6 +228,60 @@ function compileSubgraphDefinition(
                     varName: displayName,
                     code: `/* ${funcName} call */`,
                     singleOutput: isSingleOutput
+                });
+                continue;
+            }
+        }
+
+        // Handle Code Node Instance inside Subgraph
+        if (node.data.type.startsWith('code/')) {
+            const funcName = usedCodeNodes?.get(node.data.type);
+            const codeNode = codeNodesMap?.[node.data.type];
+
+            if (funcName && codeNode) {
+                // Generate unique name for this instance output
+                const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+                const baseName = localName
+                    ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                    : `_code_node${nodeIndex}`;
+
+                let displayName = baseName;
+                let suffix = 1;
+                while (usedNames.has(displayName)) {
+                    displayName = `${baseName}_${suffix++}`;
+                }
+                usedNames.add(displayName);
+                nodeIndex++;
+
+                // Collect arguments based on code node inputs
+                const args: string[] = [];
+                for (const inputPort of codeNode.inputs) {
+                    const edge = internalEdges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
+                    if (edge) {
+                        if (edge.source === 'subgraph-input' && argsMap && edge.sourceHandle) {
+                            args.push(argsMap[edge.sourceHandle] || 'float(0)');
+                        } else {
+                            const upstream = compiledNodes.get(edge.source);
+                            if (upstream) {
+                                const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
+                                args.push(`${upstream.varName}${swizzle}`);
+                            } else {
+                                args.push('float(0)');
+                            }
+                        }
+                    } else {
+                        args.push('float(0)');
+                    }
+                }
+
+                lines.push(`    const ${displayName} = ${funcName}(${args.join(', ')});`);
+
+                // Code nodes always have single output
+                compiledNodes.set(nodeId, {
+                    id: nodeId,
+                    varName: displayName,
+                    code: `/* ${funcName} call */`,
+                    singleOutput: true
                 });
                 continue;
             }
@@ -338,11 +394,13 @@ function collectSubgraphDependencies(
  * @param nodes - The nodes in the graph
  * @param edges - The edges in the graph
  * @param subgraphs - Optional map of subgraph definitions for compiling subgraph instances
+ * @param codeNodes - Optional map of code node definitions for compiling code node instances
  */
 export function compileGraph(
     nodes: Node<TSLNodeData>[],
     edges: Edge[],
-    subgraphs?: Record<string, SubgraphDefinition>
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>
 ): string {
     if (nodes.length === 0) {
         return '// No nodes in graph';
@@ -350,26 +408,68 @@ export function compileGraph(
 
     const lines: string[] = [];
     const usedSubgraphs = new Map<string, string>(); // subgraphId -> functionName
+    const usedCodeNodes = new Map<string, string>(); // codeNodeId -> functionName
 
     // 1. Identify used subgraphs (Recursive)
     if (subgraphs) {
         collectSubgraphDependencies(nodes, subgraphs, usedSubgraphs);
     }
 
-    // 2. Generate Subgraph Definitions
-    // Reverse the order so dependencies are defined first?
-    // Actually, function hoisting might handle it in JS, but TSL construction creates variables.
+    // 1b. Identify used code nodes (from main graph and from subgraphs)
+    if (codeNodes) {
+        // Collect from main graph
+        for (const node of nodes) {
+            if (node.data.type.startsWith('code/') && codeNodes[node.data.type] && !usedCodeNodes.has(node.data.type)) {
+                const codeNode = codeNodes[node.data.type];
+                const safeName = codeNode.name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&');
+                let funcName = safeName;
+                let i = 1;
+                while ([...usedCodeNodes.values()].includes(funcName)) {
+                    funcName = `${safeName}_${i++}`;
+                }
+                usedCodeNodes.set(node.data.type, funcName);
+            }
+        }
+
+        // Collect from inside subgraphs
+        if (subgraphs) {
+            for (const subgraphId of usedSubgraphs.keys()) {
+                const subgraph = subgraphs[subgraphId];
+                if (subgraph) {
+                    for (const node of subgraph.nodes) {
+                        if (node.data.type.startsWith('code/') && codeNodes[node.data.type] && !usedCodeNodes.has(node.data.type)) {
+                            const codeNode = codeNodes[node.data.type];
+                            const safeName = codeNode.name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&');
+                            let funcName = safeName;
+                            let i = 1;
+                            while ([...usedCodeNodes.values()].includes(funcName)) {
+                                funcName = `${safeName}_${i++}`;
+                            }
+                            usedCodeNodes.set(node.data.type, funcName);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Generate Code Node Definitions (before subgraphs, since subgraphs may use code nodes)
+    if (usedCodeNodes.size > 0) {
+        lines.push('// Code Node Definitions');
+        for (const [codeNodeId, funcName] of usedCodeNodes) {
+            const codeNode = codeNodes![codeNodeId];
+            lines.push(`// Code Node: ${codeNode.name}`);
+            // Code nodes already contain the full Fn definition, just assign to variable
+            lines.push(`const ${funcName} = ${codeNode.code}`);
+            lines.push('');
+        }
+    }
+
+    // 2b. Generate Subgraph Definitions
     // Variables must be defined before use.
     // So we need to topologically sort the usedSubgraphs based on dependency.
     if (usedSubgraphs.size > 0) {
         lines.push('// Subgraph Definitions');
-
-        // Simple sort: defined subgraphs that don't use others first?
-        // Or just let JS output them.
-        // If Subgraph A uses Subgraph B, B must be defined before A.
-        // collectSubgraphDependencies pushes to map in pre-order (root first, then children).
-        // But we need children defined first (post-order).
-        // Let's re-collect in post-order or just reverse if it's simple tree. It's a DAG.
 
         // Better: explicit topological sort of the used subgraphs.
         // Build dependency graph of subgraphs
@@ -400,7 +500,7 @@ export function compileGraph(
             const subgraph = subgraphs![subgraphId];
 
             lines.push(`// Subgraph: ${subgraph.name}`);
-            const defLines = compileSubgraphDefinition(subgraph, funcName, usedSubgraphs, subgraphs);
+            const defLines = compileSubgraphDefinition(subgraph, funcName, usedSubgraphs, subgraphs, usedCodeNodes, codeNodes);
             lines.push(...defLines);
             lines.push('');
         }
@@ -477,6 +577,56 @@ export function compileGraph(
             }
         }
 
+        // Handle Code Node Instance
+        if (node.data.type.startsWith('code/')) {
+            const funcName = usedCodeNodes.get(node.data.type);
+            const codeNode = codeNodes?.[node.data.type];
+
+            if (funcName && codeNode) {
+                // Generate unique name for this instance output
+                const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+                const baseName = localName
+                    ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                    : `_code_node_${nodeIndex}`;
+
+                let displayName = baseName;
+                let suffix = 1;
+                while (usedNames.has(displayName)) {
+                    displayName = `${baseName}_${suffix++}`;
+                }
+                usedNames.add(displayName);
+                nodeIndex++;
+
+                // Collect arguments based on code node inputs
+                const args: string[] = [];
+                for (const inputPort of codeNode.inputs) {
+                    const edge = edges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
+                    if (edge) {
+                        const upstream = compiledNodes.get(edge.source);
+                        if (upstream) {
+                            const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
+                            args.push(`${upstream.varName}${swizzle}`);
+                        } else {
+                            args.push('float(0)');
+                        }
+                    } else {
+                        args.push('float(0)');
+                    }
+                }
+
+                lines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
+
+                // Code nodes always have single output
+                compiledNodes.set(nodeId, {
+                    id: nodeId,
+                    varName: displayName,
+                    code: `/* ${funcName} call */`,
+                    singleOutput: true
+                });
+                continue;
+            }
+        }
+
         const def = registry.get(node.data.type);
         if (!def) {
             lines.push(`// Unknown node type: ${node.data.type}`);
@@ -485,7 +635,7 @@ export function compileGraph(
 
         // Use user-defined name if available, otherwise use auto-generated name
         const localName = node.data.localName || (node.data.values?.localName as string | undefined);
-        let baseName = localName
+        const baseName = localName
             ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
             : `_node${nodeIndex}`;
 

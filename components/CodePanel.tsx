@@ -25,12 +25,13 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
 
     const codeTheme = resolvedTheme === 'dark' ? themes.oneDark : themes.oneLight;
 
     const compiledCode = useMemo(() => {
-        return compileGraph(nodes, edges, subgraphs);
-    }, [nodes, edges, subgraphs]);
+        return compileGraph(nodes, edges, subgraphs, codeNodes);
+    }, [nodes, edges, subgraphs, codeNodes]);
 
     const imports = useMemo(() => {
         return getRequiredImports(nodes, subgraphs);

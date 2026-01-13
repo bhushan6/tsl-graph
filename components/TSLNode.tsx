@@ -17,6 +17,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const def = registry.get(data.type);
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
     const edges = useEdges();
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
@@ -52,12 +53,14 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         [handleNameSubmit, storedName]
     );
 
-    // Check if this is a subgraph instance (custom node)
+    // Check if this is a subgraph instance (custom node) or code node instance
     const isSubgraphInstance = data.type.startsWith('custom/');
+    const isCodeNodeInstance = data.type.startsWith('code/');
+    const isCustomInstance = isSubgraphInstance || isCodeNodeInstance;
 
-    // For subgraph instances, we don't need a registry definition
+    // For subgraph and code node instances, we don't need a registry definition
     // We'll use the dynamicPorts from node data
-    if (!def && !isSubgraphInstance) {
+    if (!def && !isCustomInstance) {
         return (
             <div className="min-w-[200px] bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 p-3 rounded-xl">
                 Unknown node: {data.type}
@@ -84,7 +87,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         for (const port of data.dynamicPorts) {
             if (port.id.startsWith('in_')) {
                 inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
-            } else if (port.id.startsWith('out_')) {
+            } else if (port.id.startsWith('out_') || port.id === 'out') {
                 outputs[port.id] = { label: port.label, type: port.type };
             }
         }
@@ -92,6 +95,24 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         const namePart = data.type.replace('custom/', '').split('-')[0];
         // Try to get dynamic name from store, fallback to parsed name from type
         nodeLabel = subgraphs[data.type]?.name || namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
+    } else if (isCodeNodeInstance && data.dynamicPorts) {
+        // Code node instance: dynamicPorts contains inputs (in_*) and output (out)
+        for (const port of data.dynamicPorts) {
+            if (port.id.startsWith('in_')) {
+                inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
+            } else if (port.id === 'out') {
+                outputs[port.id] = { label: port.label, type: port.type };
+            }
+        }
+        // Get name from codeNodes store
+        const codeNode = codeNodes[data.type];
+        if (codeNode) {
+            nodeLabel = codeNode.name;
+        } else {
+            // Fallback: parse from type
+            const namePart = data.type.replace('code/', '').split('-')[0];
+            nodeLabel = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
+        }
     } else if (isAnchorNode && data.dynamicPorts) {
         // Subgraph Input: dynamic ports become outputs (to connect to internal nodes)
         // Subgraph Output: dynamic ports become inputs (to receive from internal nodes)

@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react';
 import { getAbsolutePosition } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort } from '@/lib/types';
+import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition } from '@/lib/types';
 
 // Graph save format
 export interface GraphData {
@@ -22,6 +22,8 @@ export interface GraphData {
     edges: Edge[];
     // Subgraph definitions
     subgraphs?: Record<string, SubgraphDefinition>;
+    // Code node definitions
+    codeNodes?: Record<string, CodeNodeDefinition>;
 }
 
 // Editor mode - main graph or editing a subgraph
@@ -70,6 +72,9 @@ interface EditorState {
     subgraphs: Record<string, SubgraphDefinition>;
     editorMode: EditorMode;
     editingSubgraphId: string | null;
+
+    // Code nodes state
+    codeNodes: Record<string, CodeNodeDefinition>;
 
     // Canvas Mode
     canvasMode: 'pan' | 'select';
@@ -127,6 +132,12 @@ interface EditorState {
     updateDynamicPort: (nodeId: string, portId: string, updates: Partial<SubgraphPort>) => void;
     getSubgraph: (id: string) => SubgraphDefinition | undefined;
     isSubgraphMode: () => boolean;
+
+    // Code node actions
+    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => string | null;
+    updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => void;
+    deleteCodeNode: (id: string) => void;
+    getCodeNode: (id: string) => CodeNodeDefinition | undefined;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -141,6 +152,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     editorMode: 'main',
     editingSubgraphId: null,
     subgraphStack: [],
+
+    // Code nodes initialization
+    codeNodes: {},
 
     // Canvas Mode
     canvasMode: 'pan',
@@ -305,6 +319,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: get().nodes,
             edges: get().edges,
             subgraphs: get().subgraphs,
+            codeNodes: get().codeNodes,
         };
         return JSON.stringify(graphData, null, 2);
     },
@@ -318,6 +333,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     nodes: data.nodes,
                     edges: data.edges,
                     subgraphs: data.subgraphs || {},
+                    codeNodes: data.codeNodes || {},
                 });
                 return true;
             }
@@ -814,6 +830,54 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     isSubgraphMode: () => {
         return get().editorMode === 'subgraph';
+    },
+
+    // Code Node Actions
+
+    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => {
+        get().takeSnapshot();
+
+        // Generate unique ID
+        const id = `code/${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
+
+        const codeNode: CodeNodeDefinition = {
+            id,
+            name,
+            code,
+            inputs,
+            output,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+
+        set({
+            codeNodes: { ...get().codeNodes, [id]: codeNode },
+        });
+
+        return id;
+    },
+
+    updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => {
+        get().takeSnapshot();
+        const codeNode = get().codeNodes[id];
+        if (!codeNode) return;
+
+        set({
+            codeNodes: {
+                ...get().codeNodes,
+                [id]: { ...codeNode, ...updates, updatedAt: Date.now() },
+            },
+        });
+    },
+
+    deleteCodeNode: (id: string) => {
+        get().takeSnapshot();
+        const { [id]: _, ...rest } = get().codeNodes;
+        set({ codeNodes: rest });
+    },
+
+    getCodeNode: (id: string) => {
+        return get().codeNodes[id];
     },
 
     // History Implementation

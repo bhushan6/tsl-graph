@@ -33,6 +33,7 @@ import { PanelLeft } from 'lucide-react';
 import TSLEdge from './TSLEdge';
 import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
+import { CodeNodeDialog } from './CodeNodeDialog';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -66,6 +67,7 @@ function EditorCanvas() {
     const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
+    const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -176,6 +178,7 @@ function EditorCanvas() {
 
     // Get subgraph types from store
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
 
     // Generate node types from registry + subgraphs - all use the same TSLNode component
     const nodeTypes: NodeTypes = useMemo(() => {
@@ -190,8 +193,12 @@ function EditorCanvas() {
         for (const subgraphId of Object.keys(subgraphs)) {
             types[subgraphId] = TSLNode;
         }
+        // Add code node types
+        for (const codeNodeId of Object.keys(codeNodes)) {
+            types[codeNodeId] = TSLNode;
+        }
         return types;
-    }, [subgraphs]);
+    }, [subgraphs, codeNodes]);
 
     const { getNodes, getEdges } = useReactFlow<AppNode>();
 
@@ -298,7 +305,10 @@ function EditorCanvas() {
 
                 <UILayer.LeftPanel>
                     {isNodePickerOpen ? (
-                        <NodePicker onClose={() => setIsNodePickerOpen(false)} />
+                        <NodePicker
+                            onClose={() => setIsNodePickerOpen(false)}
+                            onOpenCodeNodeDialog={() => setIsCodeNodeDialogOpen(true)}
+                        />
                     ) : (
                         <Button
                             variant="outline"
@@ -325,10 +335,15 @@ function EditorCanvas() {
             </UILayer >
 
             {/* Code Panel Modal */}
-            < CodePanel
+            <CodePanel
                 isOpen={isCodePanelOpen}
-                onClose={() => setIsCodePanelOpen(false)
-                }
+                onClose={() => setIsCodePanelOpen(false)}
+            />
+
+            {/* Code Node Dialog */}
+            <CodeNodeDialog
+                open={isCodeNodeDialogOpen}
+                onOpenChange={setIsCodeNodeDialogOpen}
             />
         </>
     );

@@ -3,7 +3,8 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes } from '@/lib/node-picker-utils';
 import { useEditorStore } from '@/store/editor';
-import { NodeType } from '@/lib/types';
+import { NodeType, NodeDef } from '@/lib/types';
+import { Code, Layers } from 'lucide-react';
 import {
     Command,
     CommandEmpty,
@@ -52,6 +53,7 @@ export function EdgeDropNodePicker({
     // Get store state for filtering
     const nodes = useEditorStore((s) => s.nodes);
     const editorMode = useEditorStore((s) => s.editorMode);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
 
     // Check which anchor nodes are present in the current graph
     const hasInputAnchor = useMemo(() =>
@@ -83,10 +85,33 @@ export function EdgeDropNodePicker({
         });
     }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor, nodes]); // nodes dependency for memo safety though logic uses filtered booleans
 
+    // Build code nodes that are compatible
+    const compatibleCodeNodes = useMemo(() => {
+        // Code nodes always have 'any' type for inputs/output, so they're compatible with everything
+        return Object.values(codeNodes).map(cn => ({
+            type: cn.id as NodeType,
+            label: cn.name,
+            category: 'Custom' as const,
+            isCodeNode: true,
+            inputs: cn.inputs.reduce((acc, inp) => {
+                acc[inp.id] = { label: inp.label, type: inp.type };
+                return acc;
+            }, {} as Record<string, { label: string; type: string }>),
+            outputs: { out: { label: cn.output.label, type: cn.output.type } },
+            tsl: cn.id, // Use the code node ID as TSL reference
+        }));
+    }, [codeNodes]);
+
     const groupedNodes = useMemo(() => {
-        // We let Command handle the filtering based on search input
-        return getGroupedCompatibleNodes(compatibleNodes);
-    }, [compatibleNodes]);
+        const grouped = getGroupedCompatibleNodes(compatibleNodes);
+
+        // Add code nodes to Custom category if they exist
+        if (compatibleCodeNodes.length > 0) {
+            grouped['Custom'] = [...(grouped['Custom'] || []), ...compatibleCodeNodes as unknown as NodeDef[]];
+        }
+
+        return grouped;
+    }, [compatibleNodes, compatibleCodeNodes]);
 
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -153,7 +178,10 @@ export function EdgeDropNodePicker({
                                     key={node.type}
                                     value={`${category} ${node.label}`} // Include category in search
                                     onSelect={() => onNodeSelect(node.type as NodeType)}
+                                    className="gap-2"
                                 >
+                                    {(node as { isCodeNode?: boolean }).isCodeNode && <Code className="w-3 h-3 text-primary" />}
+                                    {category === 'Custom' && !(node as { isCodeNode?: boolean }).isCodeNode && <Layers className="w-3 h-3 text-primary" />}
                                     <span>{node.label}</span>
                                 </CommandItem>
                             ))}

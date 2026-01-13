@@ -39,6 +39,7 @@ export function Preview() {
     const nodes = useEditorStore((state) => state.nodes);
     const edges = useEditorStore((state) => state.edges);
     const subgraphs = useEditorStore((state) => state.subgraphs);
+    const codeNodes = useEditorStore((state) => state.codeNodes);
 
 
 
@@ -47,7 +48,7 @@ export function Preview() {
         if (!isReady) return null;
         try {
             setError(null);
-            return buildTSLMaterial(nodes, edges, subgraphs);
+            return buildTSLMaterial(nodes, edges, subgraphs, codeNodes);
         } catch (e) {
             console.error('Material build error:', e);
             setError(e instanceof Error ? e.message : 'Failed to build material');

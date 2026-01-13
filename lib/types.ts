@@ -54,3 +54,21 @@ export interface SubgraphDefinition {
     createdAt: number;
     updatedAt: number;
 }
+
+// Code-based custom node definition - created from TSL Fn code
+export interface CodeNodeDefinition {
+    // Unique ID for this code node (e.g., 'code/my-effect')
+    id: string;
+    // Display name (e.g., 'My Effect')
+    name: string;
+    // The raw TSL code (complete Fn definition)
+    code: string;
+    // Parsed input arguments that become input handles
+    inputs: SubgraphPort[];
+    // Single output (code nodes always have exactly one output)
+    output: SubgraphPort;
+    // Timestamp for tracking
+    createdAt: number;
+    updatedAt: number;
+}
+

@@ -25,12 +25,17 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     const handleNodeSelect = useCallback(
         (nodeType: NodeType) => {
             const definition = registry.get(nodeType);
-            if (!definition) return;
+            const isCodeNode = nodeType.startsWith('code/');
+            const codeNodes = useEditorStore.getState().codeNodes;
+            const codeNode = isCodeNode ? codeNodes[nodeType] : null;
+
+            // Must have either a registry definition or be a valid code node
+            if (!definition && !codeNode) return;
 
             // Build default values from definition
             // Note: definition.inputs is a Record<string, Port>
-            let defaultValues: Record<string, any> = {};
-            if (definition.inputs) {
+            const defaultValues: Record<string, any> = {};
+            if (definition?.inputs) {
                 Object.entries(definition.inputs).forEach(([key, input]) => {
                     // Use 'defaultValue' if you have it in your Port definition?
                     // Current Port def: readonly default?: number | ...
@@ -92,17 +97,37 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 }
             }
 
-            const newNode: AppNode = {
-                id: newNodeId,
-                type: nodeType, // This assumes 'nodeType' is valid for TSLNode (AppNode includes GroupNode | TSLNode)
-                position: flowPosition,
-                selected: true,
-                data: {
+            // Create the new node - handle code nodes specially
+            let newNode: AppNode;
+
+            if (isCodeNode && codeNode) {
+                // Code node instance
+                newNode = {
+                    id: newNodeId,
                     type: nodeType,
-                    values: defaultValues,
-                    connected: {},
-                } as TSLNodeData,
-            };
+                    position: flowPosition,
+                    selected: true,
+                    data: {
+                        type: nodeType,
+                        values: {},
+                        connected: {},
+                        dynamicPorts: [...codeNode.inputs, codeNode.output],
+                    } as TSLNodeData,
+                };
+            } else {
+                // Regular node from registry
+                newNode = {
+                    id: newNodeId,
+                    type: nodeType, // This assumes 'nodeType' is valid for TSLNode (AppNode includes GroupNode | TSLNode)
+                    position: flowPosition,
+                    selected: true,
+                    data: {
+                        type: nodeType,
+                        values: defaultValues,
+                        connected: {},
+                    } as TSLNodeData,
+                };
+            }
 
             addNodes(newNode);
 
@@ -111,28 +136,40 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             if (handleDirection === 'output') {
                 // We are dragging FROM source (output) TO new node (input)
-                // Find compatible input on new node
-                const inputs = definition.inputs || {};
-                // Find first input that matches
-                const matchingInput = Object.entries(inputs).find(([key, port]) => {
-                    return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
-                });
-                if (matchingInput) {
-                    targetHandleId = matchingInput[0];
-                } else if (Object.keys(inputs).length > 0) {
-                    targetHandleId = Object.keys(inputs)[0]; // Fallback
+                if (isCodeNode && codeNode) {
+                    // Code node: find first input
+                    if (codeNode.inputs.length > 0) {
+                        targetHandleId = codeNode.inputs[0].id;
+                    }
+                } else if (definition) {
+                    // Find compatible input on new node
+                    const inputs = definition.inputs || {};
+                    // Find first input that matches
+                    const matchingInput = Object.entries(inputs).find(([key, port]) => {
+                        return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
+                    });
+                    if (matchingInput) {
+                        targetHandleId = matchingInput[0];
+                    } else if (Object.keys(inputs).length > 0) {
+                        targetHandleId = Object.keys(inputs)[0]; // Fallback
+                    }
                 }
             } else {
                 // We are dragging FROM source (input) TO new node (output)
-                // Find compatible output on new node
-                const outputs = definition.outputs || {};
-                const matchingOutput = Object.entries(outputs).find(([key, port]) => {
-                    return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
-                });
-                if (matchingOutput) {
-                    targetHandleId = matchingOutput[0];
-                } else if (Object.keys(outputs).length > 0) {
-                    targetHandleId = Object.keys(outputs)[0];
+                if (isCodeNode && codeNode) {
+                    // Code node: use the single output
+                    targetHandleId = codeNode.output.id;
+                } else if (definition) {
+                    // Find compatible output on new node
+                    const outputs = definition.outputs || {};
+                    const matchingOutput = Object.entries(outputs).find(([key, port]) => {
+                        return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
+                    });
+                    if (matchingOutput) {
+                        targetHandleId = matchingOutput[0];
+                    } else if (Object.keys(outputs).length > 0) {
+                        targetHandleId = Object.keys(outputs)[0];
+                    }
                 }
             }
 
@@ -159,7 +196,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             close();
         },
-        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close]
+        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes]
     );
 
     if (!isOpen) return null;

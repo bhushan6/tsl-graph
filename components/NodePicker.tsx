@@ -7,7 +7,7 @@ import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { NodeType, TSLNodeData } from '@/lib/types';
 import { Node } from '@xyflow/react';
-import { X, ChevronDown, Search } from 'lucide-react';
+import { X, ChevronDown, Search, Code, Plus, Layers } from 'lucide-react';
 import {
     SidebarGroup,
     SidebarGroupLabel,
@@ -53,11 +53,13 @@ function CategoryGroup({ title, children, defaultOpen = true, forceOpen = false 
 
 interface NodePickerProps {
     onClose?: () => void;
+    onOpenCodeNodeDialog?: () => void;
 }
 
-export function NodePicker({ onClose }: NodePickerProps) {
+export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
     const addNode = useEditorStore((s) => s.addNode);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
     const editorMode = useEditorStore((s) => s.editorMode);
     const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
     const nodes = useEditorStore((s) => s.nodes);
@@ -81,10 +83,26 @@ export function NodePicker({ onClose }: NodePickerProps) {
                 type: sg.id as NodeType,
                 label: sg.name,
                 category: 'Custom',
+                isSubgraph: true,
                 inputs: sg.inputs,
                 outputs: sg.outputs,
             }));
     }, [subgraphs, editingSubgraphId, searchQuery]);
+
+    // Build code nodes list
+    const codeNodesList = useMemo(() => {
+        const query = searchQuery.toLowerCase();
+        return Object.values(codeNodes)
+            .filter(cn => !query || cn.name.toLowerCase().includes(query))
+            .map(cn => ({
+                type: cn.id as NodeType,
+                label: cn.name,
+                category: 'Custom',
+                isCodeNode: true,
+                inputs: cn.inputs,
+                output: cn.output,
+            }));
+    }, [codeNodes, searchQuery]);
 
     const handleAddNode = useCallback(
         (type: NodeType) => {
@@ -143,8 +161,45 @@ export function NodePicker({ onClose }: NodePickerProps) {
         [subgraphs, screenToFlowPosition]
     );
 
-    // Show custom nodes in both main and subgraph edit modes (self-reference already filtered)
-    const showCustomNodes = customNodes.length > 0;
+    // Add code node instance
+    const handleAddCodeNodeInstance = useCallback(
+        (codeNodeId: string) => {
+            const codeNode = codeNodes[codeNodeId];
+            if (!codeNode) return;
+
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const position = screenToFlowPosition({
+                x: centerX,
+                y: centerY,
+            });
+
+            position.x += (Math.random() - 0.5) * 100;
+            position.y += (Math.random() - 0.5) * 100;
+
+            const instanceId = `${codeNodeId}-instance-${Date.now()}`;
+            const instanceNode: Node<TSLNodeData> = {
+                id: instanceId,
+                type: codeNodeId,
+                position,
+                data: {
+                    type: codeNodeId as NodeType,
+                    values: {},
+                    connected: {},
+                    dynamicPorts: [...codeNode.inputs, codeNode.output],
+                },
+            };
+
+            useEditorStore.setState((state) => ({
+                nodes: [...state.nodes, instanceNode],
+            }));
+        },
+        [codeNodes, screenToFlowPosition]
+    );
+
+    // Show custom section if we have subgraphs or code nodes
+    const showCustomSection = customNodes.length > 0 || codeNodesList.length > 0 || !!onOpenCodeNodeDialog;
 
     // Filter nodes by category, handling anchor nodes and material nodes specially
     const filteredNodesByCategory = useMemo(() => {
@@ -239,19 +294,54 @@ export function NodePicker({ onClose }: NodePickerProps) {
                     </CategoryGroup>
                 ))}
 
-                {/* Custom Subgraphs */}
-                {showCustomNodes && (
+                {/* Custom Section - Subgraphs and Code Nodes */}
+                {showCustomSection && (
                     <CategoryGroup title="Custom" forceOpen={!!searchQuery}>
                         <SidebarMenu>
+                            {/* Create Node from Code button */}
+                            {onOpenCodeNodeDialog && (
+                                <SidebarMenuItem>
+                                    <button
+                                        onClick={onOpenCodeNodeDialog}
+                                        className={cn(
+                                            menuButtonStyles,
+                                            'border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-primary/70 hover:text-primary gap-2'
+                                        )}
+                                    >
+                                        <Plus className="w-3 h-3" />
+                                        <Code className="w-3 h-3" />
+                                        Create from Code...
+                                    </button>
+                                </SidebarMenuItem>
+                            )}
+
+                            {/* Subgraph nodes */}
                             {customNodes.map((node) => (
                                 <SidebarMenuItem key={node.type}>
                                     <button
                                         onClick={() => handleAddSubgraphInstance(node.type)}
                                         className={cn(
                                             menuButtonStyles,
-                                            'hover:bg-primary/10 text-primary/80 hover:text-primary'
+                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
                                         )}
                                     >
+                                        <Layers className="w-3 h-3" />
+                                        {node.label}
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
+
+                            {/* Code nodes */}
+                            {codeNodesList.map((node) => (
+                                <SidebarMenuItem key={node.type}>
+                                    <button
+                                        onClick={() => handleAddCodeNodeInstance(node.type)}
+                                        className={cn(
+                                            menuButtonStyles,
+                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
+                                        )}
+                                    >
+                                        <Code className="w-3 h-3" />
                                         {node.label}
                                     </button>
                                 </SidebarMenuItem>

@@ -1,7 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import * as THREE from 'three/webgpu'; // For Material classes
 import * as TSL from 'three/tsl'; // For TSL functions
-import { TSLNodeData, SubgraphDefinition } from '@/lib/types';
+import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
 import { compileGraph } from './compiler';
 
 /**
@@ -11,10 +11,11 @@ import { compileGraph } from './compiler';
 export function buildTSLMaterial(
     nodes: Node<TSLNodeData>[],
     edges: Edge[],
-    subgraphs?: Record<string, SubgraphDefinition>
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>
 ): THREE.Material {
     // 1. Compile the graph to TSL code
-    const code = compileGraph(nodes, edges, subgraphs);
+    const code = compileGraph(nodes, edges, subgraphs, codeNodes);
 
     // 2. Prepare the execution scope
     // We need all TSL functions (float, vec3, Fn, etc.) and Material classes available
