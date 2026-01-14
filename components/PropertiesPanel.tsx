@@ -14,6 +14,7 @@ import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import { SubgraphPort, TSLType } from '@/lib/types';
 import { Layers, Plus, Trash2, Upload } from 'lucide-react';
+import { NodePreview } from './NodePreview';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -268,6 +269,8 @@ function PropertiesPanelContent() {
 
             {/* Properties */}
             <div className="flex-1 overflow-y-auto p-4">
+                {/* Node Preview */}
+                <NodePreview />
 
                 {editableInputs.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
