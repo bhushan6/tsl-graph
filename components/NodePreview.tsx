@@ -19,7 +19,6 @@ export function NodePreview() {
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
 
-    const [error, setError] = useState<string | null>(null);
     const [isReady, setIsReady] = useState(false);
 
     // Store subscriptions
@@ -44,24 +43,22 @@ export function NodePreview() {
         return true;
     }, [selectedNode]);
 
-    // Build preview material using useEffect to avoid setState in useMemo
-    const [material, setMaterial] = useState<THREE.Material | null>(null);
-
-    useEffect(() => {
+    // Derived material and error
+    const { material, error } = useMemo(() => {
         if (!isReady || !shouldShowPreview || !selectedNodeId) {
-            setMaterial(null);
-            setError(null);
-            return;
+            return { material: null, error: null };
         }
         try {
-            setError(null);
             const mat = buildNodePreviewMaterial(selectedNodeId, nodes, edges, subgraphs, codeNodes);
-            setMaterial(mat);
+            return { material: mat, error: null };
         } catch (e) {
             console.error('Preview material build error:', e);
-            setError(e instanceof Error ? e.message : 'Failed to build preview');
-            setMaterial(null);
+            return {
+                material: null,
+                error: e instanceof Error ? e.message : 'Failed to build preview'
+            };
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady, shouldShowPreview, selectedNodeId, nodes, edges, subgraphs, codeNodes]);
 
     // Initialize Three.js with WebGPU
