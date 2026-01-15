@@ -24,15 +24,16 @@ export function NodePreview() {
     // Store subscriptions
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
     const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
-    const nodes = useEditorStore((state) => state.nodes);
-    const edges = useEditorStore((state) => state.edges);
-    const subgraphs = useEditorStore((state) => state.subgraphs);
-    const codeNodes = useEditorStore((state) => state.codeNodes);
+
+
+    // Check if selected node should show preview
 
     // Check if selected node should show preview
     const selectedNode = useMemo(() => {
+        const { nodes } = useEditorStore.getState();
         return nodes.find(n => n.id === selectedNodeId);
-    }, [nodes, selectedNodeId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [graphStructureVersion, selectedNodeId]);
 
     const shouldShowPreview = useMemo(() => {
         if (!selectedNode) return false;
@@ -49,6 +50,7 @@ export function NodePreview() {
             return { material: null, error: null };
         }
         try {
+            const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
             const mat = buildNodePreviewMaterial(selectedNodeId, nodes, edges, subgraphs, codeNodes);
             return { material: mat, error: null };
         } catch (e) {
@@ -59,7 +61,7 @@ export function NodePreview() {
             };
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [graphStructureVersion, isReady, shouldShowPreview, selectedNodeId, nodes, edges, subgraphs, codeNodes]);
+    }, [graphStructureVersion, isReady, shouldShowPreview, selectedNodeId]);
 
     // Initialize Three.js with WebGPU
     useEffect(() => {

@@ -4,7 +4,6 @@ import { memo, useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { HexColorPicker } from 'react-colorful';
 import { useEdges } from '@xyflow/react';
@@ -19,7 +18,6 @@ import {
     SidebarGroup,
     SidebarGroupContent,
     SidebarInput,
-    SidebarSeparator,
 } from '@/components/ui/sidebar';
 
 // Type options for port type selector
@@ -309,7 +307,7 @@ interface PropertyInputWrapperProps {
     inputType: string;
     inputLabel: string;
     inputDefault: unknown;
-    inputOptions?: readonly { label: string; value: any }[];
+    inputOptions?: readonly { label: string; value: string }[];
     onChange: (value: unknown) => void;
 }
 
@@ -346,7 +344,7 @@ function PropertyInputWrapper({
 interface PropertyInputProps {
     type: string;
     value: unknown;
-    options?: readonly { label: string; value: any }[];
+    options?: readonly { label: string; value: string }[];
     onChange: (value: unknown) => void;
 }
 

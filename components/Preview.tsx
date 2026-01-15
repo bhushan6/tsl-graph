@@ -29,31 +29,33 @@ export function Preview() {
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
 
-    const [isExpanded, setIsExpanded] = useState(false);
     const [currentMesh, setCurrentMesh] = useState<PreviewMesh>('sphere');
-    const [error, setError] = useState<string | null>(null);
+
     const [isReady, setIsReady] = useState(false);
 
 
+
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
-    const nodes = useEditorStore((state) => state.nodes);
-    const edges = useEditorStore((state) => state.edges);
-    const subgraphs = useEditorStore((state) => state.subgraphs);
-    const codeNodes = useEditorStore((state) => state.codeNodes);
 
 
 
     // Build material from graph
-    const material = useMemo(() => {
-        if (!isReady) return null;
+    const { material, error } = useMemo(() => {
+        if (!isReady) return { material: null, error: null };
         try {
-            setError(null);
-            return buildTSLMaterial(nodes, edges, subgraphs, codeNodes);
+            const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
+            return {
+                material: buildTSLMaterial(nodes, edges, subgraphs, codeNodes),
+                error: null
+            };
         } catch (e) {
             console.error('Material build error:', e);
-            setError(e instanceof Error ? e.message : 'Failed to build material');
-            return new THREE.MeshStandardMaterial({ color: 0x888888 });
+            return {
+                material: new THREE.MeshStandardMaterial({ color: 0x888888 }),
+                error: e instanceof Error ? e.message : 'Failed to build material'
+            };
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
@@ -193,8 +195,7 @@ export function Preview() {
     return (
         <div
             className={cn(
-                'pointer-events-auto relative bg-card border border-border rounded-xl shadow-lg overflow-hidden transition-all duration-200',
-                isExpanded ? 'w-96 h-96' : 'w-72 h-72'
+                'pointer-events-auto relative bg-card border border-border rounded-xl shadow-lg overflow-hidden transition-all duration-200 w-72 h-72',
             )}
         >
             <div className="absolute top-2 right-2 z-10">
