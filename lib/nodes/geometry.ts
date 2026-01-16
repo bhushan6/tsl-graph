@@ -66,6 +66,21 @@ export const geometryNodes = [
         tsl: 'normalView',
         pure: true,
     },
+    // Tangent
+    {
+        type: 'geo/tangentLocal',
+        label: 'Tangent Local',
+        category: 'Geometry',
+        outputs: {
+            x: { label: 'X', type: 'float' as const },
+            y: { label: 'Y', type: 'float' as const },
+            z: { label: 'Z', type: 'float' as const },
+            w: { label: 'W', type: 'float' as const },
+            out: { label: 'XYZW', type: 'vec4' as const },
+        },
+        tsl: 'tangentLocal',
+        pure: true,
+    },
     // UV
     {
         type: 'geo/uv',

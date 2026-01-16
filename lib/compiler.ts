@@ -822,6 +822,12 @@ export function getRequiredImports(
             continue;
         }
 
+        // Handle Code Nodes - they use Fn
+        if (node.data.type.startsWith('code/')) {
+            hasSubgraphs = true;
+            continue;
+        }
+
         const def = registry.get(node.data.type);
         if (def) {
             imports.add(def.tsl);
