@@ -75,10 +75,9 @@ function EditorCanvas() {
             isInitialized.current = true;
             const loaded = loadFromLocalStorage();
             if (!loaded) {
-                fetch('/demo.json')
+                fetch('/demo-2.json')
                     .then(response => response.text())
                     .then(json => {
-                        console.log({ json });
                         loadFromJSON(json);
                     })
                     .catch(err => console.error('Failed to load demo graph:', err));
