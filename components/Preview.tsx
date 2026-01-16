@@ -225,12 +225,18 @@ export function Preview() {
         const instanceCountNodes = nodes.filter(n => n.data.type === 'geo/instanceCount');
 
         instanceCountNodes.forEach(node => {
-            // Only update if value matches to avoid loops (though 100 !== 100 is false, so safe)
-            if (node.data.values?.value !== instanceCount) {
-                updateNodeValue(node.id, 'value', instanceCount);
+            if (isInstanced) {
+                // Only update if value matches to avoid loops (though 100 !== 100 is false, so safe)
+                if (node.data.values?.value !== instanceCount) {
+                    updateNodeValue(node.id, 'value', instanceCount);
+                }
+            } else {
+                if (node.data.values?.value !== 1) {
+                    updateNodeValue(node.id, 'value', 1);
+                }
             }
         });
-    }, [instanceCount]);
+    }, [instanceCount, isInstanced]);
 
     const meshOptions: { value: PreviewMesh; name: string }[] = [
         { value: 'sphere', name: 'Sphere' },
