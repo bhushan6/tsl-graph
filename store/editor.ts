@@ -223,7 +223,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // Remove any existing connection to the same target handle
         // (inputs can only have one connection, so replace the old one)
         const filteredEdges = edges.filter(
-            (edge) => !(edge.target === connection.target && edge.targetHandle === connection.targetHandle)
+            (edge) => {
+                const sameTarget = edge.target === connection.target;
+                const sameHandle = (edge.targetHandle || null) === (connection.targetHandle || null);
+                return !(sameTarget && sameHandle);
+            }
         );
 
 
