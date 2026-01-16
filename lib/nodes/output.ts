@@ -77,12 +77,51 @@ export const meshPhongMaterial = {
     tsl: 'MeshPhongNodeMaterial',
 } as const;
 
+export const spriteNodeMaterial = {
+    type: 'material/sprite',
+    label: 'SpriteNodeMaterial',
+    category: 'Material',
+    inputs: {
+        colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
+        opacityNode: { label: 'Opacity', type: 'float', default: 1 },
+        positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
+        scaleNode: { label: 'Scale', type: 'vec2', connectionOnly: true },
+        rotationNode: { label: 'Rotation', type: 'float', default: 0 },
+        alphaTest: { label: 'Alpha Test', type: 'float', default: 0 },
+        depthWrite: {
+            label: 'Depth Write',
+            type: 'bool',
+            default: false,
+            propertyOnly: true,
+            isMaterialProp: true
+        },
+        blending: {
+            label: 'Blending',
+            type: 'int',
+            default: 2, // NormalBlending
+            propertyOnly: true,
+            isMaterialProp: true,
+            options: [
+                { label: 'No', value: 0 }, // NoBlending
+                { label: 'Normal', value: 1 }, // NormalBlending
+                { label: 'Additive', value: 2 }, // AdditiveBlending
+                { label: 'Subtractive', value: 3 }, // SubtractiveBlending
+                { label: 'Multiply', value: 4 }, // MultiplyBlending
+                { label: 'Custom', value: 5 }, // CustomBlending
+            ]
+        }
+    },
+    outputs: {},
+    tsl: 'SpriteNodeMaterial',
+} as const;
+
 // All material node types for easy checking
 export const MATERIAL_NODE_TYPES = [
     'material/standard',
     'material/basic',
     'material/physical',
     'material/phong',
+    'material/sprite',
 ] as const;
 
 export const materialNodes = [
@@ -90,12 +129,13 @@ export const materialNodes = [
     meshBasicMaterial,
     meshPhysicalMaterial,
     meshPhongMaterial,
+    spriteNodeMaterial,
 ] as const;
 
 // Type checks
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _materialChecks: readonly BaseNodeDef[] = [
-    meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial
+    meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial, spriteNodeMaterial
 ];
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _materialNodesCheck: readonly BaseNodeDef[] = materialNodes;

@@ -117,6 +117,22 @@ export const geometryNodes = [
         tsl: 'time',
         pure: true,
     },
+    {
+        type: 'geo/instanceIndex',
+        label: 'Instance Index',
+        category: 'Geometry',
+        outputs: { out: { label: 'Out', type: 'uint' as const } },
+        tsl: 'instanceIndex',
+        pure: true,
+    },
+    {
+        type: 'geo/instanceCount',
+        label: 'Instance Count',
+        category: 'Geometry',
+        outputs: { out: { label: 'Out', type: 'uint' as const } },
+        tsl: 'instanceCount',
+        pure: false,
+    },
 ] as const;
 
 // Type check

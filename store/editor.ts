@@ -80,6 +80,12 @@ interface EditorState {
     canvasMode: 'pan' | 'select';
     setCanvasMode: (mode: 'pan' | 'select') => void;
 
+    // Instance state
+    instanceCount: number;
+    setInstanceCount: (count: number) => void;
+    isInstanced: boolean;
+    setIsInstanced: (enabled: boolean) => void;
+
     // History state
     history: HistoryState;
     isUndoRedoInProgress: boolean;
@@ -147,6 +153,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectedNodeIds: [],
     graphStructureVersion: 0,
 
+    // Instance state
+    instanceCount: 100,
+    setInstanceCount: (count) => set({ instanceCount: count }),
+    isInstanced: false,
+    setIsInstanced: (enabled) => set({ isInstanced: enabled }),
+
     // Subgraph state initialization
     subgraphs: {},
     editorMode: 'main',
@@ -166,7 +178,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     onNodesChange: (changes) => {
         const hasStructuralChange = changes.some(change => {
-            console.log('change', change);
             if (change.type === 'remove') return true;
             if (change.type === 'add') return true;
             // if (change.type === 'reset') return true;
@@ -244,6 +255,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
 
         const id = `${type}-${Date.now()}`;
+
+        // Set default value for InstanceCount node based on current store state
+        if (type === 'geo/instanceCount') {
+            const { isInstanced, instanceCount } = get();
+            const initialCount = isInstanced ? instanceCount : 1;
+            data.values = { value: initialCount, ...data.values };
+        }
+
         const newNode: Node<TSLNodeData> = {
             id,
             type,

@@ -16,10 +16,11 @@ export type TSLValueType = number | number[] | string | boolean;
 export interface Port {
     readonly label: string;
     readonly type: TSLType;
-    readonly default?: number | readonly number[] | string;
+    readonly default?: number | readonly number[] | string | boolean;
     readonly connectionOnly?: boolean; // If true, input must be connected (no inline value)
     readonly propertyOnly?: boolean; // If true, input is hidden on node (property panel only)
-    readonly options?: readonly { label: string; value: any }[]; // Dropdown options
+    readonly isMaterialProp?: boolean; // If true, treated as raw property assignment on material, not TSL node input
+    readonly options?: readonly { label: string; value: string | number }[]; // Dropdown options
 }
 
 // Base Node definition (loose types for definition files)

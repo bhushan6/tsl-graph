@@ -57,7 +57,7 @@ function getInputValue(
     inputKey: string,
     edges: Edge[],
     compiledNodes: Map<string, CompiledNode>,
-    inputDef: { type: string; default?: number | readonly number[] | string },
+    inputDef: { type: string; default?: number | readonly number[] | string | boolean },
     argsMap?: Record<string, string>
 ): string {
     const edge = edges.find(e => e.target === node.id && e.targetHandle === inputKey);
@@ -111,7 +111,7 @@ function getInputValue(
 function getStringValue(
     node: Node<TSLNodeData>,
     inputKey: string,
-    inputDef: { default?: number | readonly number[] | string }
+    inputDef: { default?: number | readonly number[] | string | boolean }
 ): string {
     const value = node.data.values?.[inputKey] ?? inputDef.default;
     return String(value ?? '');
@@ -657,6 +657,9 @@ export function compileGraph(
             // Special handling for UV node with index
             const index = Number(node.data.values?.['index'] ?? 0);
             code = `uv(${index})`;
+        } else if (def.type === 'geo/instanceCount') {
+            const count = Number(node.data.values?.['value'] ?? 0); // Default to 0 if not set
+            code = `uint(${count})`;
         } else if (def.type === 'math/split') {
             // Special handling for Split node - pass through the input value
             // The compiler's swizzling logic will handle the output access (e.g. .x, .y)
@@ -722,6 +725,16 @@ export function compileGraph(
                 // 2. Use local value (properties panel)
                 // Skip connection-only inputs that aren't connected
                 if (inputDef.connectionOnly) continue;
+
+                // 3. Handle raw material properties (depthWrite, blending, etc)
+                if (inputDef.isMaterialProp) {
+                    // Use local value (properties panel)
+                    const val = materialNode.data.values?.[key] ?? inputDef.default;
+
+                    // Assign direclty
+                    lines.push(`material.${key} = ${val};`);
+                    continue;
+                }
 
                 const valExpression = getInputValue(materialNode, key, edges, compiledNodes, inputDef);
 

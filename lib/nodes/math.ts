@@ -251,6 +251,7 @@ export const mathNodes = [
         },
         tsl: 'reflect',
     },
+
     {
         type: 'math/split',
         label: 'Split',
@@ -266,6 +267,17 @@ export const mathNodes = [
             out: { label: 'Out', type: 'any' },
         },
         tsl: 'split',
+    },
+    {
+        type: 'math/range',
+        label: 'Range',
+        category: 'Math',
+        inputs: {
+            min: { label: 'Min', type: 'any', default: 0 },
+            max: { label: 'Max', type: 'any', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'range',
     },
 ] as const;
 

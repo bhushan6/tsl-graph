@@ -307,7 +307,7 @@ interface PropertyInputWrapperProps {
     inputType: string;
     inputLabel: string;
     inputDefault: unknown;
-    inputOptions?: readonly { label: string; value: string }[];
+    inputOptions?: readonly { label: string; value: string | number }[];
     onChange: (value: unknown) => void;
 }
 
@@ -344,7 +344,7 @@ function PropertyInputWrapper({
 interface PropertyInputProps {
     type: string;
     value: unknown;
-    options?: readonly { label: string; value: string }[];
+    options?: readonly { label: string; value: string | number }[];
     onChange: (value: unknown) => void;
 }
 
