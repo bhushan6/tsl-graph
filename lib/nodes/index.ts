@@ -8,6 +8,7 @@ import { textureNodes } from './texture';
 import { modelNodes } from './model';
 import { advancedNodes } from './advanced';
 import { noiseNodes } from './noise';
+import { utilsNodes } from './utils';
 
 // Register all nodes
 export function initializeNodes() {
@@ -20,8 +21,9 @@ export function initializeNodes() {
     registry.registerMany(modelNodes);
     registry.registerMany(advancedNodes);
     registry.registerMany(noiseNodes);
+    registry.registerMany(utilsNodes);
 }
 
 // Re-export for convenience
-export { constantNodes, mathNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes };
+export { constantNodes, mathNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes };
 

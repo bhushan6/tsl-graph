@@ -8,6 +8,8 @@ import { textureNodes } from './texture';
 import { modelNodes } from './model';
 import { advancedNodes } from './advanced';
 import { noiseNodes } from './noise';
+import { utilsNodes } from './utils';
+
 
 // Aggregate all nodes
 export const allNodes = [
@@ -20,6 +22,7 @@ export const allNodes = [
     ...modelNodes,
     ...advancedNodes,
     ...noiseNodes,
+    ...utilsNodes,
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread
