@@ -5,8 +5,7 @@ import { useReactFlow } from '@xyflow/react';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
-import { NodeType, TSLNodeData } from '@/lib/types';
-import { Node } from '@xyflow/react';
+import { NodeType } from '@/lib/types';
 import { X, ChevronDown, Search, Code, Plus, Layers } from 'lucide-react';
 import {
     SidebarGroup,
@@ -141,24 +140,12 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
             position.x += (Math.random() - 0.5) * 100;
             position.y += (Math.random() - 0.5) * 100;
 
-            const instanceId = `${subgraphId}-instance-${Date.now()}`;
-            const instanceNode: Node<TSLNodeData> = {
-                id: instanceId,
-                type: subgraphId,
-                position,
-                data: {
-                    type: subgraphId as NodeType,
-                    values: {},
-                    connected: {},
-                    dynamicPorts: [...subgraph.inputs, ...subgraph.outputs],
-                },
-            };
-
-            useEditorStore.setState((state) => ({
-                nodes: [...state.nodes, instanceNode],
-            }));
+            // Use addNode with dynamicPorts data
+            addNode(subgraphId as NodeType, position, {
+                dynamicPorts: [...subgraph.inputs, ...subgraph.outputs],
+            });
         },
-        [subgraphs, screenToFlowPosition]
+        [subgraphs, screenToFlowPosition, addNode]
     );
 
     // Add code node instance
@@ -178,24 +165,12 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
             position.x += (Math.random() - 0.5) * 100;
             position.y += (Math.random() - 0.5) * 100;
 
-            const instanceId = `${codeNodeId}-instance-${Date.now()}`;
-            const instanceNode: Node<TSLNodeData> = {
-                id: instanceId,
-                type: codeNodeId,
-                position,
-                data: {
-                    type: codeNodeId as NodeType,
-                    values: {},
-                    connected: {},
-                    dynamicPorts: [...codeNode.inputs, codeNode.output],
-                },
-            };
-
-            useEditorStore.setState((state) => ({
-                nodes: [...state.nodes, instanceNode],
-            }));
+            // Use addNode with dynamicPorts data
+            addNode(codeNodeId as NodeType, position, {
+                dynamicPorts: [...codeNode.inputs, codeNode.output],
+            });
         },
-        [codeNodes, screenToFlowPosition]
+        [codeNodes, screenToFlowPosition, addNode]
     );
 
     // Show custom section if we have subgraphs or code nodes
