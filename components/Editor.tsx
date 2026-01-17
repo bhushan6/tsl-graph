@@ -42,7 +42,11 @@ const edgeTypes = {
     default: TSLEdge,
 }
 
-function EditorCanvas() {
+interface NavbarProps {
+    projectName?: string;
+}
+
+function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
     const {
         nodes,
         edges,
@@ -288,7 +292,7 @@ function EditorCanvas() {
             {/* UI Layer */}
             < UILayer >
                 <UILayer.TopBar>
-                    <Navbar />
+                    <Navbar {...navbarProps} />
                 </UILayer.TopBar>
 
                 <UILayer.LeftPanel>
@@ -337,11 +341,11 @@ function EditorCanvas() {
     );
 }
 
-export function Editor() {
+export function Editor(props: NavbarProps) {
     return (
         <div className="w-full h-full relative">
             <ReactFlowProvider>
-                <EditorCanvas />
+                <EditorCanvas navbarProps={props} />
             </ReactFlowProvider>
         </div>
     );
