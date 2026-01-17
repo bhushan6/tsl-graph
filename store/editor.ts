@@ -93,6 +93,15 @@ interface EditorState {
     // Stack for nested subgraph editing
     subgraphStack: SubgraphStackItem[];
 
+    // Auto-save state
+    autoSaveCallback: (() => Promise<void>) | null;
+    isSaving: boolean;
+    isDirty: boolean; // True when there are unsaved changes
+    autoSaveEnabled: boolean;
+    setAutoSaveCallback: (callback: (() => Promise<void>) | null) => void;
+    triggerAutoSave: () => void;
+    markDirty: () => void;
+
     onNodesChange: OnNodesChange<Node<TSLNodeData>>;
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
@@ -165,6 +174,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     editingSubgraphId: null,
     subgraphStack: [],
 
+    // Auto-save state initialization
+    autoSaveCallback: null,
+    isSaving: false,
+    isDirty: false,
+    autoSaveEnabled: true,
+
     // Code nodes initialization
     codeNodes: {},
 
@@ -175,6 +190,60 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // History initialization
     history: { past: [], future: [] },
     isUndoRedoInProgress: false,
+
+    // Auto-save methods
+    setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
+
+    markDirty: () => {
+        set({ isDirty: true });
+        // Trigger auto-save when marked dirty
+        useEditorStore.getState().triggerAutoSave();
+    },
+
+    triggerAutoSave: (() => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+        return () => {
+            const state = useEditorStore.getState();
+            if (!state.autoSaveEnabled || !state.autoSaveCallback) return;
+            if (!state.isDirty) return;
+
+            // Clear any pending save
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+
+            // Debounce: wait 2 seconds before saving
+            timeoutId = setTimeout(async () => {
+                const currentState = useEditorStore.getState();
+                if (currentState.isSaving) {
+                    // Already saving, will re-trigger after save completes
+                    return;
+                }
+                if (!currentState.isDirty) return;
+
+                useEditorStore.setState({ isSaving: true });
+
+                try {
+                    await currentState.autoSaveCallback?.();
+                    useEditorStore.setState({
+                        isDirty: false,
+                        isSaving: false
+                    });
+
+                    // Check if more changes occurred during save
+                    const afterSaveState = useEditorStore.getState();
+                    if (afterSaveState.isDirty) {
+                        // Re-trigger for pending changes
+                        afterSaveState.triggerAutoSave();
+                    }
+                } catch (error) {
+                    console.error('Auto-save failed:', error);
+                    useEditorStore.setState({ isSaving: false });
+                }
+            }, 2000);
+        };
+    })(),
 
     onNodesChange: (changes) => {
         const hasStructuralChange = changes.some(change => {
@@ -198,20 +267,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
             return true;
         });
+        // Check if this is a saveable change (anything except selection)
+        const hasSaveableChange = changes.some(change => change.type !== 'select');
+
         set({
             nodes: applyNodeChanges(filteredChanges, get().nodes),
             graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
+
+        // Mark dirty for auto-save
+        if (hasSaveableChange) {
+            get().markDirty();
+        }
     },
 
     onEdgesChange: (changes) => {
         const hasStructuralChange = changes.some(change => {
             return change.type !== 'select';
         });
+        // Check if this is a saveable change (anything except selection)
+        const hasSaveableChange = changes.some(change => change.type !== 'select');
+
         set({
             edges: applyEdgeChanges(changes, get().edges),
             graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
+
+        // Mark dirty for auto-save
+        if (hasSaveableChange) {
+            get().markDirty();
+        }
     },
 
     onConnect: (connection: Connection) => {
@@ -279,6 +364,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             },
         };
         set({ nodes: [...get().nodes, newNode], graphStructureVersion: get().graphStructureVersion + 1 });
+        get().markDirty();
         return true;
     },
 
@@ -298,6 +384,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ),
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
     },
 
     deleteNode: (nodeId) => {
@@ -311,6 +398,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
     },
 
     setSelectedNode: (nodeId) => {
@@ -395,6 +483,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: [],
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
     },
 
     hasMaterialNode: () => {
@@ -521,6 +610,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphs: { ...get().subgraphs, [id]: subgraph },
             edges: edgesToKeep,
         });
+        get().markDirty();
 
         return id;
     },
@@ -792,11 +882,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 [subgraphId]: { ...subgraph, ...updates, updatedAt: Date.now() },
             },
         });
+        get().markDirty();
     },
 
     deleteSubgraph: (subgraphId: string) => {
         const { [subgraphId]: _, ...rest } = get().subgraphs;
         set({ subgraphs: rest });
+        get().markDirty();
     },
 
     addDynamicPort: (nodeId: string, port: SubgraphPort) => {
@@ -881,6 +973,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({
             codeNodes: { ...get().codeNodes, [id]: codeNode },
         });
+        get().markDirty();
 
         return id;
     },
@@ -896,12 +989,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 [id]: { ...codeNode, ...updates, updatedAt: Date.now() },
             },
         });
+        get().markDirty();
     },
 
     deleteCodeNode: (id: string) => {
         get().takeSnapshot();
         const { [id]: _, ...rest } = get().codeNodes;
         set({ codeNodes: rest });
+        get().markDirty();
     },
 
     getCodeNode: (id: string) => {
@@ -962,7 +1057,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         // Use setTimeout to ensure we don't block render with flag
-        setTimeout(() => set({ isUndoRedoInProgress: false }), 0);
+        setTimeout(() => {
+            set({ isUndoRedoInProgress: false });
+            get().markDirty();
+        }, 0);
     },
 
     redo: () => {
@@ -990,7 +1088,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             },
         });
 
-        setTimeout(() => set({ isUndoRedoInProgress: false }), 0);
+        setTimeout(() => {
+            set({ isUndoRedoInProgress: false });
+            get().markDirty();
+        }, 0);
     },
 
     clearHistory: () => {
@@ -1130,3 +1231,5 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
     },
 }));
+
+// Note: Auto-save is triggered by markDirty() which is called when changes occur

@@ -51,14 +51,13 @@ function EditorCanvas() {
         onConnect,
         loadFromJSON,
         loadFromLocalStorage,
-        saveToLocalStorage,
         setSelectedNode,
         setSelectedNodes,
         editorMode,
         undo,
         redo,
         takeSnapshot,
-        canvasMode, // Add this
+        canvasMode,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -69,7 +68,7 @@ function EditorCanvas() {
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
 
-    // Load from localStorage on mount
+    // Load from localStorage on mount (for standalone editor without project)
     useEffect(() => {
         if (!isInitialized.current) {
             isInitialized.current = true;
@@ -85,16 +84,6 @@ function EditorCanvas() {
         }
     }, [loadFromLocalStorage, loadFromJSON]);
 
-    // Auto-save to localStorage on changes (debounced)
-    useEffect(() => {
-        if (!isInitialized.current) return;
-
-        const timeoutId = setTimeout(() => {
-            saveToLocalStorage();
-        }, 500); // Debounce 500ms
-
-        return () => clearTimeout(timeoutId);
-    }, [nodes, edges, saveToLocalStorage]);
 
     // Keyboard shortcuts for Undo/Redo
     useEffect(() => {
