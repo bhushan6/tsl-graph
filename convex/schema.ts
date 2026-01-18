@@ -9,6 +9,8 @@ export default defineSchema({
         description: v.optional(v.string()),
         isPublic: v.boolean(),
         graphData: v.any(),
+        thumbnail: v.optional(v.string()), // URL from Convex storage
+        thumbnailStorageId: v.optional(v.id("_storage")), // Storage ID for cleanup
         createdAt: v.number(),
         updatedAt: v.number(),
     })
@@ -43,4 +45,43 @@ export default defineSchema({
     })
         .index("by_user", ["userId"])
         .index("by_public", ["isPublic"]),
+
+    // ========== Asset Management ==========
+
+    // Assets: Central registry of uploaded files
+    assets: defineTable({
+        userId: v.string(),           // Owner of the asset
+        storageId: v.id("_storage"),  // Convex file storage reference
+        filename: v.string(),         // Original filename
+        mimeType: v.string(),         // File MIME type
+        size: v.number(),             // File size in bytes
+        createdAt: v.number(),
+        lastAccessedAt: v.number(),
+    })
+        .index("by_user", ["userId"])
+        .index("by_storage", ["storageId"]),
+
+    // Active references: Links between nodes and assets
+    assetReferences: defineTable({
+        assetId: v.id("assets"),
+        nodeId: v.string(),           // React Flow node ID
+        graphId: v.id("projects"),    // Project ID for scoping
+        propertyName: v.string(),     // e.g., "texture", "normalMap"
+        createdAt: v.number(),
+    })
+        .index("by_node", ["graphId", "nodeId"])
+        .index("by_asset", ["assetId"])
+        .index("by_graph", ["graphId"]),
+
+    // Soft-deleted references: For undo support (7-day grace period)
+    deletedAssetReferences: defineTable({
+        assetId: v.id("assets"),
+        nodeId: v.string(),
+        graphId: v.id("projects"),
+        propertyName: v.string(),
+        deletedAt: v.number(),        // When reference was deleted
+    })
+        .index("by_node", ["graphId", "nodeId"])
+        .index("by_asset", ["assetId"])
+        .index("by_deleted_at", ["deletedAt"]),
 });

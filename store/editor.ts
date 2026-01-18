@@ -99,6 +99,9 @@ interface EditorState {
     isDirty: boolean; // True when there are unsaved changes
     autoSaveEnabled: boolean;
 
+    // Project ID for asset management
+    projectId: string | null;
+
     // Template callbacks (for async DB operations)
     onSubgraphTemplateCreate: ((subgraph: SubgraphDefinition) => Promise<{ templateId: string; version: number }>) | null;
     onSubgraphTemplateUpdate: ((templateId: string, subgraph: SubgraphDefinition) => Promise<{ version: number }>) | null;
@@ -111,6 +114,7 @@ interface EditorState {
         onCodeNodeTemplateUpdate?: (templateId: string, codeNode: CodeNodeDefinition) => Promise<{ version: number }>;
     }) => void;
     setAutoSaveCallback: (callback: (() => Promise<void>) | null) => void;
+    setProjectId: (projectId: string | null) => void;
     triggerAutoSave: () => void;
     markDirty: () => void;
 
@@ -197,6 +201,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     isDirty: false,
     autoSaveEnabled: true,
 
+    // Project ID initialization
+    projectId: null,
+
     // Template callbacks initialization
     onSubgraphTemplateCreate: null,
     onSubgraphTemplateUpdate: null,
@@ -216,6 +223,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Auto-save methods
     setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
+    setProjectId: (projectId) => set({ projectId }),
 
     // Template callbacks setter
     setTemplateCallbacks: (callbacks) => set({

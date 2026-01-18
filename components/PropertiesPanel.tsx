@@ -15,6 +15,8 @@ import { SubgraphPort, TSLType, CodeNodeDefinition } from '@/lib/types';
 import { Layers, Plus, Trash2, Upload, Code } from 'lucide-react';
 import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
+import { AssetInput } from './inputs/AssetInput';
+import { Id } from '@/convex/_generated/dataModel';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -428,6 +430,7 @@ function PropertyInputWrapper({
 }: PropertyInputWrapperProps) {
     // Subscribe reactively to this specific value
     const value = useNodeInputValue(nodeId, inputKey, inputDefault);
+    const projectId = useEditorStore((s) => s.projectId);
 
     return (
         <div className="flex flex-col gap-1.5">
@@ -439,6 +442,9 @@ function PropertyInputWrapper({
                 value={value}
                 options={inputOptions}
                 onChange={onChange}
+                nodeId={nodeId}
+                propertyName={inputKey}
+                projectId={projectId}
             />
         </div>
     );
@@ -449,9 +455,12 @@ interface PropertyInputProps {
     value: unknown;
     options?: readonly { label: string; value: string | number }[];
     onChange: (value: unknown) => void;
+    nodeId?: string;
+    propertyName?: string;
+    projectId?: string | null;
 }
 
-function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
+function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId }: PropertyInputProps) {
     if (options && options.length > 0) {
         return (
             <select
@@ -477,6 +486,19 @@ function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
         return <AnyInput value={value} onChange={onChange} />;
     }
     if (type === 'string') {
+        // Use AssetInput for string types when we have nodeId (for texture uploads)
+        if (nodeId && propertyName) {
+            return (
+                <AssetInput
+                    value={value as string}
+                    onChange={(url) => onChange(url)}
+                    graphId={projectId as Id<"projects"> | undefined}
+                    nodeId={nodeId}
+                    propertyName={propertyName}
+                    accept="image/*"
+                />
+            );
+        }
         return <StringInput value={String(value ?? '')} onChange={onChange} />;
     }
     if (type === 'color') {

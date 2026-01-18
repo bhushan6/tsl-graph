@@ -107,6 +107,7 @@ function getInputValue(
 
 /**
  * Get the string value for an input, evaluating node values or defaults.
+ * Handles AssetValue objects by extracting the url property.
  */
 function getStringValue(
     node: Node<TSLNodeData>,
@@ -114,6 +115,12 @@ function getStringValue(
     inputDef: { default?: number | readonly number[] | string | boolean }
 ): string {
     const value = node.data.values?.[inputKey] ?? inputDef.default;
+
+    // Handle AssetValue objects (e.g., {url: "...", assetId: "..."})
+    if (value && typeof value === 'object' && 'url' in value) {
+        return String((value as { url: string }).url ?? '');
+    }
+
     return String(value ?? '');
 }
 

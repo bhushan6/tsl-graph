@@ -295,8 +295,17 @@ function DashboardContent() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex-grow pb-4">
-                                    <div className="aspect-video w-full rounded-md bg-muted/50 border flex items-center justify-center text-muted-foreground/50 group-hover:bg-muted/70 transition-colors">
-                                        <Sparkles className="h-8 w-8 opacity-20" />
+                                    <div className="aspect-video w-full rounded-md bg-muted/50 border flex items-center justify-center text-muted-foreground/50 overflow-hidden group-hover:bg-muted/70 transition-colors">
+                                        {project.thumbnail ? (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img
+                                                src={project.thumbnail}
+                                                alt={project.name}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <Sparkles className="h-8 w-8 opacity-20" />
+                                        )}
                                     </div>
                                 </CardContent>
                                 {/* Bottom Accent */}

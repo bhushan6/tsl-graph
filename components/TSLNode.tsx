@@ -304,7 +304,14 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
     const looksLikeColor = type === 'any' && typeof value === 'string' && value.startsWith('#');
 
     if (type === 'string') {
-        return <StringPreview value={String(value ?? '')} />;
+        // Handle AssetValue objects (e.g., {url: "...", assetId: "..."})
+        let stringValue = '';
+        if (value && typeof value === 'object' && 'url' in value) {
+            stringValue = (value as { url: string }).url || '';
+        } else {
+            stringValue = String(value ?? '');
+        }
+        return <StringPreview value={stringValue} />;
     }
     if (isColor || looksLikeColor) {
         return <ColorInputPreview value={String(value ?? '#ffffff')} />;

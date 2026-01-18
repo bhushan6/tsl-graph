@@ -25,6 +25,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
     const setAutoSaveCallback = useEditorStore((s) => s.setAutoSaveCallback);
     const setTemplateCallbacks = useEditorStore((s) => s.setTemplateCallbacks);
+    const setProjectId = useEditorStore((s) => s.setProjectId);
     const resetEditor = useEditorStore((s) => s.resetEditor);
 
     const hasLoadedRef = useRef(false);
@@ -132,13 +133,14 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
         if (project?.graphData && !hasLoadedRef.current) {
             const json = JSON.stringify(project.graphData);
             loadFromJSON(json);
+            setProjectId(projectId);
             hasLoadedRef.current = true;
             // Set lastSavedVersion to current to prevent immediate re-save
             useEditorStore.setState({
                 isDirty: false
             });
         }
-    }, [project, loadFromJSON]);
+    }, [project, loadFromJSON, projectId, setProjectId]);
 
     if (project === undefined) {
         return (
@@ -167,6 +169,8 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
             <main className="flex-1 overflow-hidden relative">
                 <Editor
                     projectName={project.name}
+                    projectId={projectId}
+                    hasThumbnail={!!project.thumbnail}
                 />
             </main>
         </div>

@@ -47,7 +47,12 @@ interface NavbarProps {
     projectName?: string;
 }
 
-function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
+interface EditorProps extends NavbarProps {
+    projectId?: string;
+    hasThumbnail?: boolean;
+}
+
+function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: NavbarProps; projectId?: string; hasThumbnail?: boolean }) {
     const {
         nodes,
         edges,
@@ -316,7 +321,7 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
                 </UILayer.LeftPanel>
 
                 <UILayer.RightPanel>
-                    {editorMode === 'main' && <Preview />}
+                    {editorMode === 'main' && <Preview projectId={projectId} hasThumbnail={hasThumbnail} />}
                     <PropertiesPanel />
                 </UILayer.RightPanel>
 
@@ -348,11 +353,11 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
     );
 }
 
-export function Editor(props: NavbarProps) {
+export function Editor(props: EditorProps) {
     return (
         <div className="w-full h-full relative">
             <ReactFlowProvider>
-                <EditorCanvas navbarProps={props} />
+                <EditorCanvas navbarProps={props} projectId={props.projectId} hasThumbnail={props.hasThumbnail} />
             </ReactFlowProvider>
         </div>
     );

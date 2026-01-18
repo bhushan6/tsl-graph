@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useEditorStore } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -16,12 +16,15 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
 
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { Id } from '@/convex/_generated/dataModel';
 
-export function Preview() {
+export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -38,7 +41,94 @@ export function Preview() {
     const setInstanceCount = useEditorStore((state) => state.setInstanceCount);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
+
     const [isReady, setIsReady] = useState(false);
+
+    // Thumbnail generation
+    const generateThumbnailUploadUrl = useMutation(api.projects.generateThumbnailUploadUrl);
+    const updateThumbnail = useMutation(api.projects.updateThumbnail);
+    const nodes = useEditorStore((state) => state.nodes);
+    const lastSnapshotNodeCount = useRef(nodes.length);
+    // Track if we've done the initial snapshot for this session
+    const initialSnapshotTaken = useRef(false);
+
+    const captureSnapshot = useCallback(async () => {
+        if (!rendererRef.current || !props.projectId) return;
+
+        try {
+            // Convert canvas to blob
+            const canvas = rendererRef.current.domElement;
+            const blob = await new Promise<Blob | null>((resolve) => {
+                canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.7);
+            });
+
+            if (!blob) {
+                console.error('Failed to create blob from canvas');
+                return;
+            }
+
+            // Get upload URL from Convex
+            const uploadUrl = await generateThumbnailUploadUrl();
+
+            // Upload blob to Convex storage
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'image/jpeg' },
+                body: blob,
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to upload thumbnail');
+            }
+
+            const { storageId } = await response.json();
+
+            // Update project with new thumbnail (old one will be deleted by mutation)
+            await updateThumbnail({
+                id: props.projectId as Id<"projects">,
+                storageId,
+            });
+
+            console.log('Thumbnail updated');
+        } catch (err) {
+            console.error('Failed to update thumbnail:', err);
+        }
+    }, [props.projectId, generateThumbnailUploadUrl, updateThumbnail]);
+
+    // Initial snapshot when landing in editor
+    useEffect(() => {
+        if (isReady && props.projectId && !props.hasThumbnail && !initialSnapshotTaken.current) {
+            // Wait a bit for scene to settle/render
+            const timeout = setTimeout(() => {
+                captureSnapshot();
+                initialSnapshotTaken.current = true;
+            }, 1000);
+            return () => clearTimeout(timeout);
+        }
+    }, [isReady, props.projectId, props.hasThumbnail, captureSnapshot]);
+
+    // Snapshot every 5 nodes added
+    useEffect(() => {
+        if (!isReady || !props.projectId) return;
+
+        // If nodes decreased, just sync the ref to avoid getting stuck
+        if (nodes.length < lastSnapshotNodeCount.current) {
+            lastSnapshotNodeCount.current = nodes.length;
+            return;
+        }
+
+        // Check if we added 5+ nodes since last snapshot
+        if (nodes.length - lastSnapshotNodeCount.current >= 5) {
+            // Wait small delay for new node to render
+            const timeout = setTimeout(() => {
+                captureSnapshot();
+                lastSnapshotNodeCount.current = nodes.length;
+            }, 1000);
+            return () => clearTimeout(timeout);
+        }
+    }, [nodes.length, isReady, props.projectId, captureSnapshot]);
+
+
 
 
 

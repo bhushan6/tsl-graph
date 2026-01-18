@@ -68,6 +68,68 @@ export const update = mutation({
     },
 });
 
+// Update project thumbnail with Convex storage
+// Flow: Upload blob to storage → call this mutation → old thumbnail deleted
+export const updateThumbnail = mutation({
+    args: {
+        id: v.id("projects"),
+        storageId: v.id("_storage"),
+    },
+    handler: async (ctx, args) => {
+        const user = await authComponent.getAuthUser(ctx);
+        if (!user) {
+            throw new Error("Not authenticated");
+        }
+
+        const project = await ctx.db.get(args.id);
+        if (!project) {
+            throw new Error("Project not found");
+        }
+        if (project.userId !== user._id) {
+            throw new Error("Not authorized");
+        }
+
+        // Get the URL for the new thumbnail
+        const url = await ctx.storage.getUrl(args.storageId);
+        if (!url) {
+            throw new Error("Failed to get thumbnail URL");
+        }
+
+        // Store old storage ID for deletion after update
+        const oldStorageId = project.thumbnailStorageId;
+
+        // Update project with new thumbnail
+        await ctx.db.patch(args.id, {
+            thumbnail: url,
+            thumbnailStorageId: args.storageId,
+            updatedAt: Date.now(),
+        });
+
+        // Delete old thumbnail from storage if it exists
+        if (oldStorageId) {
+            try {
+                await ctx.storage.delete(oldStorageId);
+                console.log("[updateThumbnail] Deleted old thumbnail:", oldStorageId);
+            } catch (err) {
+                console.error("[updateThumbnail] Failed to delete old thumbnail:", err);
+            }
+        }
+
+        return { id: args.id, url };
+    },
+});
+
+// Generate upload URL for thumbnail
+export const generateThumbnailUploadUrl = mutation({
+    handler: async (ctx) => {
+        const user = await authComponent.getAuthUser(ctx);
+        if (!user) {
+            throw new Error("Not authenticated");
+        }
+        return await ctx.storage.generateUploadUrl();
+    },
+});
+
 // Delete a project
 export const remove = mutation({
     args: {
