@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2 } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
@@ -114,85 +115,112 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 <div className="w-px h-4 bg-border" />
 
                 <div className="flex items-center gap-0.5">
-                    <Button
-                        type="button"
-                        variant={canvasMode === 'pan' ? 'secondary' : 'ghost'}
-                        size="icon"
-                        onClick={() => setCanvasMode('pan')}
-                        className="h-8 w-8"
-                        title="Pan Mode"
-                    >
-                        <Hand className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant={canvasMode === 'select' ? 'secondary' : 'ghost'}
-                        size="icon"
-                        onClick={() => setCanvasMode('select')}
-                        className="h-8 w-8"
-                        title="Selection Mode"
-                    >
-                        <MousePointer2 className="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                type="button"
+                                variant={canvasMode === 'pan' ? 'secondary' : 'ghost'}
+                                size="icon"
+                                onClick={() => setCanvasMode('pan')}
+                                className="h-8 w-8"
+                            >
+                                <Hand className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Pan Mode</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                type="button"
+                                variant={canvasMode === 'select' ? 'secondary' : 'ghost'}
+                                size="icon"
+                                onClick={() => setCanvasMode('select')}
+                                className="h-8 w-8"
+                            >
+                                <MousePointer2 className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Selection Mode</TooltipContent>
+                    </Tooltip>
                 </div>
 
                 <div className="w-px h-4 bg-border" />
 
                 <div className="flex items-center gap-0.5">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={undo}
-                        disabled={history.past.length === 0}
-                        className="h-8 w-8 text-primary hover:text-primary"
-                        title="Undo (Ctrl+Z)"
-                    >
-                        <Undo2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={redo}
-                        disabled={history.future.length === 0}
-                        className="h-8 w-8 text-primary hover:text-primary"
-                        title="Redo (Ctrl+Y)"
-                    >
-                        <Redo2 className="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={undo}
+                                    disabled={history.past.length === 0}
+                                    className="h-8 w-8 text-primary hover:text-primary"
+                                >
+                                    <Undo2 className="w-4 h-4" />
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={redo}
+                                    disabled={history.future.length === 0}
+                                    className="h-8 w-8 text-primary hover:text-primary"
+                                >
+                                    <Redo2 className="w-4 h-4" />
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
+                    </Tooltip>
                 </div>
 
                 <div className="w-px h-4 bg-border" />
 
-                <Button
-                    type="submit"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-3 gap-2 text-primary hover:text-primary"
-                    title="Save and exit"
-                    disabled={isProcessing}
-                >
-                    {isProcessing ? (
-                        <>
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span className="text-xs">Saving...</span>
-                        </>
-                    ) : (
-                        <span className="text-xs">Save & Exit</span>
-                    )}
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                type="submit"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-primary hover:text-primary"
+                                disabled={isProcessing}
+                            >
+                                {isProcessing ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Check className="w-4 h-4" />
+                                )}
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{isProcessing ? 'Saving...' : 'Save & Exit'}</TooltipContent>
+                </Tooltip>
 
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleExitSubgraph(false)}
-                    className="h-8 px-3 gap-2 text-muted-foreground"
-                    title="Cancel and exit"
-                >
-                    <span className="text-xs">Cancel</span>
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleExitSubgraph(false)}
+                            className="h-8 w-8 text-muted-foreground"
+                        >
+                            <X className="w-4 h-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Cancel</TooltipContent>
+                </Tooltip>
             </form >
         );
     }
@@ -200,106 +228,142 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
     return (
         <div className="pointer-events-auto flex items-center gap-1 bg-card/95 backdrop-blur-sm border border-border rounded-xl p-1.5 shadow-lg">
             <div className="flex items-center gap-0.5">
-                <Button
-                    variant={canvasMode === 'pan' ? 'secondary' : 'ghost'}
-                    size="icon"
-                    onClick={() => setCanvasMode('pan')}
-                    className="h-8 w-8"
-                    title="Pan Mode"
-                >
-                    <Hand className="w-4 h-4" />
-                </Button>
-                <Button
-                    variant={canvasMode === 'select' ? 'secondary' : 'ghost'}
-                    size="icon"
-                    onClick={() => setCanvasMode('select')}
-                    className="h-8 w-8"
-                    title="Selection Mode"
-                >
-                    <MousePointer2 className="w-4 h-4" />
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant={canvasMode === 'pan' ? 'secondary' : 'ghost'}
+                            size="icon"
+                            onClick={() => setCanvasMode('pan')}
+                            className="h-8 w-8"
+                        >
+                            <Hand className="w-4 h-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Pan Mode</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant={canvasMode === 'select' ? 'secondary' : 'ghost'}
+                            size="icon"
+                            onClick={() => setCanvasMode('select')}
+                            className="h-8 w-8"
+                        >
+                            <MousePointer2 className="w-4 h-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Selection Mode</TooltipContent>
+                </Tooltip>
             </div>
 
             <div className="w-px h-4 bg-border" />
 
-            <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCreateSubgraph}
-                className="h-8 px-3 gap-2"
-                title="Create subgraph from selected nodes"
-                disabled={selectedNodeIds.length < 1}
-            >
-                <Layers className="w-4 h-4" />
-                <span className="text-xs">Subgraph</span>
-            </Button>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleCreateSubgraph}
+                            className="h-8 w-8"
+                            disabled={selectedNodeIds.length < 1}
+                        >
+                            <Layers className="w-4 h-4" />
+                        </Button>
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent>Create Subgraph</TooltipContent>
+            </Tooltip>
 
             <div className="w-px h-4 bg-border" />
 
             <div className="flex items-center gap-0.5">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={groupNodes}
-                    className="h-8 px-2 gap-2"
-                    title="Group selected nodes"
-                    disabled={selectedNodeIds.length < 1}
-                >
-                    <Group className="w-4 h-4" />
-                    <span className="text-xs">Group</span>
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={groupNodes}
+                                className="h-8 w-8"
+                                disabled={selectedNodeIds.length < 1}
+                            >
+                                <Group className="w-4 h-4" />
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Group Nodes</TooltipContent>
+                </Tooltip>
                 {selectedNodeIds.length > 0 && nodes.filter(n => selectedNodeIds.includes(n.id)).every(n => n.type === 'group') && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={ungroupNodes}
-                        className="h-8 px-2 gap-2"
-                        title="Ungroup selected groups"
-                    >
-                        <Ungroup className="w-4 h-4" />
-                        <span className="text-xs">Ungroup</span>
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={ungroupNodes}
+                                className="h-8 w-8"
+                            >
+                                <Ungroup className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Ungroup Nodes</TooltipContent>
+                    </Tooltip>
                 )}
             </div>
 
             <div className="w-px h-4 bg-border" />
 
             <div className="flex items-center gap-0.5">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={undo}
-                    disabled={history.past.length === 0}
-                    className="h-8 w-8"
-                    title="Undo (Ctrl+Z)"
-                >
-                    <Undo2 className="w-4 h-4" />
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={redo}
-                    disabled={history.future.length === 0}
-                    className="h-8 w-8"
-                    title="Redo (Ctrl+Y)"
-                >
-                    <Redo2 className="w-4 h-4" />
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={undo}
+                                disabled={history.past.length === 0}
+                                className="h-8 w-8"
+                            >
+                                <Undo2 className="w-4 h-4" />
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={redo}
+                                disabled={history.future.length === 0}
+                                className="h-8 w-8"
+                            >
+                                <Redo2 className="w-4 h-4" />
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
+                </Tooltip>
             </div>
 
             {onOpenCodePanel && (
                 <>
                     <div className="w-px h-4 bg-border" />
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onOpenCodePanel}
-                        className="h-8 px-3 gap-2"
-                        title="View generated code"
-                    >
-                        <Code className="w-4 h-4" />
-                        <span className="text-xs">Code</span>
-                    </Button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onOpenCodePanel}
+                                className="h-8 w-8"
+                            >
+                                <Code className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View Code</TooltipContent>
+                    </Tooltip>
                 </>
             )}
         </div>
