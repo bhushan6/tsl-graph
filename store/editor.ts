@@ -15,6 +15,16 @@ import { getAbsolutePosition } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
 
+// Preview mesh type
+export type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
+
+// Preview settings interface
+export interface PreviewSettings {
+    mesh: PreviewMesh;
+    isInstanced: boolean;
+    instanceCount: number;
+}
+
 // Graph save format
 export interface GraphData {
     version: number;
@@ -24,6 +34,8 @@ export interface GraphData {
     subgraphs?: Record<string, SubgraphDefinition>;
     // Code node definitions
     codeNodes?: Record<string, CodeNodeDefinition>;
+    // Preview settings
+    previewSettings?: PreviewSettings;
 }
 
 // Editor mode - main graph or editing a subgraph
@@ -80,11 +92,9 @@ interface EditorState {
     canvasMode: 'pan' | 'select';
     setCanvasMode: (mode: 'pan' | 'select') => void;
 
-    // Instance state
-    instanceCount: number;
-    setInstanceCount: (count: number) => void;
-    isInstanced: boolean;
-    setIsInstanced: (enabled: boolean) => void;
+    // Preview settings
+    previewSettings: PreviewSettings;
+    updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
 
     // History state
     history: HistoryState;
@@ -183,11 +193,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectedNodeIds: [],
     graphStructureVersion: 0,
 
-    // Instance state
-    instanceCount: 100,
-    setInstanceCount: (count) => set({ instanceCount: count }),
-    isInstanced: false,
-    setIsInstanced: (enabled) => set({ isInstanced: enabled }),
+    // Preview settings
+    previewSettings: {
+        mesh: 'sphere' as PreviewMesh,
+        isInstanced: false,
+        instanceCount: 100,
+    },
+    updatePreviewSettings: (updates) => {
+        set({ previewSettings: { ...get().previewSettings, ...updates } });
+        get().markDirty();
+    },
 
     // Subgraph state initialization
     subgraphs: {},
@@ -274,16 +289,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
                 if (!currentState.isDirty) return;
 
-                useEditorStore.setState({ isSaving: true });
+                // Clear dirty flag BEFORE starting save - this captures the current state.
+                // If changes happen during the save, markDirty() will set isDirty: true again,
+                // and the follow-up check will trigger another save.
+                useEditorStore.setState({ isSaving: true, isDirty: false });
 
                 try {
                     await currentState.autoSaveCallback?.();
 
-                    // Clear dirty flag after successful save
-                    useEditorStore.setState({
-                        isDirty: false,
-                        isSaving: false
-                    });
+                    useEditorStore.setState({ isSaving: false });
 
                     // Immediately check if more changes occurred during save
                     // Use a small delay to ensure state is settled
@@ -295,9 +309,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     }, 100);
                 } catch (error) {
                     console.error('Auto-save failed:', error);
-                    useEditorStore.setState({ isSaving: false });
+                    // Re-mark as dirty since save failed - the original changes weren't persisted
+                    useEditorStore.setState({ isSaving: false, isDirty: true });
 
-                    // On error, retry after a delay if still dirty
+                    // On error, retry after a delay
                     setTimeout(() => {
                         const afterErrorState = useEditorStore.getState();
                         if (afterErrorState.isDirty && !afterErrorState.isSaving) {
@@ -413,8 +428,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // Set default value for InstanceCount node based on current store state
         if (type === 'geo/instanceCount') {
-            const { isInstanced, instanceCount } = get();
-            const initialCount = isInstanced ? instanceCount : 1;
+            const { previewSettings } = get();
+            const initialCount = previewSettings.isInstanced ? previewSettings.instanceCount : 1;
             data.values = { value: initialCount, ...data.values };
         }
 
@@ -566,6 +581,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: edgesToSave,
             subgraphs: subgraphsToSave,
             codeNodes: codeNodes,
+            previewSettings: get().previewSettings,
         };
         return JSON.stringify(graphData, null, 2);
     },
@@ -581,6 +597,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     subgraphs: data.subgraphs || {},
                     codeNodes: data.codeNodes || {},
                     graphStructureVersion: get().graphStructureVersion + 1,
+                    // Restore preview settings
+                    previewSettings: data.previewSettings || {
+                        mesh: 'sphere',
+                        isInstanced: false,
+                        instanceCount: 100,
+                    },
                     // Reset subgraph state on load
                     editorMode: 'main',
                     editingSubgraphId: null,

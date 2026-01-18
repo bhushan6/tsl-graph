@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { useEditorStore } from '@/store/editor';
+import { useEditorStore, PreviewMesh } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
@@ -19,8 +19,6 @@ import {
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
-
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { Id } from '@/convex/_generated/dataModel';
 
@@ -34,11 +32,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
 
-    const [currentMesh, setCurrentMesh] = useState<PreviewMesh>('sphere');
-    const isInstanced = useEditorStore((state) => state.isInstanced);
-    const setIsInstanced = useEditorStore((state) => state.setIsInstanced);
-    const instanceCount = useEditorStore((state) => state.instanceCount);
-    const setInstanceCount = useEditorStore((state) => state.setInstanceCount);
+    const previewSettings = useEditorStore((state) => state.previewSettings);
+    const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
 
@@ -163,7 +158,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {
-        switch (currentMesh) {
+        switch (previewSettings.mesh) {
             case 'cube':
                 return new THREE.BoxGeometry(1.5, 1.5, 1.5, 64, 64, 64);
             case 'torus':
@@ -174,7 +169,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             default:
                 return new THREE.SphereGeometry(1, 128, 128);
         }
-    }, [currentMesh]);
+    }, [previewSettings.mesh]);
 
     const handleResize = () => {
         if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
@@ -283,8 +278,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
         let mesh: THREE.Mesh;
 
-        if (isInstanced) {
-            mesh = new THREE.InstancedMesh(geometry, material, instanceCount);
+        if (previewSettings.isInstanced) {
+            mesh = new THREE.InstancedMesh(geometry, material, previewSettings.instanceCount);
             mesh.position.set(0, 0, 0); // Galaxy usually centered
             // We don't need to set matrices if the material handles positioning via storage/attributes,
             // BUT for TSL SpriteNodeMaterial examples, it often uses instanceIndex.
@@ -296,7 +291,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             // Standard InstancedMesh initialized with identity matrices is usually enough if TSL overrides position.
 
             // However, to be safe, let's fill it with dummy data so it renders if TSL doesn't fully override
-            for (let i = 0; i < instanceCount; i++) {
+            for (let i = 0; i < previewSettings.instanceCount; i++) {
                 const matrix = new THREE.Matrix4();
                 matrix.setPosition(0, 0, 0);
                 (mesh as THREE.InstancedMesh).setMatrixAt(i, matrix);
@@ -309,7 +304,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         sceneRef.current.add(mesh);
         meshRef.current = mesh;
 
-    }, [geometry, material, isInstanced, instanceCount]);
+    }, [geometry, material, previewSettings.isInstanced, previewSettings.instanceCount]);
 
     useEffect(() => {
         handleResize();
@@ -321,10 +316,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         const instanceCountNodes = nodes.filter(n => n.data.type === 'geo/instanceCount');
 
         instanceCountNodes.forEach(node => {
-            if (isInstanced) {
+            if (previewSettings.isInstanced) {
                 // Only update if value matches to avoid loops (though 100 !== 100 is false, so safe)
-                if (node.data.values?.value !== instanceCount) {
-                    updateNodeValue(node.id, 'value', instanceCount);
+                if (node.data.values?.value !== previewSettings.instanceCount) {
+                    updateNodeValue(node.id, 'value', previewSettings.instanceCount);
                 }
             } else {
                 if (node.data.values?.value !== 1) {
@@ -332,7 +327,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 }
             }
         });
-    }, [instanceCount, isInstanced]);
+    }, [previewSettings.instanceCount, previewSettings.isInstanced]);
 
     const meshOptions: { value: PreviewMesh; name: string }[] = [
         { value: 'sphere', name: 'Sphere' },
@@ -362,7 +357,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-auto px-2 text-xs">
-                            {meshOptions.find((opt) => opt.value === currentMesh)?.name}
+                            {meshOptions.find((opt) => opt.value === previewSettings.mesh)?.name}
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -372,7 +367,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                             {meshOptions.map((opt) => (
                                 <DropdownMenuItem
                                     key={opt.value}
-                                    onClick={() => setCurrentMesh(opt.value)}
+                                    onClick={() => updatePreviewSettings({ mesh: opt.value })}
                                 >
                                     <span>{opt.name}</span>
                                 </DropdownMenuItem>
@@ -386,17 +381,17 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                 <label className="text-xs">Enable</label>
                                 <input
                                     type="checkbox"
-                                    checked={isInstanced}
-                                    onChange={(e) => setIsInstanced(e.target.checked)}
+                                    checked={previewSettings.isInstanced}
+                                    onChange={(e) => updatePreviewSettings({ isInstanced: e.target.checked })}
                                 />
                             </div>
-                            {isInstanced && (
+                            {previewSettings.isInstanced && (
                                 <div className="flex items-center gap-2">
                                     <label className="text-xs">Count</label>
                                     <input
                                         type="number"
-                                        value={instanceCount}
-                                        onChange={(e) => setInstanceCount(Number(e.target.value))}
+                                        value={previewSettings.instanceCount}
+                                        onChange={(e) => updatePreviewSettings({ instanceCount: Number(e.target.value) })}
                                         className="w-16 h-6 text-xs border rounded px-1 text-black"
                                     />
                                 </div>
