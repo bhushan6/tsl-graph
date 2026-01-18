@@ -8,11 +8,7 @@ import { Button } from '@/components/ui/button';
 import { SidebarInput } from '@/components/ui/sidebar';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface AssetValue {
-    url: string;
-    assetId?: string;
-}
+import type { AssetValue } from '@/lib/types';
 
 interface AssetInputProps {
     value: AssetValue | string | undefined;

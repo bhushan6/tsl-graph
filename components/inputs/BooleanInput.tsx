@@ -3,9 +3,10 @@
 import { memo, useId } from 'react';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { TSLValueType } from '@/lib/types';
 
 interface BooleanInputProps {
-    value: unknown;
+    value: TSLValueType;
     onChange: (value: boolean) => void;
     label?: string;
 }

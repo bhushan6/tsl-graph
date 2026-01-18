@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react';
 import { getAbsolutePosition } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition } from '@/lib/types';
+import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
 
 // Graph save format
 export interface GraphData {
@@ -123,7 +123,7 @@ interface EditorState {
     onConnect: OnConnect;
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
-    updateNodeValue: (nodeId: string, key: string, value: unknown) => void;
+    updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
     deleteNode: (nodeId: string) => void;
     setSelectedNode: (nodeId: string | null) => void;
     setSelectedNodes: (nodeIds: string[]) => void;
@@ -418,7 +418,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         ...node,
                         data: {
                             ...node.data,
-                            values: { ...node.data.values, [key]: value as import('@/lib/nodes/definitions').TSLValueType },
+                            values: { ...node.data.values, [key]: value },
                         },
                     }
                     : node

@@ -11,7 +11,8 @@ class NodeRegistry {
         defs.forEach((d) => this.register(d));
     }
 
-    get(type: string): NodeDef | undefined {
+    get(type: unknown): NodeDef | undefined {
+        if (typeof type !== 'string') return undefined;
         return this.defs.get(type as NodeType);
     }
 

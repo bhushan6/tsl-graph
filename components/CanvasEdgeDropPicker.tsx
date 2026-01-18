@@ -7,7 +7,7 @@ import { registry } from "@/lib/registry";
 import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
-import { NodeType, AppNode, TSLNodeData } from "@/lib/types";
+import { NodeType, AppNode, TSLNodeData, TSLValueType } from "@/lib/types";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -34,7 +34,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             // Build default values from definition
             // Note: definition.inputs is a Record<string, Port>
-            const defaultValues: Record<string, any> = {};
+            const defaultValues: Record<string, TSLValueType> = {};
             if (definition?.inputs) {
                 Object.entries(definition.inputs).forEach(([key, input]) => {
                     // Use 'defaultValue' if you have it in your Port definition?
