@@ -245,6 +245,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return () => {
             const state = useEditorStore.getState();
             if (!state.autoSaveEnabled || !state.autoSaveCallback) return;
+
+            // If already saving, just ensure dirty flag is set and exit
+            // The completion handler will pick it up
+            if (state.isSaving) {
+                if (!state.isDirty) {
+                    useEditorStore.setState({ isDirty: true });
+                }
+                return;
+            }
+
+            // If not dirty, nothing to save
             if (!state.isDirty) return;
 
             // Clear any pending save
@@ -255,30 +266,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             // Debounce: wait 2 seconds before saving
             timeoutId = setTimeout(async () => {
                 const currentState = useEditorStore.getState();
+
+                // Double-check we're not already saving (race condition guard)
                 if (currentState.isSaving) {
-                    // Already saving, will re-trigger after save completes
                     return;
                 }
+
                 if (!currentState.isDirty) return;
 
                 useEditorStore.setState({ isSaving: true });
 
                 try {
                     await currentState.autoSaveCallback?.();
+
+                    // Clear dirty flag after successful save
                     useEditorStore.setState({
                         isDirty: false,
                         isSaving: false
                     });
 
-                    // Check if more changes occurred during save
-                    const afterSaveState = useEditorStore.getState();
-                    if (afterSaveState.isDirty) {
-                        // Re-trigger for pending changes
-                        afterSaveState.triggerAutoSave();
-                    }
+                    // Immediately check if more changes occurred during save
+                    // Use a small delay to ensure state is settled
+                    setTimeout(() => {
+                        const afterSaveState = useEditorStore.getState();
+                        if (afterSaveState.isDirty && !afterSaveState.isSaving) {
+                            afterSaveState.triggerAutoSave();
+                        }
+                    }, 100);
                 } catch (error) {
                     console.error('Auto-save failed:', error);
                     useEditorStore.setState({ isSaving: false });
+
+                    // On error, retry after a delay if still dirty
+                    setTimeout(() => {
+                        const afterErrorState = useEditorStore.getState();
+                        if (afterErrorState.isDirty && !afterErrorState.isSaving) {
+                            afterErrorState.triggerAutoSave();
+                        }
+                    }, 1000);
                 }
             }, 2000);
         };
