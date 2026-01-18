@@ -3,11 +3,10 @@
 import { useEffect, useRef, useMemo } from 'react';
 
 // Debounce hook for input values
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useDebouncedCallback<T extends (...args: any[]) => void>(
-    callback: T,
+export function useDebouncedCallback<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
     delay: number
-): T {
+): (...args: TArgs) => void {
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
     const callbackRef = useRef(callback);
     callbackRef.current = callback;
@@ -20,13 +19,12 @@ export function useDebouncedCallback<T extends (...args: any[]) => void>(
 
     return useMemo(
         () =>
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ((...args: any[]) => {
+            (...args: TArgs) => {
                 if (timeoutRef.current) clearTimeout(timeoutRef.current);
                 timeoutRef.current = setTimeout(() => {
                     callbackRef.current(...args);
                 }, delay);
-            }) as T,
+            },
         [delay]
     );
 }

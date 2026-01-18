@@ -226,7 +226,7 @@ function DashboardContent() {
                                 <Search className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
                                 <h3 className="text-lg font-semibold">No results found</h3>
                                 <p className="text-muted-foreground max-w-sm mt-2">
-                                    No projects found matching "{searchQuery}". Try a different search term.
+                                    No projects found matching &quot;{searchQuery}&quot;. Try a different search term.
                                 </p>
                             </>
                         ) : (

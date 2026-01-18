@@ -11,11 +11,12 @@ import {
     useReactFlow,
     type Connection,
     type Edge,
+    type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
-import { AppNode } from '@/lib/types';
+import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import GroupNode from './GroupNode';
@@ -181,7 +182,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
     // Generate node types from registry + subgraphs - all use the same TSLNode component
     const nodeTypes: NodeTypes = useMemo(() => {
         const types: NodeTypes = {
-            group: GroupNode as any,
+            group: GroupNode,
         };
         // Add registry types
         for (const def of registry.all()) {
@@ -220,11 +221,11 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
         [getNodes, getEdges]
     );
 
-    const onConnectEnd = useCallback(
-        (event: MouseEvent | TouchEvent, connectionState: any) => {
+    const onConnectEnd: OnConnectEnd = useCallback(
+        (event, connectionState) => {
             if (!connectionState.isValid && connectionState.fromHandle && connectionState.fromNode) {
                 const { clientX, clientY } =
-                    'changedTouches' in event ? (event as any).changedTouches[0] : event;
+                    'changedTouches' in event ? (event as TouchEvent).changedTouches[0] : (event as MouseEvent);
 
                 const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
 
@@ -233,7 +234,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                 const nodeType = node.type || node.data?.type;
                 const def = registry.get(nodeType);
 
-                let dataType = 'any';
+                let dataType: TSLType | '' = 'any';
                 let direction: 'input' | 'output' = 'output';
 
                 if (connectionState.fromHandle.type === 'target') {

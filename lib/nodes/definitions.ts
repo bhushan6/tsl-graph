@@ -10,13 +10,19 @@ export type TSLMatrix = 'mat2' | 'mat3' | 'mat4';
 export type TSLOther = 'color' | 'sampler2D' | 'any' | 'string';
 export type TSLType = TSLScalar | TSLVector | TSLMatrix | TSLOther;
 
-// Port definitions
-export type TSLValueType = number | number[] | string | boolean;
+// Asset values for texture/file uploads
+export interface AssetValue {
+    url: string;
+    assetId?: string;
+}
+
+// Port/value definitions
+export type TSLValueType = number | number[] | readonly number[] | string | boolean | AssetValue;
 
 export interface Port {
     readonly label: string;
     readonly type: TSLType;
-    readonly default?: number | readonly number[] | string | boolean;
+    readonly default?: TSLValueType;
     readonly connectionOnly?: boolean; // If true, input must be connected (no inline value)
     readonly propertyOnly?: boolean; // If true, input is hidden on node (property panel only)
     readonly isMaterialProp?: boolean; // If true, treated as raw property assignment on material, not TSL node input

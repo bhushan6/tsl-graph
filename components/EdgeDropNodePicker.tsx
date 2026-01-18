@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes } from '@/lib/node-picker-utils';
 import { useEditorStore } from '@/store/editor';
-import { NodeType, NodeDef } from '@/lib/types';
+import { NodeType, NodeDef, TSLType } from '@/lib/types';
 import { Code, Layers } from 'lucide-react';
 import {
     Command,
@@ -16,10 +16,15 @@ import {
 
 interface EdgeDropNodePickerProps {
     position: { x: number; y: number };
-    sourceDataType: string;
+    sourceDataType: TSLType | '';
     handleDirection: 'input' | 'output';
     onNodeSelect: (nodeType: NodeType) => void;
     onClose: () => void;
+}
+
+interface CodeNodeDef extends Omit<NodeDef, 'tsl'> {
+    isCodeNode: true;
+    tsl: string;
 }
 
 export function EdgeDropNodePicker({
@@ -86,18 +91,18 @@ export function EdgeDropNodePicker({
     }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor, nodes]); // nodes dependency for memo safety though logic uses filtered booleans
 
     // Build code nodes that are compatible
-    const compatibleCodeNodes = useMemo(() => {
+    const compatibleCodeNodes = useMemo((): CodeNodeDef[] => {
         // Code nodes always have 'any' type for inputs/output, so they're compatible with everything
         return Object.values(codeNodes).map(cn => ({
             type: cn.id as NodeType,
             label: cn.name,
             category: 'Custom' as const,
-            isCodeNode: true,
+            isCodeNode: true as const,
             inputs: cn.inputs.reduce((acc, inp) => {
-                acc[inp.id] = { label: inp.label, type: inp.type };
+                acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
                 return acc;
-            }, {} as Record<string, { label: string; type: string }>),
-            outputs: { out: { label: cn.output.label, type: cn.output.type } },
+            }, {} as Record<string, { label: string; type: TSLType }>),
+            outputs: { out: { label: cn.output.label, type: cn.output.type as TSLType } },
             tsl: cn.id, // Use the code node ID as TSL reference
         }));
     }, [codeNodes]);
@@ -107,7 +112,7 @@ export function EdgeDropNodePicker({
 
         // Add code nodes to Custom category if they exist
         if (compatibleCodeNodes.length > 0) {
-            grouped['Custom'] = [...(grouped['Custom'] || []), ...compatibleCodeNodes as unknown as NodeDef[]];
+            grouped['Custom'] = [...(grouped['Custom'] || []), ...compatibleCodeNodes];
         }
 
         return grouped;

@@ -1,21 +1,22 @@
 'use client';
 
-import { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
 import { VectorInput } from './VectorInput';
 import { BooleanInput } from './BooleanInput';
 import { HexColorPicker } from 'react-colorful';
 import { SidebarInput } from '@/components/ui/sidebar';
 import { Label } from '@/components/ui/label';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
+import { TSLValueType } from '@/lib/types';
 
 interface AnyInputProps {
-    value: unknown;
-    onChange: (value: unknown) => void;
+    value: TSLValueType;
+    onChange: (value: TSLValueType) => void;
 }
 
 type InputType = 'float' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'bool';
 
-export function inferType(value: unknown): InputType {
+export function inferType(value: TSLValueType): InputType {
     if (typeof value === 'boolean') return 'bool';
     if (typeof value === 'string' && value.startsWith('#')) return 'color';
     if (Array.isArray(value)) {
@@ -56,7 +57,7 @@ export function rgbToHex(r: number, g: number, b: number): string {
 
 /**
  * Convert value from one type to another with proper component preservation.
- * 
+ *
  * Rules:
  * - Vector → larger vector: Extend with 0s, except alpha (w) = 1 for vec4
  * - Vector → smaller vector: Truncate (keep first N components)
@@ -64,7 +65,7 @@ export function rgbToHex(r: number, g: number, b: number): string {
  * - Vector → scalar: Take first component [x]
  * - Color ↔ vectors: Convert RGB hex to/from normalized [0-1] values
  */
-export function convertValue(oldValue: unknown, newType: InputType): unknown {
+export function convertValue(oldValue: TSLValueType, newType: InputType): TSLValueType {
     const oldType = inferType(oldValue);
 
     // Same type - no conversion needed
@@ -147,15 +148,33 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
             case 'bool':
                 return <BooleanInput value={value} onChange={onChange} />;
             case 'vec2':
-                // Cast to array safely
-                return <VectorInput size={2} value={value} onChange={onChange as any} labels={['X', 'Y']} />;
+                return (
+                    <VectorInput
+                        size={2}
+                        value={Array.isArray(value) ? value : Number(value ?? 0)}
+                        onChange={onChange}
+                        labels={['X', 'Y']}
+                    />
+                );
             case 'vec3':
-                return <VectorInput size={3} value={value} onChange={onChange as any} labels={['X', 'Y', 'Z']} />;
+                return (
+                    <VectorInput
+                        size={3}
+                        value={Array.isArray(value) ? value : Number(value ?? 0)}
+                        onChange={onChange}
+                        labels={['X', 'Y', 'Z']}
+                    />
+                );
             case 'vec4':
-                return <VectorInput size={4} value={value} onChange={onChange as any} labels={['X', 'Y', 'Z', 'W']} />;
+                return (
+                    <VectorInput
+                        size={4}
+                        value={Array.isArray(value) ? value : Number(value ?? 0)}
+                        onChange={onChange}
+                        labels={['X', 'Y', 'Z', 'W']}
+                    />
+                );
             case 'color':
-                // Inline simple color input re-implementation or reuse generic one?
-                // Let's implement a simple inline one to avoid circular deps if any.
                 return <SimpleColorInput value={String(value)} onChange={onChange} />;
             case 'float':
             default:
@@ -196,7 +215,7 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
 }
 
 // Debounced float input with local state
-function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v: unknown) => void }) {
+function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v: TSLValueType) => void }) {
     const [localValue, setLocalValue] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 

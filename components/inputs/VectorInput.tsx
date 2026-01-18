@@ -6,7 +6,7 @@ import { SidebarInput } from '@/components/ui/sidebar';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 
 interface VectorInputProps {
-    value: unknown; // Expecting number[] or number
+    value: number | readonly number[]; // Expecting number[] or number
     onChange: (value: number[]) => void;
     size: 2 | 3 | 4;
     labels?: string[]; // Defaults to ['X', 'Y', 'Z', 'W']
