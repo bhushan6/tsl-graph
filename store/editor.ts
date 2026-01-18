@@ -93,6 +93,27 @@ interface EditorState {
     // Stack for nested subgraph editing
     subgraphStack: SubgraphStackItem[];
 
+    // Auto-save state
+    autoSaveCallback: (() => Promise<void>) | null;
+    isSaving: boolean;
+    isDirty: boolean; // True when there are unsaved changes
+    autoSaveEnabled: boolean;
+
+    // Template callbacks (for async DB operations)
+    onSubgraphTemplateCreate: ((subgraph: SubgraphDefinition) => Promise<{ templateId: string; version: number }>) | null;
+    onSubgraphTemplateUpdate: ((templateId: string, subgraph: SubgraphDefinition) => Promise<{ version: number }>) | null;
+    onCodeNodeTemplateCreate: ((codeNode: CodeNodeDefinition) => Promise<{ templateId: string; version: number }>) | null;
+    onCodeNodeTemplateUpdate: ((templateId: string, codeNode: CodeNodeDefinition) => Promise<{ version: number }>) | null;
+    setTemplateCallbacks: (callbacks: {
+        onSubgraphTemplateCreate?: (subgraph: SubgraphDefinition) => Promise<{ templateId: string; version: number }>;
+        onSubgraphTemplateUpdate?: (templateId: string, subgraph: SubgraphDefinition) => Promise<{ version: number }>;
+        onCodeNodeTemplateCreate?: (codeNode: CodeNodeDefinition) => Promise<{ templateId: string; version: number }>;
+        onCodeNodeTemplateUpdate?: (templateId: string, codeNode: CodeNodeDefinition) => Promise<{ version: number }>;
+    }) => void;
+    setAutoSaveCallback: (callback: (() => Promise<void>) | null) => void;
+    triggerAutoSave: () => void;
+    markDirty: () => void;
+
     onNodesChange: OnNodesChange<Node<TSLNodeData>>;
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
@@ -130,8 +151,9 @@ interface EditorState {
     // Subgraph actions
     createSubgraph: (name: string, selectedNodeIds: string[]) => string | null;
     enterSubgraphEditor: (subgraphId: string) => boolean;
-    exitSubgraphEditor: (save: boolean, nameOverride?: string) => void;
+    exitSubgraphEditor: (save: boolean, nameOverride?: string) => Promise<void>;
     updateSubgraphDefinition: (subgraphId: string, updates: Partial<SubgraphDefinition>) => void;
+    addSubgraphDefinition: (subgraph: SubgraphDefinition) => void;
     deleteSubgraph: (subgraphId: string) => void;
     addDynamicPort: (nodeId: string, port: SubgraphPort) => void;
     removeDynamicPort: (nodeId: string, portId: string) => void;
@@ -142,8 +164,12 @@ interface EditorState {
     // Code node actions
     createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => string | null;
     updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => void;
+    addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => void;
     deleteCodeNode: (id: string) => void;
     getCodeNode: (id: string) => CodeNodeDefinition | undefined;
+
+    // Reset entire store
+    resetEditor: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -165,6 +191,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     editingSubgraphId: null,
     subgraphStack: [],
 
+    // Auto-save state initialization
+    autoSaveCallback: null,
+    isSaving: false,
+    isDirty: false,
+    autoSaveEnabled: true,
+
+    // Template callbacks initialization
+    onSubgraphTemplateCreate: null,
+    onSubgraphTemplateUpdate: null,
+    onCodeNodeTemplateCreate: null,
+    onCodeNodeTemplateUpdate: null,
+
     // Code nodes initialization
     codeNodes: {},
 
@@ -175,6 +213,68 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // History initialization
     history: { past: [], future: [] },
     isUndoRedoInProgress: false,
+
+    // Auto-save methods
+    setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
+
+    // Template callbacks setter
+    setTemplateCallbacks: (callbacks) => set({
+        onSubgraphTemplateCreate: callbacks.onSubgraphTemplateCreate ?? null,
+        onSubgraphTemplateUpdate: callbacks.onSubgraphTemplateUpdate ?? null,
+        onCodeNodeTemplateCreate: callbacks.onCodeNodeTemplateCreate ?? null,
+        onCodeNodeTemplateUpdate: callbacks.onCodeNodeTemplateUpdate ?? null,
+    }),
+
+    markDirty: () => {
+        set({ isDirty: true });
+        // Trigger auto-save when marked dirty
+        useEditorStore.getState().triggerAutoSave();
+    },
+
+    triggerAutoSave: (() => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+        return () => {
+            const state = useEditorStore.getState();
+            if (!state.autoSaveEnabled || !state.autoSaveCallback) return;
+            if (!state.isDirty) return;
+
+            // Clear any pending save
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+
+            // Debounce: wait 2 seconds before saving
+            timeoutId = setTimeout(async () => {
+                const currentState = useEditorStore.getState();
+                if (currentState.isSaving) {
+                    // Already saving, will re-trigger after save completes
+                    return;
+                }
+                if (!currentState.isDirty) return;
+
+                useEditorStore.setState({ isSaving: true });
+
+                try {
+                    await currentState.autoSaveCallback?.();
+                    useEditorStore.setState({
+                        isDirty: false,
+                        isSaving: false
+                    });
+
+                    // Check if more changes occurred during save
+                    const afterSaveState = useEditorStore.getState();
+                    if (afterSaveState.isDirty) {
+                        // Re-trigger for pending changes
+                        afterSaveState.triggerAutoSave();
+                    }
+                } catch (error) {
+                    console.error('Auto-save failed:', error);
+                    useEditorStore.setState({ isSaving: false });
+                }
+            }, 2000);
+        };
+    })(),
 
     onNodesChange: (changes) => {
         const hasStructuralChange = changes.some(change => {
@@ -198,20 +298,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
             return true;
         });
+        // Check if this is a saveable change (anything except selection)
+        const hasSaveableChange = changes.some(change => change.type !== 'select');
+
         set({
             nodes: applyNodeChanges(filteredChanges, get().nodes),
             graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
+
+        // Mark dirty for auto-save
+        if (hasSaveableChange) {
+            get().markDirty();
+        }
     },
 
     onEdgesChange: (changes) => {
         const hasStructuralChange = changes.some(change => {
             return change.type !== 'select';
         });
+        // Check if this is a saveable change (anything except selection)
+        const hasSaveableChange = changes.some(change => change.type !== 'select');
+
         set({
             edges: applyEdgeChanges(changes, get().edges),
             graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
+
+        // Mark dirty for auto-save
+        if (hasSaveableChange) {
+            get().markDirty();
+        }
     },
 
     onConnect: (connection: Connection) => {
@@ -235,6 +351,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: addEdge(connection, filteredEdges),
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+
+        get().markDirty();
     },
 
     addNode: (type, position, data = {}) => {
@@ -279,6 +397,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             },
         };
         set({ nodes: [...get().nodes, newNode], graphStructureVersion: get().graphStructureVersion + 1 });
+        get().markDirty();
         return true;
     },
 
@@ -298,6 +417,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ),
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
     },
 
     deleteNode: (nodeId) => {
@@ -311,6 +431,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
     },
 
     setSelectedNode: (nodeId) => {
@@ -337,12 +458,81 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Save graph to JSON string
     saveToJSON: () => {
+        const { nodes, edges, subgraphs, codeNodes, editorMode, subgraphStack, editingSubgraphId } = get();
+
+        let nodesToSave = nodes;
+        let edgesToSave = edges;
+        const subgraphsToSave = { ...subgraphs };
+
+        // If we are in subgraph mode, we need to:
+        // 1. Update the 'subgraphs' map with the current state of nested subgraphs
+        // 2. Use the root graph (from the bottom of the stack) as the main nodes/edges
+        if (editorMode === 'subgraph' && subgraphStack.length > 0) {
+            // Updated current subgraph definition
+            if (editingSubgraphId) {
+                // Filter out anchor nodes for the definition
+                const internalNodes = nodes.filter(
+                    n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output'
+                );
+
+                // Get input/output ports from anchor nodes
+                const inputNode = nodes.find(n => n.id === 'subgraph-input');
+                const outputNode = nodes.find(n => n.id === 'subgraph-output');
+
+                subgraphsToSave[editingSubgraphId] = {
+                    ...subgraphsToSave[editingSubgraphId],
+                    nodes: internalNodes,
+                    edges: edges, // Save all edges
+                    inputNodePosition: inputNode?.position,
+                    outputNodePosition: outputNode?.position,
+                    updatedAt: Date.now(),
+                    inputs: inputNode?.data.dynamicPorts || subgraphsToSave[editingSubgraphId].inputs,
+                    outputs: outputNode?.data.dynamicPorts || subgraphsToSave[editingSubgraphId].outputs,
+                };
+            }
+
+            // Update definitions for intermediate subgraphs in the stack
+            // The stack contains the state of the graph *before* entering the next level.
+            // But if that state was "inside a subgraph", we need to update that subgraph's definition too.
+            // Stack items are ordered: [Root, Level1, Level2...]
+
+            // We need to verify if we should traverse the stack to update 'subgraphsToSave'.
+            // When we enter a subgraph, we push the *current* state.
+            // If the current state was a subgraph editor, we need to update its definition in the map.
+
+            subgraphStack.forEach(item => {
+                if (item.subgraphId) {
+                    // This stack item represents a subgraph we were editing
+                    const internalNodes = item.nodes.filter(
+                        n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output'
+                    );
+                    const inputNode = item.nodes.find(n => n.id === 'subgraph-input');
+                    const outputNode = item.nodes.find(n => n.id === 'subgraph-output');
+
+                    subgraphsToSave[item.subgraphId] = {
+                        ...subgraphsToSave[item.subgraphId],
+                        nodes: internalNodes,
+                        edges: item.edges,
+                        inputNodePosition: inputNode?.position,
+                        outputNodePosition: outputNode?.position,
+                        updatedAt: Date.now(),
+                        inputs: inputNode?.data.dynamicPorts || subgraphsToSave[item.subgraphId].inputs,
+                        outputs: outputNode?.data.dynamicPorts || subgraphsToSave[item.subgraphId].outputs,
+                    };
+                }
+            });
+
+            // The root graph is at index 0 of the stack
+            nodesToSave = subgraphStack[0].nodes;
+            edgesToSave = subgraphStack[0].edges;
+        }
+
         const graphData: GraphData = {
             version: GRAPH_VERSION,
-            nodes: get().nodes,
-            edges: get().edges,
-            subgraphs: get().subgraphs,
-            codeNodes: get().codeNodes,
+            nodes: nodesToSave,
+            edges: edgesToSave,
+            subgraphs: subgraphsToSave,
+            codeNodes: codeNodes,
         };
         return JSON.stringify(graphData, null, 2);
     },
@@ -358,6 +548,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     subgraphs: data.subgraphs || {},
                     codeNodes: data.codeNodes || {},
                     graphStructureVersion: get().graphStructureVersion + 1,
+                    // Reset subgraph state on load
+                    editorMode: 'main',
+                    editingSubgraphId: null,
+                    subgraphStack: [],
+                    history: { past: [], future: [] },
                 });
                 return true;
             }
@@ -395,6 +590,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: [],
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
     },
 
     hasMaterialNode: () => {
@@ -521,6 +717,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphs: { ...get().subgraphs, [id]: subgraph },
             edges: edgesToKeep,
         });
+        get().markDirty();
+
+        // NOTE: Template is NOT saved to DB here. It only gets saved when user
+        // clicks "Save & Exit" in exitSubgraphEditor. This prevents orphaned 
+        // templates when user cancels.
 
         return id;
     },
@@ -585,7 +786,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return true;
     },
 
-    exitSubgraphEditor: (save: boolean, nameOverride?: string) => {
+    exitSubgraphEditor: async (save: boolean, nameOverride?: string) => {
         const { editingSubgraphId, nodes, edges, subgraphs, subgraphStack } = get();
 
         if (subgraphStack.length === 0 || !editingSubgraphId) {
@@ -671,6 +872,57 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             set({
                 subgraphs: { ...subgraphs, [editingSubgraphId]: updatedSubgraph },
             });
+
+            // Push to DB: Create new template OR update existing
+            const currentSubgraph = get().subgraphs[editingSubgraphId];
+            const { onSubgraphTemplateCreate, onSubgraphTemplateUpdate } = get();
+
+            if (currentSubgraph?.templateId) {
+                // UPDATE existing template
+                if (onSubgraphTemplateUpdate) {
+                    try {
+                        const result = await onSubgraphTemplateUpdate(currentSubgraph.templateId, updatedSubgraph);
+                        // Update local version
+                        const latestSubgraphs = useEditorStore.getState().subgraphs;
+                        if (latestSubgraphs[editingSubgraphId]) {
+                            useEditorStore.setState({
+                                subgraphs: {
+                                    ...latestSubgraphs,
+                                    [editingSubgraphId]: {
+                                        ...latestSubgraphs[editingSubgraphId],
+                                        templateVersion: result.version,
+                                    },
+                                },
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Failed to update subgraph template in DB:', error);
+                    }
+                }
+            } else {
+                // CREATE new template (first time saving this subgraph)
+                if (onSubgraphTemplateCreate) {
+                    try {
+                        const result = await onSubgraphTemplateCreate(updatedSubgraph);
+                        // Update local definition with template reference
+                        const latestSubgraphs = useEditorStore.getState().subgraphs;
+                        if (latestSubgraphs[editingSubgraphId]) {
+                            useEditorStore.setState({
+                                subgraphs: {
+                                    ...latestSubgraphs,
+                                    [editingSubgraphId]: {
+                                        ...latestSubgraphs[editingSubgraphId],
+                                        templateId: result.templateId,
+                                        templateVersion: result.version,
+                                    },
+                                },
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Failed to create subgraph template in DB:', error);
+                    }
+                }
+            }
 
             // Prepare instance node data for deferred creation
             const originalNodeIds = stackItem.originalNodeIds;
@@ -791,12 +1043,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 ...get().subgraphs,
                 [subgraphId]: { ...subgraph, ...updates, updatedAt: Date.now() },
             },
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
+
+        get().markDirty();
+    },
+
+    addSubgraphDefinition: (subgraph: SubgraphDefinition) => {
+        get().takeSnapshot();
+        set({
+            subgraphs: {
+                ...get().subgraphs,
+                [subgraph.id]: {
+                    ...subgraph,
+                    createdAt: subgraph.createdAt || Date.now(),
+                    updatedAt: Date.now(),
+                },
+            },
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
     },
 
     deleteSubgraph: (subgraphId: string) => {
         const { [subgraphId]: _, ...rest } = get().subgraphs;
         set({ subgraphs: rest });
+        get().markDirty();
     },
 
     addDynamicPort: (nodeId: string, port: SubgraphPort) => {
@@ -881,6 +1153,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({
             codeNodes: { ...get().codeNodes, [id]: codeNode },
         });
+        get().markDirty();
+
+        // Auto-save to DB as private template
+        const { onCodeNodeTemplateCreate } = get();
+        if (onCodeNodeTemplateCreate) {
+            onCodeNodeTemplateCreate(codeNode).then(result => {
+                // Update local definition with template reference
+                const currentCodeNodes = useEditorStore.getState().codeNodes;
+                if (currentCodeNodes[id]) {
+                    useEditorStore.setState({
+                        codeNodes: {
+                            ...currentCodeNodes,
+                            [id]: {
+                                ...currentCodeNodes[id],
+                                templateId: result.templateId,
+                                templateVersion: result.version,
+                            },
+                        },
+                    });
+                }
+            }).catch(error => {
+                console.error('Failed to save code node template to DB:', error);
+            });
+        }
 
         return id;
     },
@@ -890,18 +1186,112 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const codeNode = get().codeNodes[id];
         if (!codeNode) return;
 
+        const updatedCodeNode = { ...codeNode, ...updates, updatedAt: Date.now() };
+
+        // Propagate changes to all instances of this code node
+        const { nodes, edges } = get();
+
+        // Find existing edges to remove if ports are removed
+        const newInputIds = (updatedCodeNode.inputs || []).map(p => p.id);
+        const newOutputId = updatedCodeNode.output?.id;
+
+        let newEdges = edges;
+
+        const newNodes = nodes.map(node => {
+            // Check if this node is an instance of the code node
+            // The instance type is either the ID itself (usually) or stored in data.type
+            if (node.data.type === id || node.type === id) {
+                const newPorts = [...(updatedCodeNode.inputs || []), updatedCodeNode.output].filter(Boolean) as SubgraphPort[];
+
+                // If ports are removed, we must remove connected edges
+                // Identify removed input IDs
+                // Note: we only check inputs for removal here as output usually persists (or is single 'out')
+                // But strictly checking all valid handles is better.
+                const validHandleIds = new Set([...newInputIds, newOutputId].filter(Boolean));
+
+                // Filter edges connected to this node
+                newEdges = newEdges.filter(edge => {
+                    if (edge.source === node.id) {
+                        // Edge from this node (output)
+                        return validHandleIds.has(edge.sourceHandle || '');
+                    }
+                    if (edge.target === node.id) {
+                        // Edge to this node (input)
+                        return validHandleIds.has(edge.targetHandle || '');
+                    }
+                    return true;
+                });
+
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        label: updatedCodeNode.name, // Update label if name changed
+                        dynamicPorts: newPorts,
+                    }
+                };
+            }
+            return node;
+        });
+
         set({
             codeNodes: {
                 ...get().codeNodes,
-                [id]: { ...codeNode, ...updates, updatedAt: Date.now() },
+                [id]: updatedCodeNode,
             },
+            nodes: newNodes,
+            edges: newEdges,
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
+        get().markDirty();
+
+        // Push updates to DB if this code node is linked to a template
+        // AND we are not just syncing the version from the DB (indicated by presence of templateVersion in updates)
+        const isSyncing = typeof updates.templateVersion === 'number';
+        const { onCodeNodeTemplateUpdate } = get();
+
+        if (onCodeNodeTemplateUpdate && codeNode.templateId && !isSyncing) {
+            onCodeNodeTemplateUpdate(codeNode.templateId, updatedCodeNode).then(result => {
+                // Update local version
+                const latestCodeNodes = useEditorStore.getState().codeNodes;
+                if (latestCodeNodes[id]) {
+                    useEditorStore.setState({
+                        codeNodes: {
+                            ...latestCodeNodes,
+                            [id]: {
+                                ...latestCodeNodes[id],
+                                templateVersion: result.version,
+                            },
+                        },
+                    });
+                }
+            }).catch(error => {
+                console.error('Failed to update code node template in DB:', error);
+            });
+        }
     },
 
     deleteCodeNode: (id: string) => {
         get().takeSnapshot();
         const { [id]: _, ...rest } = get().codeNodes;
         set({ codeNodes: rest });
+        get().markDirty();
+    },
+
+    addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => {
+        get().takeSnapshot();
+        set({
+            codeNodes: {
+                ...get().codeNodes,
+                [codeNode.id]: {
+                    ...codeNode,
+                    createdAt: codeNode.createdAt || Date.now(),
+                    updatedAt: Date.now(),
+                },
+            },
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
     },
 
     getCodeNode: (id: string) => {
@@ -962,7 +1352,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         // Use setTimeout to ensure we don't block render with flag
-        setTimeout(() => set({ isUndoRedoInProgress: false }), 0);
+        setTimeout(() => {
+            set({ isUndoRedoInProgress: false });
+            get().markDirty();
+        }, 0);
     },
 
     redo: () => {
@@ -990,7 +1383,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             },
         });
 
-        setTimeout(() => set({ isUndoRedoInProgress: false }), 0);
+        setTimeout(() => {
+            set({ isUndoRedoInProgress: false });
+            get().markDirty();
+        }, 0);
     },
 
     clearHistory: () => {
@@ -1129,4 +1525,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeId: null,
         });
     },
+
+    resetEditor: () => {
+        set({
+            nodes: [],
+            edges: [],
+            selectedNodeId: null,
+            selectedNodeIds: [],
+            graphStructureVersion: 0,
+            subgraphs: {},
+            editorMode: 'main',
+            editingSubgraphId: null,
+            subgraphStack: [],
+            autoSaveCallback: null,
+            isSaving: false,
+            isDirty: false,
+            history: { past: [], future: [] },
+            canvasMode: 'pan',
+            codeNodes: {},
+            // Reset template callbacks as well? Probably no, they are set by the component. 
+            // The component usually sets them in useEffect.
+        });
+    },
 }));
+
+// Note: Auto-save is triggered by markDirty() which is called when changes occur

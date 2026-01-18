@@ -86,6 +86,15 @@ export function Preview() {
         }
     }, [currentMesh]);
 
+    const handleResize = () => {
+        if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        cameraRef.current.aspect = w / h;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(w, h);
+    };
+
     // Initialize Three.js with WebGPU
     useEffect(() => {
         if (!containerRef.current || initRef.current) return;
@@ -150,14 +159,7 @@ export function Preview() {
         init().catch(console.error);
 
         // Handle resize
-        const handleResize = () => {
-            if (!rendererRef.current || !cameraRef.current) return;
-            const w = container.clientWidth;
-            const h = container.clientHeight;
-            cameraRef.current.aspect = w / h;
-            cameraRef.current.updateProjectionMatrix();
-            rendererRef.current.setSize(w, h);
-        };
+
 
         const resizeObserver = new ResizeObserver(handleResize);
         resizeObserver.observe(container);
@@ -219,6 +221,10 @@ export function Preview() {
 
     }, [geometry, material, isInstanced, instanceCount]);
 
+    useEffect(() => {
+        handleResize();
+    }, [isFullScreen])
+
     // Sync instance count to InstanceCount nodes
     useEffect(() => {
         const { nodes, updateNodeValue } = useEditorStore.getState();
@@ -250,7 +256,7 @@ export function Preview() {
             className={cn(
                 'pointer-events-auto bg-card border border-border overflow-hidden transition-all duration-200',
                 isFullScreen
-                    ? 'fixed inset-4 z-50 rounded-xl shadow-2xl'
+                    ? 'fixed inset-4 z-50 rounded-xl shadow-2xl '
                     : 'relative rounded-xl shadow-lg w-72 h-72'
             )}
         >

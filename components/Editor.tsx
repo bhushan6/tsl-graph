@@ -34,6 +34,7 @@ import TSLEdge from './TSLEdge';
 import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
+import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -42,7 +43,11 @@ const edgeTypes = {
     default: TSLEdge,
 }
 
-function EditorCanvas() {
+interface NavbarProps {
+    projectName?: string;
+}
+
+function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
     const {
         nodes,
         edges,
@@ -51,14 +56,13 @@ function EditorCanvas() {
         onConnect,
         loadFromJSON,
         loadFromLocalStorage,
-        saveToLocalStorage,
         setSelectedNode,
         setSelectedNodes,
         editorMode,
         undo,
         redo,
         takeSnapshot,
-        canvasMode, // Add this
+        canvasMode,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -69,7 +73,7 @@ function EditorCanvas() {
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
 
-    // Load from localStorage on mount
+    // Load from localStorage on mount (for standalone editor without project)
     useEffect(() => {
         if (!isInitialized.current) {
             isInitialized.current = true;
@@ -85,16 +89,6 @@ function EditorCanvas() {
         }
     }, [loadFromLocalStorage, loadFromJSON]);
 
-    // Auto-save to localStorage on changes (debounced)
-    useEffect(() => {
-        if (!isInitialized.current) return;
-
-        const timeoutId = setTimeout(() => {
-            saveToLocalStorage();
-        }, 500); // Debounce 500ms
-
-        return () => clearTimeout(timeoutId);
-    }, [nodes, edges, saveToLocalStorage]);
 
     // Keyboard shortcuts for Undo/Redo
     useEffect(() => {
@@ -299,7 +293,7 @@ function EditorCanvas() {
             {/* UI Layer */}
             < UILayer >
                 <UILayer.TopBar>
-                    <Navbar />
+                    <Navbar {...navbarProps} />
                 </UILayer.TopBar>
 
                 <UILayer.LeftPanel>
@@ -340,19 +334,25 @@ function EditorCanvas() {
             />
 
             {/* Code Node Dialog */}
-            <CodeNodeDialog
-                open={isCodeNodeDialogOpen}
-                onOpenChange={setIsCodeNodeDialogOpen}
-            />
+            {isCodeNodeDialogOpen && (
+                <CodeNodeDialog
+                    open={true}
+                    onOpenChange={setIsCodeNodeDialogOpen}
+                    mode="create"
+                />
+            )}
+
+            {/* Stale Templates Notification */}
+            <StaleTemplatesNotification />
         </>
     );
 }
 
-export function Editor() {
+export function Editor(props: NavbarProps) {
     return (
         <div className="w-full h-full relative">
             <ReactFlowProvider>
-                <EditorCanvas />
+                <EditorCanvas navbarProps={props} />
             </ReactFlowProvider>
         </div>
     );

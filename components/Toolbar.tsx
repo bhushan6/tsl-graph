@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
@@ -33,8 +33,9 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
 
     // Ref to track subgraph name without causing re-renders
     const subgraphNameRef = useRef<HTMLInputElement>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    // Create subgraph from selected nodes
+    // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
         if (selectedNodeIds.length < 1) return;
 
@@ -43,10 +44,12 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         if (subgraphId) {
             enterSubgraphEditor(subgraphId);
         }
-    }, [selectedNodeIds.length, createSubgraph, enterSubgraphEditor, selectedNodeIds]);
+    }, [selectedNodeIds, createSubgraph, enterSubgraphEditor]);
 
     // Exit subgraph mode
-    const handleExitSubgraph = useCallback((save: boolean) => {
+    const handleExitSubgraph = useCallback(async (save: boolean) => {
+        if (isProcessing) return;
+
         let nameOverride: string | undefined = undefined;
 
         if (save && editingSubgraphId && subgraphNameRef.current) {
@@ -77,8 +80,13 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
             nameOverride = rawName;
         }
 
-        exitSubgraphEditor(save, nameOverride);
-    }, [exitSubgraphEditor, editingSubgraphId, subgraphs]);
+        setIsProcessing(true);
+        try {
+            await exitSubgraphEditor(save, nameOverride);
+        } finally {
+            setIsProcessing(false);
+        }
+    }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing]);
 
     // Subgraph mode toolbar
     if (editorMode === 'subgraph') {
@@ -163,8 +171,16 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                     size="sm"
                     className="h-8 px-3 gap-2 text-primary hover:text-primary"
                     title="Save and exit"
+                    disabled={isProcessing}
                 >
-                    <span className="text-xs">Save & Exit</span>
+                    {isProcessing ? (
+                        <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span className="text-xs">Saving...</span>
+                        </>
+                    ) : (
+                        <span className="text-xs">Save & Exit</span>
+                    )}
                 </Button>
 
                 <Button

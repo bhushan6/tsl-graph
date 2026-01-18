@@ -11,9 +11,10 @@ import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import { SubgraphPort, TSLType } from '@/lib/types';
-import { Layers, Plus, Trash2, Upload } from 'lucide-react';
+import { SubgraphPort, TSLType, CodeNodeDefinition } from '@/lib/types';
+import { Layers, Plus, Trash2, Upload, Code } from 'lucide-react';
 import { NodePreview } from './NodePreview';
+import { CodeNodeDialog } from './CodeNodeDialog';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -159,6 +160,100 @@ function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: unkno
     });
 }
 
+// Panel for subgraph instances - simplified since templates auto-save
+interface SubgraphInstancePanelProps {
+    subgraph: {
+        id: string;
+        name: string;
+        templateId?: string;
+        templateVersion?: number;
+    };
+    onEnterEditor: () => void;
+}
+
+function SubgraphInstancePanel({ subgraph, onEnterEditor }: SubgraphInstancePanelProps) {
+    const isSynced = !!subgraph.templateId;
+
+    return (
+        <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">{subgraph.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Custom Subgraph
+                    {isSynced && (
+                        <span className="ml-1 text-green-500">• Synced</span>
+                    )}
+                </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex-1 p-4 space-y-3">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onEnterEditor}
+                    className="w-full gap-2"
+                >
+                    <Layers className="w-4 h-4" />
+                    Edit Subgraph
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                    Edit the internal graph of this custom node
+                </p>
+            </div>
+        </div>
+    );
+}
+
+
+
+function CodeNodeInstancePanel({ codeNode, onEdit }: { codeNode: CodeNodeDefinition, onEdit: () => void }) {
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm">Code Node</h3>
+                    <Button variant="outline" size="sm" onClick={onEdit} className="h-7 text-xs gap-1.5">
+                        <Code className="w-3.5 h-3.5" />
+                        Edit Code
+                    </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {codeNode.name}
+                </p>
+            </div>
+
+            <div className="flex-1 p-4 space-y-6">
+                <div className="space-y-3">
+                    <div>
+                        <div className="text-xs font-medium text-muted-foreground mb-1.5">Inputs</div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {codeNode.inputs && codeNode.inputs.length > 0 ? (
+                                codeNode.inputs.map((input: SubgraphPort) => (
+                                    <span key={input.id} className="text-[10px] font-mono px-1.5 py-0.5 h-5 rounded-sm bg-sidebar-accent text-sidebar-foreground/70 border border-sidebar-border inline-flex items-center">
+                                        {input.label}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-xs text-muted-foreground italic">No inputs</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</h4>
+                    <div className="font-mono text-[10px] bg-muted/50 p-2 rounded-md overflow-x-auto whitespace-pre text-muted-foreground/80 border border-border/50">
+                        {codeNode.code.split('\n').slice(0, 8).join('\n')}
+                        {codeNode.code.split('\n').length > 8 && '\n...'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
@@ -171,7 +266,11 @@ function PropertiesPanelContent() {
     const updateDynamicPort = useEditorStore((s) => s.updateDynamicPort);
     const enterSubgraphEditor = useEditorStore((s) => s.enterSubgraphEditor);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const getCodeNode = useEditorStore((s) => s.getCodeNode);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
     const edges = useEdges();
+
+    const [editingCodeNodeId, setEditingCodeNodeId] = useState<string | null>(null);
 
     // Handle no node selected
     if (!node) {
@@ -190,34 +289,38 @@ function PropertiesPanelContent() {
     const isSubgraphInstance = node.data.type.startsWith('custom/');
     const subgraph = isSubgraphInstance ? subgraphs[node.data.type] : null;
 
-    // For subgraph instances, show edit button (they don't have registry definitions)
+    // For subgraph instances, show edit button
     if (isSubgraphInstance && subgraph) {
         return (
-            <div className="flex flex-col h-full">
-                {/* Header */}
-                <div className="px-4 py-3 border-b border-sidebar-border">
-                    <h3 className="font-semibold text-sm">{subgraph.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        Custom Subgraph
-                    </p>
-                </div>
+            <SubgraphInstancePanel
+                subgraph={subgraph}
+                onEnterEditor={() => enterSubgraphEditor(node.data.type)}
+            />
+        );
+    }
 
-                {/* Edit Button */}
-                <div className="flex-1 p-4">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => enterSubgraphEditor(node.data.type)}
-                        className="w-full gap-2"
-                    >
-                        <Layers className="w-4 h-4" />
-                        Edit Subgraph
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-2 text-center">
-                        Edit the internal graph of this custom node
-                    </p>
-                </div>
-            </div>
+    // Check if this is a code node instance
+    const isCodeNodeInstance = node.data.type.startsWith('code/') || !!codeNodes[node.data.type];
+    const codeNode = isCodeNodeInstance ? (getCodeNode(node.data.type) || codeNodes[node.data.type]) : null;
+
+    if (isCodeNodeInstance && codeNode) {
+        return (
+            <>
+                <CodeNodeInstancePanel
+                    codeNode={codeNode}
+                    onEdit={() => setEditingCodeNodeId(codeNode.id)}
+                />
+                {editingCodeNodeId && (
+                    <CodeNodeDialog
+                        open={!!editingCodeNodeId}
+                        onOpenChange={(open) => !open && setEditingCodeNodeId(null)}
+                        mode="edit"
+                        nodeId={editingCodeNodeId}
+                        initialName={codeNode.name}
+                        initialCode={codeNode.code}
+                    />
+                )}
+            </>
         );
     }
 

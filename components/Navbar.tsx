@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Sparkles, FileText, Download, Upload, Trash2, ChevronDown } from 'lucide-react';
+import { Sparkles, FileText, Download, Upload, Trash2, ChevronDown, ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -18,14 +18,21 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { useEditorStore } from '@/store/editor';
+import { useRouter } from 'next/navigation';
 
-export function Navbar() {
+interface NavbarProps {
+    projectName?: string;
+}
+
+export function Navbar({ projectName }: NavbarProps) {
+    const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const {
         saveToJSON,
         loadFromJSON,
         clearGraph,
         nodes,
+        isSaving,
     } = useEditorStore();
 
     // Download as JSON file
@@ -91,6 +98,11 @@ export function Navbar() {
 
                 <div className="h-4 w-px bg-border mx-1" />
 
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => router.push('/dashboard')} title="Back to Dashboard">
+                    <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="h-4 w-px bg-border mx-1" />
+
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
@@ -122,6 +134,18 @@ export function Navbar() {
             </div>
 
             <div className="flex items-center gap-2">
+                {projectName && (
+                    <span className="text-sm font-medium mr-2 hidden sm:inline-block text-muted-foreground">
+                        {projectName}
+                    </span>
+                )}
+
+                {isSaving && (
+                    <div className="flex items-center gap-1.5 px-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Saving...</span>
+                    </div>
+                )}
                 <ThemeToggle />
             </div>
 
