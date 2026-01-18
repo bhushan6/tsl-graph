@@ -50,7 +50,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             // Validation: Only one material node allowed
             const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
-            const { nodes, edges } = useEditorStore.getState();
+            const { nodes } = useEditorStore.getState();
 
             if (isMaterialNode) {
                 const existingMaterial = nodes.find(n =>
@@ -145,7 +145,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     // Find compatible input on new node
                     const inputs = definition.inputs || {};
                     // Find first input that matches
-                    const matchingInput = Object.entries(inputs).find(([key, port]) => {
+                    const matchingInput = Object.entries(inputs).find(([, port]) => {
                         return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
                     });
                     if (matchingInput) {
@@ -162,7 +162,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 } else if (definition) {
                     // Find compatible output on new node
                     const outputs = definition.outputs || {};
-                    const matchingOutput = Object.entries(outputs).find(([key, port]) => {
+                    const matchingOutput = Object.entries(outputs).find(([, port]) => {
                         return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
                     });
                     if (matchingOutput) {

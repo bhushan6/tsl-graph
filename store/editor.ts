@@ -1074,7 +1074,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     deleteSubgraph: (subgraphId: string) => {
-        const { [subgraphId]: _, ...rest } = get().subgraphs;
+        const rest = { ...get().subgraphs };
+        delete rest[subgraphId];
         set({ subgraphs: rest });
         get().markDirty();
     },
@@ -1281,7 +1282,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     deleteCodeNode: (id: string) => {
         get().takeSnapshot();
-        const { [id]: _, ...rest } = get().codeNodes;
+        const rest = { ...get().codeNodes };
+        delete rest[id];
         set({ codeNodes: rest });
         get().markDirty();
     },

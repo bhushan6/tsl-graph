@@ -27,6 +27,8 @@ interface CodeNodeDef extends Omit<NodeDef, 'tsl'> {
     tsl: string;
 }
 
+const ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'];
+
 export function EdgeDropNodePicker({
     position,
     sourceDataType,
@@ -66,8 +68,6 @@ export function EdgeDropNodePicker({
     const hasOutputAnchor = useMemo(() =>
         nodes.some(n => n.data.type === 'subgraph/output'), [nodes]);
 
-    const ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'];
-
     // Get compatible nodes
     const compatibleNodes = useMemo(() => {
         const nodes = handleDirection === 'output'
@@ -88,7 +88,7 @@ export function EdgeDropNodePicker({
             }
             return true;
         });
-    }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor, nodes]); // nodes dependency for memo safety though logic uses filtered booleans
+    }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor]); // nodes dependency for memo safety though logic uses filtered booleans
 
     // Build code nodes that are compatible
     const compatibleCodeNodes = useMemo((): CodeNodeDef[] => {

@@ -164,7 +164,7 @@ function compileSubgraphDefinition(
     // Map inputs to argument names
     // input.id maps to the sourceHandle of edges coming from 'subgraph-input'
     const argsMap: Record<string, string> = {};
-    const argNames = subgraph.inputs.map((input, i) => {
+    const argNames = subgraph.inputs.map((input) => {
         const argName = `arg_${input.id}`;
         argsMap[input.id] = argName;
         return argName;

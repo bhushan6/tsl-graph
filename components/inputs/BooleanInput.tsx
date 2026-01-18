@@ -11,7 +11,7 @@ interface BooleanInputProps {
     label?: string;
 }
 
-function BooleanInputComponent({ value, onChange, label }: BooleanInputProps) {
+function BooleanInputComponent({ value, onChange }: BooleanInputProps) {
     const boolValue = Boolean(value);
     const id = useId();
 

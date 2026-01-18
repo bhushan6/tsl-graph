@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useState, useCallback, useRef } from 'react';
+import { memo, useEffect, useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { SidebarInput } from '@/components/ui/sidebar';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
@@ -17,7 +17,7 @@ const defaultLabels = ['X', 'Y', 'Z', 'W'];
 function VectorInputComponent({ value, onChange, size, labels }: VectorInputProps) {
     // Ensure value is an array of correct size
 
-    const getSafeValue = (): number[] => {
+    const safeValue = useMemo(() => {
         if (Array.isArray(value)) {
             // Pad or truncate
             const arr = [...value];
@@ -27,21 +27,15 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
         // If single number or undefined/null
         const num = Number(value ?? 0);
         return Array(size).fill(num);
-    };
-
-    const safeValue = getSafeValue();
-
-    // Keep a ref to track the latest value for use in handleChange
-    const valueRef = useRef(safeValue);
-    valueRef.current = safeValue;
+    }, [value, size]);
 
     const currentLabels = labels || defaultLabels.slice(0, size);
 
     const handleChange = useCallback((index: number, newVal: number) => {
-        const newArr = [...valueRef.current];
+        const newArr = [...safeValue];
         newArr[index] = newVal;
         onChange(newArr);
-    }, [onChange]);
+    }, [onChange, safeValue]);
 
     return (
         <div className="flex gap-2 w-full">

@@ -9,7 +9,10 @@ export function useDebouncedCallback<TArgs extends unknown[]>(
 ): (...args: TArgs) => void {
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
     const callbackRef = useRef(callback);
-    callbackRef.current = callback;
+
+    useEffect(() => {
+        callbackRef.current = callback;
+    }, [callback]);
 
     useEffect(() => {
         return () => {

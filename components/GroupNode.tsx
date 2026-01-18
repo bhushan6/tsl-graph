@@ -1,5 +1,5 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { NodeResizer, type NodeProps } from '@xyflow/react';
+import { type NodeProps } from '@xyflow/react';
 import { useEditorStore } from '@/store/editor';
 import { Edit2, Group } from 'lucide-react';
 import type { AppNode } from '@/lib/types';
@@ -12,21 +12,15 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const label = (data.values.label as string) || 'Group';
     const [inputValue, setInputValue] = useState(label);
 
-    // Sync local state with data when not editing
-    useEffect(() => {
-        if (!isEditing) {
-            setInputValue(label);
-        }
-    }, [label, isEditing]);
-
     const handleLabelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         setInputValue(e.target.value);
     }, []);
 
     const handleEdit = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
+        setInputValue(label);
         setIsEditing(true);
-    }, []);
+    }, [label]);
 
     const handleBlur = useCallback(() => {
         setIsEditing(false);
@@ -42,10 +36,9 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
         } else if (e.key === 'Escape') {
             e.preventDefault();
             // Revert changes
-            setInputValue(label);
             setIsEditing(false);
         }
-    }, [label, id, inputValue, updateNodeValue]);
+    }, [id, inputValue, updateNodeValue]);
 
     // Focus input when editing starts
     useEffect(() => {
@@ -109,7 +102,7 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                 ) : (
                     <div className="flex items-center gap-2 group pointer-events-auto">
                         <span
-                            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                            onDoubleClick={handleEdit}
                             className="
                             text-sm font-medium
                             text-foreground/80

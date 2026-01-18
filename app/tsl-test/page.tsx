@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface TestResult {
     name: string;
