@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
 
-import { AppNode, Port, TSLType } from '@/lib/types';
+import type { AppNode, Port, TSLType, TSLValueType } from '@/lib/types';
 import { NodeProps } from '@xyflow/react';
 
 type TSLNodeProps = NodeProps<AppNode>;
@@ -288,7 +288,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 // Value Preview Components - Read-only previews for node values
 interface ValuePreviewProps {
     type: string;
-    value: unknown;
+    value: TSLValueType;
 }
 
 function ValuePreview({ type, value }: ValuePreviewProps) {

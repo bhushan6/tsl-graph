@@ -11,7 +11,7 @@ import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import { SubgraphPort, TSLType, CodeNodeDefinition } from '@/lib/types';
+import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType } from '@/lib/types';
 import { Layers, Plus, Trash2, Upload, Code } from 'lucide-react';
 import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
@@ -155,7 +155,7 @@ function AnchorNodePortEditor({
 /**
  * Hook to reactively get a node's input value from the store.
  */
-function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: import('@/lib/types').TSLValueType | undefined): import('@/lib/types').TSLValueType {
+function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: TSLValueType | undefined): TSLValueType {
     return useEditorStore((s) => {
         const node = s.nodes.find((n) => n.id === nodeId);
         const value = node?.data.values?.[inputKey];
@@ -413,9 +413,9 @@ interface PropertyInputWrapperProps {
     inputKey: string;
     inputType: string;
     inputLabel: string;
-    inputDefault: import('@/lib/types').TSLValueType | undefined;
+    inputDefault: TSLValueType | undefined;
     inputOptions?: readonly { label: string; value: string | number }[];
-    onChange: (value: import('@/lib/types').TSLValueType) => void;
+    onChange: (value: TSLValueType) => void;
 }
 
 /**
@@ -454,9 +454,9 @@ function PropertyInputWrapper({
 
 interface PropertyInputProps {
     type: string;
-    value: import('@/lib/types').TSLValueType;
+    value: TSLValueType;
     options?: readonly { label: string; value: string | number }[];
-    onChange: (value: import('@/lib/types').TSLValueType) => void;
+    onChange: (value: TSLValueType) => void;
     nodeId?: string;
     propertyName?: string;
     projectId?: string | null;
@@ -528,7 +528,7 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
     );
 }
 
-function StringInput({ value, onChange }: { value: string; onChange: (value: import('@/lib/types').TSLValueType) => void }) {
+function StringInput({ value, onChange }: { value: string; onChange: (value: TSLValueType) => void }) {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -578,7 +578,7 @@ function StringInput({ value, onChange }: { value: string; onChange: (value: imp
     );
 }
 
-function ColorInput({ value, onChange }: { value: string; onChange: (value: import('@/lib/types').TSLValueType) => void }) {
+function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLValueType) => void }) {
     const [localColor, setLocalColor] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -617,7 +617,7 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: impo
     );
 }
 
-function NumberInput({ value, onChange, step }: { value: number; onChange: (value: import('@/lib/types').TSLValueType) => void; step: number }) {
+function NumberInput({ value, onChange, step }: { value: number; onChange: (value: TSLValueType) => void; step: number }) {
     const [localValue, setLocalValue] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 

@@ -16,7 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
-import { AppNode } from '@/lib/types';
+import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import GroupNode from './GroupNode';
@@ -234,7 +234,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                 const nodeType = node.type || node.data?.type;
                 const def = registry.get(nodeType);
 
-                let dataType: import('@/lib/types').TSLType | '' = 'any';
+                let dataType: TSLType | '' = 'any';
                 let direction: 'input' | 'output' = 'output';
 
                 if (connectionState.fromHandle.type === 'target') {
