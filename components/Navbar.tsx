@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Sparkles, FileText, Download, Upload, Trash2, ChevronDown, Loader2 } from 'lucide-react';
+import { FileText, Download, Upload, Trash2, ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -17,6 +17,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { useEditorStore } from '@/store/editor';
 import { useRouter } from 'next/navigation';
 
@@ -33,6 +34,7 @@ export function Navbar({ projectName }: NavbarProps) {
         clearGraph,
         nodes,
         isSaving,
+        isDirty,
     } = useEditorStore();
 
     // Download as JSON file
@@ -138,11 +140,20 @@ export function Navbar({ projectName }: NavbarProps) {
                     </span>
                 )}
 
-                {isSaving && (
-                    <div className="flex items-center gap-1.5 px-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Saving...</span>
-                    </div>
+                {/* Sync Status Badge */}
+                {isSaving ? (
+                    <Badge variant="default" className="w-[80px] justify-center bg-blue-500 hover:bg-blue-600 border-blue-600 text-white gap-1.5 transition-all">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Saving
+                    </Badge>
+                ) : isDirty ? (
+                    <Badge variant="secondary" className="w-[80px] justify-center bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 transition-all">
+                        Unsaved
+                    </Badge>
+                ) : (
+                    <Badge variant="outline" className="w-[80px] justify-center text-green-600 border-green-200 bg-green-50 hover:bg-green-100 hover:text-green-700 dark:text-green-400 dark:border-green-900/50 dark:bg-green-900/20 transition-all">
+                        Saved
+                    </Badge>
                 )}
                 <ThemeToggle />
             </div>
