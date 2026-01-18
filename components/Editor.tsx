@@ -334,10 +334,13 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
             />
 
             {/* Code Node Dialog */}
-            <CodeNodeDialog
-                open={isCodeNodeDialogOpen}
-                onOpenChange={setIsCodeNodeDialogOpen}
-            />
+            {isCodeNodeDialogOpen && (
+                <CodeNodeDialog
+                    open={true}
+                    onOpenChange={setIsCodeNodeDialogOpen}
+                    mode="create"
+                />
+            )}
 
             {/* Stale Templates Notification */}
             <StaleTemplatesNotification />

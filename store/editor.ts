@@ -1188,18 +1188,69 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const updatedCodeNode = { ...codeNode, ...updates, updatedAt: Date.now() };
 
+        // Propagate changes to all instances of this code node
+        const { nodes, edges } = get();
+
+        // Find existing edges to remove if ports are removed
+        const newInputIds = (updatedCodeNode.inputs || []).map(p => p.id);
+        const newOutputId = updatedCodeNode.output?.id;
+
+        let newEdges = edges;
+
+        const newNodes = nodes.map(node => {
+            // Check if this node is an instance of the code node
+            // The instance type is either the ID itself (usually) or stored in data.type
+            if (node.data.type === id || node.type === id) {
+                const newPorts = [...(updatedCodeNode.inputs || []), updatedCodeNode.output].filter(Boolean) as SubgraphPort[];
+
+                // If ports are removed, we must remove connected edges
+                // Identify removed input IDs
+                // Note: we only check inputs for removal here as output usually persists (or is single 'out')
+                // But strictly checking all valid handles is better.
+                const validHandleIds = new Set([...newInputIds, newOutputId].filter(Boolean));
+
+                // Filter edges connected to this node
+                newEdges = newEdges.filter(edge => {
+                    if (edge.source === node.id) {
+                        // Edge from this node (output)
+                        return validHandleIds.has(edge.sourceHandle || '');
+                    }
+                    if (edge.target === node.id) {
+                        // Edge to this node (input)
+                        return validHandleIds.has(edge.targetHandle || '');
+                    }
+                    return true;
+                });
+
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        label: updatedCodeNode.name, // Update label if name changed
+                        dynamicPorts: newPorts,
+                    }
+                };
+            }
+            return node;
+        });
+
         set({
             codeNodes: {
                 ...get().codeNodes,
                 [id]: updatedCodeNode,
             },
+            nodes: newNodes,
+            edges: newEdges,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
 
         // Push updates to DB if this code node is linked to a template
+        // AND we are not just syncing the version from the DB (indicated by presence of templateVersion in updates)
+        const isSyncing = typeof updates.templateVersion === 'number';
         const { onCodeNodeTemplateUpdate } = get();
-        if (onCodeNodeTemplateUpdate && codeNode.templateId) {
+
+        if (onCodeNodeTemplateUpdate && codeNode.templateId && !isSyncing) {
             onCodeNodeTemplateUpdate(codeNode.templateId, updatedCodeNode).then(result => {
                 // Update local version
                 const latestCodeNodes = useEditorStore.getState().codeNodes;

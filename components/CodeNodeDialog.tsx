@@ -21,6 +21,10 @@ import { toast } from 'sonner';
 interface CodeNodeDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    mode?: 'create' | 'edit';
+    nodeId?: string;
+    initialName?: string;
+    initialCode?: string;
 }
 
 const PLACEHOLDER_CODE = `Fn(([a, b]) => {
@@ -29,10 +33,18 @@ const PLACEHOLDER_CODE = `Fn(([a, b]) => {
     return result;
 })`;
 
-export function CodeNodeDialog({ open, onOpenChange }: CodeNodeDialogProps) {
-    const [name, setName] = useState('');
-    const [code, setCode] = useState('');
-    const { createCodeNode, codeNodes, subgraphs } = useEditorStore();
+export function CodeNodeDialog({
+    open,
+    onOpenChange,
+    mode = 'create',
+    nodeId,
+    initialName = '',
+    initialCode = ''
+}: CodeNodeDialogProps) {
+    const [name, setName] = useState(initialName);
+    const [code, setCode] = useState(initialCode);
+    const { createCodeNode, updateCodeNode, subgraphs } = useEditorStore();
+
 
     // Parse code to extract arguments and validate
     const parseResult = useMemo(() => {
@@ -48,23 +60,32 @@ export function CodeNodeDialog({ open, onOpenChange }: CodeNodeDialogProps) {
         const normalizedName = name.trim().toLowerCase();
 
         // Check against existing code nodes
-        const existingCodeNode = Object.values(codeNodes).find(
-            cn => cn.name.toLowerCase() === normalizedName
-        );
-        if (existingCodeNode) return 'A code node with this name already exists';
+        // SKIPPED: Code node instances share names with templates (e.g. template "Add" vs instance "Add").
+        // We enforce ID uniqueness, but names can be duplicated for instances.
 
-        // Check against subgraphs
+        /* 
+        const conflictingNode = Object.values(codeNodes).find(
+            cn => cn.name.toLowerCase() === normalizedName && 
+                  (mode !== 'edit' || !nodeId || cn.id !== nodeId)
+        );
+        
+        if (conflictingNode) {
+            return 'A code node with this name already exists';
+        }
+        */
+
+        // Check against subgraphs - these should be unique as they are global types
         const existingSubgraph = Object.values(subgraphs).find(
             sg => sg.name.toLowerCase() === normalizedName
         );
         if (existingSubgraph) return 'A subgraph with this name already exists';
 
         return null;
-    }, [name, codeNodes, subgraphs]);
+    }, [name, subgraphs]);
 
     const canCreate = parseResult.isValid && name.trim() && !nameConflict;
 
-    const handleCreate = useCallback(() => {
+    const handleSave = useCallback(() => {
         if (!canCreate) return;
 
         // Create input ports from parsed arguments
@@ -81,20 +102,34 @@ export function CodeNodeDialog({ open, onOpenChange }: CodeNodeDialogProps) {
             type: 'any',
         };
 
-        const id = createCodeNode(name.trim(), code.trim(), inputs, output);
-        if (id) {
-            toast.success(`Created code node "${name}"`);
-            setName('');
-            setCode('');
-            onOpenChange(false);
+        if (mode === 'create') {
+            const id = createCodeNode(name.trim(), code.trim(), inputs, output);
+            if (id) {
+                toast.success(`Created code node "${name}"`);
+                setName('');
+                setCode('');
+                onOpenChange(false);
+            }
+        } else {
+            if (nodeId) {
+                updateCodeNode(nodeId, {
+                    name: name.trim(),
+                    code: code.trim(),
+                    inputs,
+                    output
+                });
+                toast.success(`Updated code node "${name}"`);
+                onOpenChange(false);
+            }
         }
-    }, [canCreate, name, code, parseResult.arguments, createCodeNode, onOpenChange]);
+    }, [canCreate, name, code, parseResult.arguments, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId]);
 
     const handleClose = useCallback(() => {
-        setName('');
-        setCode('');
+        // Reset to initial values on close without saving
+        setName(initialName);
+        setCode(initialCode);
         onOpenChange(false);
-    }, [onOpenChange]);
+    }, [onOpenChange, initialName, initialCode]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,10 +137,12 @@ export function CodeNodeDialog({ open, onOpenChange }: CodeNodeDialogProps) {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Code className="w-5 h-5" />
-                        Create Node from Code
+                        {mode === 'create' ? 'Create Node from Code' : 'Edit Code Node'}
                     </DialogTitle>
                     <DialogDescription>
-                        Create a reusable node by writing TSL code. Arguments become input handles.
+                        {mode === 'create'
+                            ? 'Create a reusable node by writing TSL code. Arguments become input handles.'
+                            : 'Edit the TSL code. Changing arguments will update input handles.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -168,8 +205,8 @@ export function CodeNodeDialog({ open, onOpenChange }: CodeNodeDialogProps) {
                     <Button variant="outline" onClick={handleClose}>
                         Cancel
                     </Button>
-                    <Button onClick={handleCreate} disabled={!canCreate}>
-                        Create Node
+                    <Button onClick={handleSave} disabled={!canCreate}>
+                        {mode === 'create' ? 'Create Node' : 'Save Changes'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
