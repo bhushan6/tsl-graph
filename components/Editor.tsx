@@ -34,6 +34,7 @@ import TSLEdge from './TSLEdge';
 import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
+import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -337,6 +338,9 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
                 open={isCodeNodeDialogOpen}
                 onOpenChange={setIsCodeNodeDialogOpen}
             />
+
+            {/* Stale Templates Notification */}
+            <StaleTemplatesNotification />
         </>
     );
 }

@@ -40,6 +40,9 @@ export interface SubgraphDefinition {
     id: string;
     // Display name (e.g., 'My Blur Effect')
     name: string;
+    // Template reference (if saved from/as a template)
+    templateId?: string;
+    templateVersion?: number;
     // Input ports that become inputs on the custom node
     inputs: SubgraphPort[];
     // Output ports that become outputs on the custom node
@@ -61,6 +64,9 @@ export interface CodeNodeDefinition {
     id: string;
     // Display name (e.g., 'My Effect')
     name: string;
+    // Template reference (if saved from/as a template)
+    templateId?: string;
+    templateVersion?: number;
     // The raw TSL code (complete Fn definition)
     code: string;
     // Parsed input arguments that become input handles

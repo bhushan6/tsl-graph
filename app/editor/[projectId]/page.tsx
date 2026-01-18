@@ -15,10 +15,26 @@ import Link from "next/link";
 function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
     const project = useQuery(api.projects.get, { id: projectId });
     const updateProject = useMutation(api.projects.update);
+
+    // Template mutations
+    const createSubgraphTemplate = useMutation(api.templates.createSubgraphTemplate);
+    const updateSubgraphTemplate = useMutation(api.templates.updateSubgraphTemplate);
+    const createCodeNodeTemplate = useMutation(api.templates.createCodeNodeTemplate);
+    const updateCodeNodeTemplate = useMutation(api.templates.updateCodeNodeTemplate);
+
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
     const setAutoSaveCallback = useEditorStore((s) => s.setAutoSaveCallback);
+    const setTemplateCallbacks = useEditorStore((s) => s.setTemplateCallbacks);
+    const resetEditor = useEditorStore((s) => s.resetEditor);
 
     const hasLoadedRef = useRef(false);
+
+    // Reset editor on unmount
+    useEffect(() => {
+        return () => {
+            resetEditor();
+        };
+    }, [resetEditor]);
 
     // Register auto-save callback for this project
     useEffect(() => {
@@ -38,6 +54,78 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
             setAutoSaveCallback(null);
         };
     }, [projectId, updateProject, setAutoSaveCallback]);
+
+    // Register template callbacks
+    useEffect(() => {
+        setTemplateCallbacks({
+            onSubgraphTemplateCreate: async (subgraph) => {
+                const result = await createSubgraphTemplate({
+                    name: subgraph.name,
+                    data: {
+                        id: subgraph.id,
+                        name: subgraph.name,
+                        inputs: subgraph.inputs,
+                        outputs: subgraph.outputs,
+                        nodes: subgraph.nodes,
+                        edges: subgraph.edges,
+                        inputNodePosition: subgraph.inputNodePosition,
+                        outputNodePosition: subgraph.outputNodePosition,
+                    },
+                    isPublic: false,
+                });
+                return { templateId: result.templateId, version: result.version };
+            },
+            onSubgraphTemplateUpdate: async (templateId, subgraph) => {
+                const result = await updateSubgraphTemplate({
+                    id: templateId as Id<"subgraphTemplates">,
+                    name: subgraph.name, // Update the top-level name in DB
+                    data: {
+                        id: subgraph.id,
+                        name: subgraph.name,
+                        inputs: subgraph.inputs,
+                        outputs: subgraph.outputs,
+                        nodes: subgraph.nodes,
+                        edges: subgraph.edges,
+                        inputNodePosition: subgraph.inputNodePosition,
+                        outputNodePosition: subgraph.outputNodePosition,
+                    },
+                });
+                return { version: result.version };
+            },
+            onCodeNodeTemplateCreate: async (codeNode) => {
+                const result = await createCodeNodeTemplate({
+                    name: codeNode.name,
+                    data: {
+                        id: codeNode.id,
+                        name: codeNode.name,
+                        code: codeNode.code,
+                        inputs: codeNode.inputs,
+                        output: codeNode.output,
+                    },
+                    isPublic: false,
+                });
+                return { templateId: result.templateId, version: result.version };
+            },
+            onCodeNodeTemplateUpdate: async (templateId, codeNode) => {
+                const result = await updateCodeNodeTemplate({
+                    id: templateId as Id<"codeNodeTemplates">,
+                    name: codeNode.name, // Update the top-level name in DB
+                    data: {
+                        id: codeNode.id,
+                        name: codeNode.name,
+                        code: codeNode.code,
+                        inputs: codeNode.inputs,
+                        output: codeNode.output,
+                    },
+                });
+                return { version: result.version };
+            },
+        });
+
+        return () => {
+            setTemplateCallbacks({});
+        };
+    }, [createSubgraphTemplate, updateSubgraphTemplate, createCodeNodeTemplate, updateCodeNodeTemplate, setTemplateCallbacks]);
 
     // Load project data when it arrives
     useEffect(() => {

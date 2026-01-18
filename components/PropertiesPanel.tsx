@@ -159,6 +159,53 @@ function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: unkno
     });
 }
 
+// Panel for subgraph instances - simplified since templates auto-save
+interface SubgraphInstancePanelProps {
+    subgraph: {
+        id: string;
+        name: string;
+        templateId?: string;
+        templateVersion?: number;
+    };
+    onEnterEditor: () => void;
+}
+
+function SubgraphInstancePanel({ subgraph, onEnterEditor }: SubgraphInstancePanelProps) {
+    const isSynced = !!subgraph.templateId;
+
+    return (
+        <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">{subgraph.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Custom Subgraph
+                    {isSynced && (
+                        <span className="ml-1 text-green-500">• Synced</span>
+                    )}
+                </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex-1 p-4 space-y-3">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onEnterEditor}
+                    className="w-full gap-2"
+                >
+                    <Layers className="w-4 h-4" />
+                    Edit Subgraph
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                    Edit the internal graph of this custom node
+                </p>
+            </div>
+        </div>
+    );
+}
+
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
@@ -190,34 +237,13 @@ function PropertiesPanelContent() {
     const isSubgraphInstance = node.data.type.startsWith('custom/');
     const subgraph = isSubgraphInstance ? subgraphs[node.data.type] : null;
 
-    // For subgraph instances, show edit button (they don't have registry definitions)
+    // For subgraph instances, show edit button
     if (isSubgraphInstance && subgraph) {
         return (
-            <div className="flex flex-col h-full">
-                {/* Header */}
-                <div className="px-4 py-3 border-b border-sidebar-border">
-                    <h3 className="font-semibold text-sm">{subgraph.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        Custom Subgraph
-                    </p>
-                </div>
-
-                {/* Edit Button */}
-                <div className="flex-1 p-4">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => enterSubgraphEditor(node.data.type)}
-                        className="w-full gap-2"
-                    >
-                        <Layers className="w-4 h-4" />
-                        Edit Subgraph
-                    </Button>
-                    <p className="text-xs text-muted-foreground mt-2 text-center">
-                        Edit the internal graph of this custom node
-                    </p>
-                </div>
-            </div>
+            <SubgraphInstancePanel
+                subgraph={subgraph}
+                onEnterEditor={() => enterSubgraphEditor(node.data.type)}
+            />
         );
     }
 
