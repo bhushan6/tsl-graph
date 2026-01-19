@@ -138,6 +138,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     }> = [];
 
     for (const inputKey of inputKeys) {
+        if (inputs[inputKey].hidden) continue;
+
         const hasMatchingOutput = outputKeys.includes(inputKey) && inputKey !== 'out';
         rows.push({
             key: inputKey,

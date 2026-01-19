@@ -680,6 +680,17 @@ export function compileGraph(
             lines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
             lines.push(`${texVarName}.colorSpace = THREE.SRGBColorSpace;`);
 
+            // Apply texture properties
+            const wrapS = node.data.values?.['wrapS'] ?? inputs['wrapS']?.default ?? 'RepeatWrapping';
+            const wrapT = node.data.values?.['wrapT'] ?? inputs['wrapT']?.default ?? 'RepeatWrapping';
+            const minFilter = node.data.values?.['minFilter'] ?? inputs['minFilter']?.default ?? 'LinearMipmapLinearFilter';
+            const magFilter = node.data.values?.['magFilter'] ?? inputs['magFilter']?.default ?? 'LinearFilter';
+
+            lines.push(`${texVarName}.wrapS = THREE.${wrapS};`);
+            lines.push(`${texVarName}.wrapT = THREE.${wrapT};`);
+            lines.push(`${texVarName}.minFilter = THREE.${minFilter};`);
+            lines.push(`${texVarName}.magFilter = THREE.${magFilter};`);
+
             // 2. Get UV input
             const uvInput = inputs['uv'];
             const uvEdge = edges.find(e => e.target === node.id && e.targetHandle === 'uv');

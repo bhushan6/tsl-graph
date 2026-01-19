@@ -25,6 +25,7 @@ export interface Port {
     readonly default?: TSLValueType;
     readonly connectionOnly?: boolean; // If true, input must be connected (no inline value)
     readonly propertyOnly?: boolean; // If true, input is hidden on node (property panel only)
+    readonly hidden?: boolean; // If true, input is completely hidden from node UI (values/labels)
     readonly isMaterialProp?: boolean; // If true, treated as raw property assignment on material, not TSL node input
     readonly options?: readonly { label: string; value: string | number }[]; // Dropdown options
 }
