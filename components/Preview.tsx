@@ -156,6 +156,13 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
 
+    // Dispose material when it changes
+    useEffect(() => {
+        return () => {
+            material?.dispose();
+        };
+    }, [material]);
+
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {
         switch (previewSettings.mesh) {
@@ -164,12 +171,19 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             case 'torus':
                 return new THREE.TorusKnotGeometry(0.8, 0.3, 256, 64);
             case 'plane':
-                return new THREE.PlaneGeometry(2, 2, 128, 128);
+                return new THREE.PlaneGeometry(1, 1);
             case 'sphere':
             default:
                 return new THREE.SphereGeometry(1, 128, 128);
         }
     }, [previewSettings.mesh]);
+
+    // Dispose geometry when it changes
+    useEffect(() => {
+        return () => {
+            geometry?.dispose();
+        };
+    }, [geometry]);
 
     const handleResize = () => {
         if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
@@ -255,6 +269,26 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             if (controlsRef.current) {
                 controlsRef.current.dispose();
             }
+
+            // Clean up scene
+            if (sceneRef.current) {
+                sceneRef.current.traverse((object) => {
+                    if (object instanceof THREE.Mesh) {
+                        object.geometry?.dispose();
+                        if (Array.isArray(object.material)) {
+                            object.material.forEach(m => m.dispose());
+                        } else {
+                            object.material?.dispose();
+                        }
+                    }
+                    // Dispose helpers
+                    if (object instanceof THREE.GridHelper) {
+                        object.dispose();
+                    }
+                });
+                sceneRef.current.clear();
+            }
+
             if (rendererRef.current) {
                 rendererRef.current.dispose();
                 if (container.contains(rendererRef.current.domElement)) {
@@ -291,11 +325,11 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             // Standard InstancedMesh initialized with identity matrices is usually enough if TSL overrides position.
 
             // However, to be safe, let's fill it with dummy data so it renders if TSL doesn't fully override
-            for (let i = 0; i < previewSettings.instanceCount; i++) {
-                const matrix = new THREE.Matrix4();
-                matrix.setPosition(0, 0, 0);
-                (mesh as THREE.InstancedMesh).setMatrixAt(i, matrix);
-            }
+            // for (let i = 0; i < previewSettings.instanceCount; i++) {
+            //     const matrix = new THREE.Matrix4();
+            //     matrix.setPosition(0, 0, 0);
+            //     (mesh as THREE.InstancedMesh).setMatrixAt(i, matrix);
+            // }
         } else {
             mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(0, 0, 0);
@@ -303,6 +337,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
         sceneRef.current.add(mesh);
         meshRef.current = mesh;
+
+
 
     }, [geometry, material, previewSettings.isInstanced, previewSettings.instanceCount]);
 
