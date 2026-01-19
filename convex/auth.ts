@@ -16,6 +16,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     return betterAuth({
         baseURL: siteUrl,
         database: authComponent.adapter(ctx),
+        trustedOrigins: [process.env.NEXT_PUBLIC_SITE_URL!],
         socialProviders: {
             google: {
                 clientId: process.env.GOOGLE_CLIENT_ID!,
