@@ -21,6 +21,7 @@ import {
     Plus,
     Search,
     FolderOpen,
+    Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
@@ -35,6 +36,8 @@ function DashboardContent() {
     // Removed newProjectName and isCreateOpen states as they are no longer needed
     const [searchQuery, setSearchQuery] = useState("");
     const [projectToDelete, setProjectToDelete] = useState<Id<"projects"> | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const projects = useQuery(api.projects.list);
     const createProject = useMutation(api.projects.create);
@@ -42,6 +45,7 @@ function DashboardContent() {
 
     const handleCreateProject = async () => {
         try {
+            setIsCreating(true);
             // No name provided, backend handles "Untitled" + auto-increment
             const projectId = await createProject({
                 graphData: { version: 1, nodes: [], edges: [], subgraphs: {}, codeNodes: {} },
@@ -50,13 +54,21 @@ function DashboardContent() {
             router.push(`/editor/${projectId}`);
         } catch (error) {
             console.error("Failed to create project:", error);
+            setIsCreating(false);
         }
     };
 
     const handleDeleteProject = async () => {
         if (!projectToDelete) return;
-        await deleteProject({ id: projectToDelete });
-        setProjectToDelete(null);
+        try {
+            setIsDeleting(true);
+            await deleteProject({ id: projectToDelete });
+            setProjectToDelete(null);
+        } catch (error) {
+            console.error("Failed to delete project:", error);
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     const filteredProjects = projects?.filter(p =>
@@ -91,9 +103,14 @@ function DashboardContent() {
 
                             <Button
                                 onClick={handleCreateProject}
+                                disabled={isCreating}
                                 className="rounded-md px-6 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
                             >
-                                <Plus className="h-4 w-4 mr-2" />
+                                {isCreating ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Plus className="h-4 w-4 mr-2" />
+                                )}
                                 New Project
                             </Button>
                         </div>
@@ -125,8 +142,12 @@ function DashboardContent() {
                                     <p className="text-muted-foreground max-w-sm mt-2 mb-8 font-light">
                                         Create your first shader project to get started with TSL Editor.
                                     </p>
-                                    <Button onClick={handleCreateProject} className="rounded-md px-8 bg-primary text-primary-foreground hover:bg-primary/90">
-                                        <Plus className="h-4 w-4 mr-2" />
+                                    <Button onClick={handleCreateProject} disabled={isCreating} className="rounded-md px-8 bg-primary text-primary-foreground hover:bg-primary/90">
+                                        {isCreating ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <Plus className="h-4 w-4 mr-2" />
+                                        )}
                                         Create Project
                                     </Button>
                                 </>
@@ -146,7 +167,7 @@ function DashboardContent() {
                 </div>
 
                 {/* Delete Confirmation Alert */}
-                <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+                <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && !isDeleting && setProjectToDelete(null)}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Delete Sketch?</AlertDialogTitle>
@@ -155,12 +176,23 @@ function DashboardContent() {
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
                             <AlertDialogAction
-                                onClick={handleDeleteProject}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDeleteProject();
+                                }}
+                                disabled={isDeleting}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
-                                Delete
+                                {isDeleting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    "Delete"
+                                )}
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
