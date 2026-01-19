@@ -185,22 +185,24 @@ export const getSubgraphTemplate = query({
 // Get multiple templates by IDs (for staleness and ownership check)
 export const getSubgraphTemplateVersions = query({
     args: {
-        ids: v.array(v.id("subgraphTemplates")),
+        ids: v.array(v.string()), // Accept strings to handle IDs from other environments gracefully
     },
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         const results: Record<string, { version: number; updatedAt: number; isOwned: boolean } | null> = {};
 
-        for (const id of args.ids) {
-            const template = await ctx.db.get(id);
+        for (const idStr of args.ids) {
+            const id = ctx.db.normalizeId("subgraphTemplates", idStr);
+            const template = id ? await ctx.db.get(id) : null;
+
             if (template) {
-                results[id] = {
+                results[idStr] = {
                     version: template.version,
                     updatedAt: template.updatedAt,
                     isOwned: template.userId === user?._id,
                 };
             } else {
-                results[id] = null;
+                results[idStr] = null;
             }
         }
 
@@ -390,22 +392,24 @@ export const getCodeNodeTemplate = query({
 // Get multiple code node templates by IDs (for staleness and ownership check)
 export const getCodeNodeTemplateVersions = query({
     args: {
-        ids: v.array(v.id("codeNodeTemplates")),
+        ids: v.array(v.string()), // Accept strings to handle IDs from other environments gracefully
     },
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         const results: Record<string, { version: number; updatedAt: number; isOwned: boolean } | null> = {};
 
-        for (const id of args.ids) {
-            const template = await ctx.db.get(id);
+        for (const idStr of args.ids) {
+            const id = ctx.db.normalizeId("codeNodeTemplates", idStr);
+            const template = id ? await ctx.db.get(id) : null;
+
             if (template) {
-                results[id] = {
+                results[idStr] = {
                     version: template.version,
                     updatedAt: template.updatedAt,
                     isOwned: template.userId === user?._id,
                 };
             } else {
-                results[id] = null;
+                results[idStr] = null;
             }
         }
 
