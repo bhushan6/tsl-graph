@@ -1492,6 +1492,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 past: newPast,
                 future: [currentSnapshot, ...history.future],
             },
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
 
         // Use setTimeout to ensure we don't block render with flag
@@ -1524,6 +1525,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 past: [...history.past, currentSnapshot],
                 future: newFuture,
             },
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
 
         setTimeout(() => {
