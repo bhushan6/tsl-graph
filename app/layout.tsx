@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+import { ReactScan } from "@/components/react-scan";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,6 +34,7 @@ export default function RootLayout({
         <ConvexClientProvider>
           <ThemeProvider>
             {children}
+            <ReactScan />
             <Toaster position="top-center" richColors />
           </ThemeProvider>
         </ConvexClientProvider>
