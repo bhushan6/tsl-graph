@@ -11,9 +11,49 @@ import {
     type Connection,
     getNodesBounds,
 } from '@xyflow/react';
-import { getAbsolutePosition } from '@/lib/utils';
+import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition } from '@/lib/types';
+import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
+import { toast } from 'sonner';
+
+// Preview mesh type
+export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane';
+
+// Geometry configuration
+export interface GeometryConfig {
+    // Box
+    width?: number;
+    height?: number;
+    depth?: number;
+    widthSegments?: number;
+    heightSegments?: number;
+    depthSegments?: number;
+
+    // Sphere
+    radius?: number;
+    widthSegmentsSphere?: number;
+    heightSegmentsSphere?: number;
+
+    // Torus
+    radiusTorus?: number;
+    tube?: number;
+    radialSegments?: number;
+    tubularSegments?: number;
+
+    // Plane
+    widthPlane?: number;
+    heightPlane?: number;
+    widthSegmentsPlane?: number;
+    heightSegmentsPlane?: number;
+}
+
+// Preview settings interface
+export interface PreviewSettings {
+    mesh: PreviewMeshType;
+    config: GeometryConfig;
+    isInstanced: boolean;
+    instanceCount: number;
+}
 
 // Graph save format
 export interface GraphData {
@@ -24,6 +64,8 @@ export interface GraphData {
     subgraphs?: Record<string, SubgraphDefinition>;
     // Code node definitions
     codeNodes?: Record<string, CodeNodeDefinition>;
+    // Preview settings
+    previewSettings?: PreviewSettings;
 }
 
 // Editor mode - main graph or editing a subgraph
@@ -80,11 +122,9 @@ interface EditorState {
     canvasMode: 'pan' | 'select';
     setCanvasMode: (mode: 'pan' | 'select') => void;
 
-    // Instance state
-    instanceCount: number;
-    setInstanceCount: (count: number) => void;
-    isInstanced: boolean;
-    setIsInstanced: (enabled: boolean) => void;
+    // Preview settings
+    previewSettings: PreviewSettings;
+    updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
 
     // History state
     history: HistoryState;
@@ -99,6 +139,9 @@ interface EditorState {
     isDirty: boolean; // True when there are unsaved changes
     autoSaveEnabled: boolean;
 
+    // Project ID for asset management
+    projectId: string | null;
+
     // Template callbacks (for async DB operations)
     onSubgraphTemplateCreate: ((subgraph: SubgraphDefinition) => Promise<{ templateId: string; version: number }>) | null;
     onSubgraphTemplateUpdate: ((templateId: string, subgraph: SubgraphDefinition) => Promise<{ version: number }>) | null;
@@ -111,6 +154,7 @@ interface EditorState {
         onCodeNodeTemplateUpdate?: (templateId: string, codeNode: CodeNodeDefinition) => Promise<{ version: number }>;
     }) => void;
     setAutoSaveCallback: (callback: (() => Promise<void>) | null) => void;
+    setProjectId: (projectId: string | null) => void;
     triggerAutoSave: () => void;
     markDirty: () => void;
 
@@ -119,7 +163,7 @@ interface EditorState {
     onConnect: OnConnect;
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
-    updateNodeValue: (nodeId: string, key: string, value: unknown) => void;
+    updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
     deleteNode: (nodeId: string) => void;
     setSelectedNode: (nodeId: string | null) => void;
     setSelectedNodes: (nodeIds: string[]) => void;
@@ -162,7 +206,7 @@ interface EditorState {
     isSubgraphMode: () => boolean;
 
     // Code node actions
-    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => string | null;
+    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => Promise<string | null>;
     updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => void;
     addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => void;
     deleteCodeNode: (id: string) => void;
@@ -179,11 +223,43 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectedNodeIds: [],
     graphStructureVersion: 0,
 
-    // Instance state
-    instanceCount: 100,
-    setInstanceCount: (count) => set({ instanceCount: count }),
-    isInstanced: false,
-    setIsInstanced: (enabled) => set({ isInstanced: enabled }),
+    // Preview settings
+    previewSettings: {
+        mesh: 'sphere' as PreviewMeshType,
+        isInstanced: false,
+        instanceCount: 100,
+        config: {
+            // Defaults with low resolution as requested
+            // Box
+            width: 1.5,
+            height: 1.5,
+            depth: 1.5,
+            widthSegments: 1,
+            heightSegments: 1,
+            depthSegments: 1,
+
+            // Sphere
+            radius: 1,
+            widthSegmentsSphere: 32,
+            heightSegmentsSphere: 16,
+
+            // Torus
+            radiusTorus: 0.8,
+            tube: 0.3,
+            radialSegments: 16,
+            tubularSegments: 32,
+
+            // Plane
+            widthPlane: 1,
+            heightPlane: 1,
+            widthSegmentsPlane: 1,
+            heightSegmentsPlane: 1,
+        }
+    },
+    updatePreviewSettings: (updates) => {
+        set({ previewSettings: { ...get().previewSettings, ...updates } });
+        get().markDirty();
+    },
 
     // Subgraph state initialization
     subgraphs: {},
@@ -196,6 +272,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     isSaving: false,
     isDirty: false,
     autoSaveEnabled: true,
+
+    // Project ID initialization
+    projectId: null,
 
     // Template callbacks initialization
     onSubgraphTemplateCreate: null,
@@ -216,6 +295,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Auto-save methods
     setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
+    setProjectId: (projectId) => set({ projectId }),
 
     // Template callbacks setter
     setTemplateCallbacks: (callbacks) => set({
@@ -237,6 +317,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return () => {
             const state = useEditorStore.getState();
             if (!state.autoSaveEnabled || !state.autoSaveCallback) return;
+
+            // If already saving, just ensure dirty flag is set and exit
+            // The completion handler will pick it up
+            if (state.isSaving) {
+                if (!state.isDirty) {
+                    useEditorStore.setState({ isDirty: true });
+                }
+                return;
+            }
+
+            // If not dirty, nothing to save
             if (!state.isDirty) return;
 
             // Clear any pending save
@@ -247,30 +338,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             // Debounce: wait 2 seconds before saving
             timeoutId = setTimeout(async () => {
                 const currentState = useEditorStore.getState();
+
+                // Double-check we're not already saving (race condition guard)
                 if (currentState.isSaving) {
-                    // Already saving, will re-trigger after save completes
                     return;
                 }
+
                 if (!currentState.isDirty) return;
 
-                useEditorStore.setState({ isSaving: true });
+                // Clear dirty flag BEFORE starting save - this captures the current state.
+                // If changes happen during the save, markDirty() will set isDirty: true again,
+                // and the follow-up check will trigger another save.
+                useEditorStore.setState({ isSaving: true, isDirty: false });
 
                 try {
                     await currentState.autoSaveCallback?.();
-                    useEditorStore.setState({
-                        isDirty: false,
-                        isSaving: false
-                    });
 
-                    // Check if more changes occurred during save
-                    const afterSaveState = useEditorStore.getState();
-                    if (afterSaveState.isDirty) {
-                        // Re-trigger for pending changes
-                        afterSaveState.triggerAutoSave();
-                    }
+                    useEditorStore.setState({ isSaving: false });
+
+                    // Immediately check if more changes occurred during save
+                    // Use a small delay to ensure state is settled
+                    setTimeout(() => {
+                        const afterSaveState = useEditorStore.getState();
+                        if (afterSaveState.isDirty && !afterSaveState.isSaving) {
+                            afterSaveState.triggerAutoSave();
+                        }
+                    }, 100);
                 } catch (error) {
                     console.error('Auto-save failed:', error);
-                    useEditorStore.setState({ isSaving: false });
+                    // Re-mark as dirty since save failed - the original changes weren't persisted
+                    useEditorStore.setState({ isSaving: false, isDirty: true });
+
+                    // On error, retry after a delay
+                    setTimeout(() => {
+                        const afterErrorState = useEditorStore.getState();
+                        if (afterErrorState.isDirty && !afterErrorState.isSaving) {
+                            afterErrorState.triggerAutoSave();
+                        }
+                    }, 1000);
                 }
             }, 2000);
         };
@@ -380,8 +485,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // Set default value for InstanceCount node based on current store state
         if (type === 'geo/instanceCount') {
-            const { isInstanced, instanceCount } = get();
-            const initialCount = isInstanced ? instanceCount : 1;
+            const { previewSettings } = get();
+            const initialCount = previewSettings.isInstanced ? previewSettings.instanceCount : 1;
             data.values = { value: initialCount, ...data.values };
         }
 
@@ -410,7 +515,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         ...node,
                         data: {
                             ...node.data,
-                            values: { ...node.data.values, [key]: value as import('@/lib/nodes/definitions').TSLValueType },
+                            values: { ...node.data.values, [key]: value },
                         },
                     }
                     : node
@@ -533,6 +638,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: edgesToSave,
             subgraphs: subgraphsToSave,
             codeNodes: codeNodes,
+            previewSettings: get().previewSettings,
         };
         return JSON.stringify(graphData, null, 2);
     },
@@ -548,6 +654,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     subgraphs: data.subgraphs || {},
                     codeNodes: data.codeNodes || {},
                     graphStructureVersion: get().graphStructureVersion + 1,
+                    // Restore preview settings
+                    previewSettings: data.previewSettings || {
+                        mesh: 'sphere',
+                        isInstanced: false,
+                        instanceCount: 100,
+                        config: {
+                            width: 1.5,
+                            height: 1.5,
+                            depth: 1.5,
+                            widthSegments: 1,
+                            heightSegments: 1,
+                            depthSegments: 1,
+                            radius: 1,
+                            widthSegmentsSphere: 32,
+                            heightSegmentsSphere: 16,
+                            radiusTorus: 0.8,
+                            tube: 0.3,
+                            radialSegments: 16,
+                            tubularSegments: 32,
+                            widthPlane: 1,
+                            heightPlane: 1,
+                            widthSegmentsPlane: 1,
+                            heightSegmentsPlane: 1,
+                        }
+                    },
                     // Reset subgraph state on load
                     editorMode: 'main',
                     editingSubgraphId: null,
@@ -897,6 +1028,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         }
                     } catch (error) {
                         console.error('Failed to update subgraph template in DB:', error);
+                        toast.error(getErrorMessage(error));
                     }
                 }
             } else {
@@ -920,6 +1052,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         }
                     } catch (error) {
                         console.error('Failed to create subgraph template in DB:', error);
+                        toast.error(getErrorMessage(error));
                     }
                 }
             }
@@ -1134,7 +1267,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Code Node Actions
 
-    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => {
+    createCodeNode: async (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => {
         get().takeSnapshot();
 
         // Generate unique ID
@@ -1158,7 +1291,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // Auto-save to DB as private template
         const { onCodeNodeTemplateCreate } = get();
         if (onCodeNodeTemplateCreate) {
-            onCodeNodeTemplateCreate(codeNode).then(result => {
+            try {
+                const result = await onCodeNodeTemplateCreate(codeNode);
                 // Update local definition with template reference
                 const currentCodeNodes = useEditorStore.getState().codeNodes;
                 if (currentCodeNodes[id]) {
@@ -1173,9 +1307,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         },
                     });
                 }
-            }).catch(error => {
+                return id;
+            } catch (error) {
+                // Rollback: remove the code node from local state
+                const currentCodeNodes = useEditorStore.getState().codeNodes;
+                const { [id]: _, ...rest } = currentCodeNodes;
+                useEditorStore.setState({ codeNodes: rest });
+
                 console.error('Failed to save code node template to DB:', error);
-            });
+                toast.error(getErrorMessage(error));
+                return null;
+            }
         }
 
         return id;
@@ -1267,6 +1409,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             }).catch(error => {
                 console.error('Failed to update code node template in DB:', error);
+                toast.error(getErrorMessage(error));
             });
         }
     },
@@ -1543,6 +1686,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             history: { past: [], future: [] },
             canvasMode: 'pan',
             codeNodes: {},
+            previewSettings: {
+                mesh: 'sphere',
+                isInstanced: false,
+                instanceCount: 100,
+                config: {
+                    width: 1.5,
+                    height: 1.5,
+                    depth: 1.5,
+                    widthSegments: 1,
+                    heightSegments: 1,
+                    depthSegments: 1,
+                    radius: 1,
+                    widthSegmentsSphere: 32,
+                    heightSegmentsSphere: 16,
+                    radiusTorus: 0.8,
+                    tube: 0.3,
+                    radialSegments: 16,
+                    tubularSegments: 32,
+                    widthPlane: 1,
+                    heightPlane: 1,
+                    widthSegmentsPlane: 1,
+                    heightSegmentsPlane: 1,
+                }
+            },
             // Reset template callbacks as well? Probably no, they are set by the component. 
             // The component usually sets them in useEffect.
         });

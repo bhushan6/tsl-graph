@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
 
-import { AppNode, TSLType } from '@/lib/types';
+import type { AppNode, Port, TSLType, TSLValueType } from '@/lib/types';
 import { NodeProps } from '@xyflow/react';
 
 type TSLNodeProps = NodeProps<AppNode>;
@@ -29,7 +29,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         edges.filter((e) => e.source === id).map((e) => e.sourceHandle)
     );
 
-    const storedName = (data.values?.localName as string | undefined) || '';
+    const storedNameValue = data.values?.localName;
+    const storedName = typeof storedNameValue === 'string' ? storedNameValue : '';
     const [isEditingName, setIsEditingName] = useState(false);
     const [localName, setLocalName] = useState(storedName);
     // const [hoveredPort, setHoveredPort] = useState<string | null>(null);
@@ -73,12 +74,9 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const isSubgraphOutput = data.type === 'subgraph/output';
     const isAnchorNode = isSubgraphInput || isSubgraphOutput;
 
-    // Port type that matches what we need
-    type PortDef = { label: string; type: string; default?: unknown; connectionOnly?: boolean; propertyOnly?: boolean };
-
     // Get ports - for anchor nodes and subgraph instances, use dynamic ports from data
-    let inputs: Record<string, PortDef> = {};
-    let outputs: Record<string, PortDef> = {};
+    let inputs: Record<string, Port> = {};
+    let outputs: Record<string, Port> = {};
     let nodeLabel = def?.label || 'Custom Node';
 
     if (isSubgraphInstance && data.dynamicPorts) {
@@ -86,9 +84,9 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         // Inputs have ids starting with 'in_', outputs with 'out_'
         for (const port of data.dynamicPorts) {
             if (port.id.startsWith('in_')) {
-                inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
+                inputs[port.id] = { label: port.label, type: port.type as TSLType, connectionOnly: true };
             } else if (port.id.startsWith('out_') || port.id === 'out') {
-                outputs[port.id] = { label: port.label, type: port.type };
+                outputs[port.id] = { label: port.label, type: port.type as TSLType };
             }
         }
         // Extract name from type (custom/name-timestamp)
@@ -99,9 +97,9 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         // Code node instance: dynamicPorts contains inputs (in_*) and output (out)
         for (const port of data.dynamicPorts) {
             if (port.id.startsWith('in_')) {
-                inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
+                inputs[port.id] = { label: port.label, type: port.type as TSLType, connectionOnly: true };
             } else if (port.id === 'out') {
-                outputs[port.id] = { label: port.label, type: port.type };
+                outputs[port.id] = { label: port.label, type: port.type as TSLType };
             }
         }
         // Get name from codeNodes store
@@ -118,14 +116,14 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         // Subgraph Output: dynamic ports become inputs (to receive from internal nodes)
         for (const port of data.dynamicPorts) {
             if (isSubgraphInput) {
-                outputs[port.id] = { label: port.label, type: port.type };
+                outputs[port.id] = { label: port.label, type: port.type as TSLType };
             } else {
-                inputs[port.id] = { label: port.label, type: port.type, connectionOnly: true };
+                inputs[port.id] = { label: port.label, type: port.type as TSLType, connectionOnly: true };
             }
         }
     } else if (def) {
-        inputs = (def.inputs ?? {}) as Record<string, PortDef>;
-        outputs = (def.outputs ?? {}) as Record<string, PortDef>;
+        inputs = def.inputs ?? {};
+        outputs = def.outputs ?? {};
         nodeLabel = def.label;
     }
 
@@ -290,7 +288,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 // Value Preview Components - Read-only previews for node values
 interface ValuePreviewProps {
     type: string;
-    value: unknown;
+    value: TSLValueType;
 }
 
 function ValuePreview({ type, value }: ValuePreviewProps) {
@@ -304,7 +302,14 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
     const looksLikeColor = type === 'any' && typeof value === 'string' && value.startsWith('#');
 
     if (type === 'string') {
-        return <StringPreview value={String(value ?? '')} />;
+        // Handle AssetValue objects (e.g., {url: "...", assetId: "..."})
+        let stringValue = '';
+        if (value && typeof value === 'object' && 'url' in value) {
+            stringValue = (value as { url: string }).url || '';
+        } else {
+            stringValue = String(value ?? '');
+        }
+        return <StringPreview value={stringValue} />;
     }
     if (isColor || looksLikeColor) {
         return <ColorInputPreview value={String(value ?? '#ffffff')} />;

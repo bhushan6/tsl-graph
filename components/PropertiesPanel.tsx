@@ -11,10 +11,12 @@ import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import { SubgraphPort, TSLType, CodeNodeDefinition } from '@/lib/types';
+import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType } from '@/lib/types';
 import { Layers, Plus, Trash2, Upload, Code } from 'lucide-react';
 import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
+import { AssetInput } from './inputs/AssetInput';
+import { Id } from '@/convex/_generated/dataModel';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -153,10 +155,12 @@ function AnchorNodePortEditor({
 /**
  * Hook to reactively get a node's input value from the store.
  */
-function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: unknown) {
+function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: TSLValueType | undefined): TSLValueType {
     return useEditorStore((s) => {
         const node = s.nodes.find((n) => n.id === nodeId);
-        return node?.data.values?.[inputKey] ?? defaultValue;
+        const value = node?.data.values?.[inputKey];
+        if (value !== undefined) return value;
+        return defaultValue !== undefined ? defaultValue : 0;
     });
 }
 
@@ -409,9 +413,9 @@ interface PropertyInputWrapperProps {
     inputKey: string;
     inputType: string;
     inputLabel: string;
-    inputDefault: unknown;
+    inputDefault: TSLValueType | undefined;
     inputOptions?: readonly { label: string; value: string | number }[];
-    onChange: (value: unknown) => void;
+    onChange: (value: TSLValueType) => void;
 }
 
 /**
@@ -428,6 +432,7 @@ function PropertyInputWrapper({
 }: PropertyInputWrapperProps) {
     // Subscribe reactively to this specific value
     const value = useNodeInputValue(nodeId, inputKey, inputDefault);
+    const projectId = useEditorStore((s) => s.projectId);
 
     return (
         <div className="flex flex-col gap-1.5">
@@ -439,6 +444,9 @@ function PropertyInputWrapper({
                 value={value}
                 options={inputOptions}
                 onChange={onChange}
+                nodeId={nodeId}
+                propertyName={inputKey}
+                projectId={projectId}
             />
         </div>
     );
@@ -446,12 +454,15 @@ function PropertyInputWrapper({
 
 interface PropertyInputProps {
     type: string;
-    value: unknown;
+    value: TSLValueType;
     options?: readonly { label: string; value: string | number }[];
-    onChange: (value: unknown) => void;
+    onChange: (value: TSLValueType) => void;
+    nodeId?: string;
+    propertyName?: string;
+    projectId?: string | null;
 }
 
-function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
+function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId }: PropertyInputProps) {
     if (options && options.length > 0) {
         return (
             <select
@@ -477,6 +488,19 @@ function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
         return <AnyInput value={value} onChange={onChange} />;
     }
     if (type === 'string') {
+        // Use AssetInput for string types when we have nodeId (for texture uploads)
+        if (nodeId && propertyName) {
+            return (
+                <AssetInput
+                    value={value as string}
+                    onChange={(url) => onChange(url)}
+                    graphId={projectId as Id<"projects"> | undefined}
+                    nodeId={nodeId}
+                    propertyName={propertyName}
+                    accept="image/*"
+                />
+            );
+        }
         return <StringInput value={String(value ?? '')} onChange={onChange} />;
     }
     if (type === 'color') {
@@ -486,13 +510,13 @@ function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
         return <BooleanInput value={value} onChange={onChange} />;
     }
     if (type === 'vec2') {
-        return <VectorInput size={2} value={value} onChange={onChange} labels={['X', 'Y']} />;
+        return <VectorInput size={2} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y']} />;
     }
     if (type === 'vec3') {
-        return <VectorInput size={3} value={value} onChange={onChange} labels={['X', 'Y', 'Z']} />;
+        return <VectorInput size={3} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z']} />;
     }
     if (type === 'vec4') {
-        return <VectorInput size={4} value={value} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} />;
+        return <VectorInput size={4} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} />;
     }
 
     return (
@@ -504,7 +528,7 @@ function PropertyInput({ type, value, options, onChange }: PropertyInputProps) {
     );
 }
 
-function StringInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+function StringInput({ value, onChange }: { value: string; onChange: (value: TSLValueType) => void }) {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -554,7 +578,7 @@ function StringInput({ value, onChange }: { value: string; onChange: (value: unk
     );
 }
 
-function ColorInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLValueType) => void }) {
     const [localColor, setLocalColor] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -593,7 +617,7 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: unkn
     );
 }
 
-function NumberInput({ value, onChange, step }: { value: number; onChange: (value: unknown) => void; step: number }) {
+function NumberInput({ value, onChange, step }: { value: number; onChange: (value: TSLValueType) => void; step: number }) {
     const [localValue, setLocalValue] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 

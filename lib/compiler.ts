@@ -1,5 +1,5 @@
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
+import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port } from '@/lib/types';
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
@@ -57,7 +57,7 @@ function getInputValue(
     inputKey: string,
     edges: Edge[],
     compiledNodes: Map<string, CompiledNode>,
-    inputDef: { type: string; default?: number | readonly number[] | string | boolean },
+    inputDef: Pick<Port, 'type' | 'default'>,
     argsMap?: Record<string, string>
 ): string {
     const edge = edges.find(e => e.target === node.id && e.targetHandle === inputKey);
@@ -107,13 +107,20 @@ function getInputValue(
 
 /**
  * Get the string value for an input, evaluating node values or defaults.
+ * Handles AssetValue objects by extracting the url property.
  */
 function getStringValue(
     node: Node<TSLNodeData>,
     inputKey: string,
-    inputDef: { default?: number | readonly number[] | string | boolean }
+    inputDef: Pick<Port, 'default'>
 ): string {
     const value = node.data.values?.[inputKey] ?? inputDef.default;
+
+    // Handle AssetValue objects (e.g., {url: "...", assetId: "..."})
+    if (value && typeof value === 'object' && 'url' in value) {
+        return String((value as { url: string }).url ?? '');
+    }
+
     return String(value ?? '');
 }
 

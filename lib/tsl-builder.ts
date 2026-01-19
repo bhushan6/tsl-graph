@@ -27,6 +27,7 @@ export function buildTSLMaterial(
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
         MeshPhysicalNodeMaterial: THREE.MeshPhysicalNodeMaterial,
         MeshPhongNodeMaterial: THREE.MeshPhongNodeMaterial,
+        SpriteNodeMaterial: THREE.SpriteNodeMaterial,
         THREE: THREE, // Expose THREE namespace for TextureLoader
         rotation3d,
         rotate2D,

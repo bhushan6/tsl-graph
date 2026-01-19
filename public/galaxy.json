@@ -1,0 +1,1714 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "data": {
+        "connected": {},
+        "type": "material/sprite",
+        "values": {
+          "depthWrite": false
+        }
+      },
+      "dragging": false,
+      "id": "material/sprite-1768809014161",
+      "measured": {
+        "height": 300,
+        "width": 220
+      },
+      "position": {
+        "x": 7083.514686899542,
+        "y": 268.19145791973597
+      },
+      "selected": false,
+      "type": "material/sprite"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "size"
+        }
+      },
+      "dragging": false,
+      "id": "group-1768824408596",
+      "measured": {
+        "height": 221,
+        "width": 300
+      },
+      "position": {
+        "x": 1041.689517184547,
+        "y": 12.358530396396436
+      },
+      "selected": false,
+      "style": {
+        "height": 220.99999999999997,
+        "width": 300
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/float",
+        "values": {
+          "value": 0.08
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/float-1768824395663",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768824408596",
+      "position": {
+        "x": 40,
+        "y": 47.97211488457906
+      },
+      "selected": false,
+      "type": "const/float"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "scale"
+        }
+      },
+      "dragging": false,
+      "id": "group-1768824447179",
+      "measured": {
+        "height": 430,
+        "width": 571
+      },
+      "position": {
+        "x": 1383.4070397397475,
+        "y": -36.50437304851417
+      },
+      "selected": false,
+      "style": {
+        "height": 429.8865179064284,
+        "width": 570.6791059319214
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/range",
+        "values": {
+          "max": 1,
+          "min": 0.1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/range-1768824422985",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768824447179",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "selected": false,
+      "type": "math/range"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mul",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "extent": "parent",
+      "id": "math/mul-1768824435448",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768824447179",
+      "position": {
+        "x": 310.6791059319214,
+        "y": 220.88651790642842
+      },
+      "selected": false,
+      "type": "math/mul"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "radius ratio"
+        }
+      },
+      "id": "group-1768824516529",
+      "measured": {
+        "height": 249,
+        "width": 300
+      },
+      "position": {
+        "x": 1060.3752971860295,
+        "y": 420.1722949234047
+      },
+      "selected": false,
+      "style": {
+        "height": 249,
+        "width": 300
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/range",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/range-1768824508496",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768824516529",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "selected": false,
+      "type": "math/range"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "radius"
+        }
+      },
+      "id": "group-1768825127909",
+      "measured": {
+        "height": 334,
+        "width": 671
+      },
+      "position": {
+        "x": 1452.2816206376658,
+        "y": 457.3550241689218
+      },
+      "selected": false,
+      "style": {
+        "height": 334.0111475451082,
+        "width": 671.2269824854063
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/pow",
+        "values": {
+          "x": 2,
+          "y": 1.5
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/pow-1768824546572",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825127909",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "selected": false,
+      "type": "math/pow"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mul",
+        "values": {
+          "a": 1,
+          "b": 5
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/mul-1768824560982",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825127909",
+      "position": {
+        "x": 411.22698248540655,
+        "y": 125.0111475451082
+      },
+      "selected": false,
+      "type": "math/mul"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "branches"
+        }
+      },
+      "id": "group-1768824602945",
+      "measured": {
+        "height": 221,
+        "width": 300
+      },
+      "position": {
+        "x": 1073.7335653199125,
+        "y": 737.599529188019
+      },
+      "selected": false,
+      "style": {
+        "height": 221,
+        "width": 300
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/float",
+        "values": {
+          "value": 3
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/float-1768824599794",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768824602945",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "selected": false,
+      "type": "const/float"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "branch angles"
+        }
+      },
+      "dragging": false,
+      "id": "group-1768824781410",
+      "measured": {
+        "height": 621,
+        "width": 928
+      },
+      "position": {
+        "x": 1389.707638918113,
+        "y": 814.9766187454745
+      },
+      "selected": false,
+      "style": {
+        "height": 621.4087729004325,
+        "width": 928.1775255584184
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/range",
+        "values": {
+          "max": 1,
+          "min": 0
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/range-1768824626231",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768824781410",
+      "position": {
+        "x": 102.49331355776144,
+        "y": 40
+      },
+      "selected": false,
+      "type": "math/range"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/floor",
+        "values": {
+          "x": 0
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/floor-1768824648078",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768824781410",
+      "position": {
+        "x": 363.33658909139785,
+        "y": 179.8497079668291
+      },
+      "selected": false,
+      "type": "math/floor"
+    },
+    {
+      "data": {
+        "connected": {},
+        "dynamicPorts": [
+          {
+            "id": "out",
+            "label": "Result",
+            "type": "any"
+          }
+        ],
+        "type": "code/twopi-1768824726228-1768824731211",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "code/twopi-1768824726228-1768824731211-1768824731211",
+      "measured": {
+        "height": 113,
+        "width": 220
+      },
+      "parentId": "group-1768824781410",
+      "position": {
+        "x": 40,
+        "y": 377.6858633037334
+      },
+      "selected": false,
+      "type": "code/twopi-1768824726228-1768824731211"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/div",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/div-1768824743183",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768824781410",
+      "position": {
+        "x": 352.33717385805153,
+        "y": 412.4087729004325
+      },
+      "selected": false,
+      "type": "math/div"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mul",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "extent": "parent",
+      "id": "math/mul-1768824763570",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768824781410",
+      "position": {
+        "x": 668.1775255584184,
+        "y": 300.8432755336364
+      },
+      "selected": false,
+      "type": "math/mul"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "angle"
+        }
+      },
+      "id": "group-1768825054376",
+      "measured": {
+        "height": 464,
+        "width": 1042
+      },
+      "position": {
+        "x": 2327.7915925325487,
+        "y": 569.2312649405384
+      },
+      "selected": false,
+      "style": {
+        "height": 463.8974001380685,
+        "width": 1041.6929857767045
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "dynamicPorts": [
+          {
+            "id": "in_0",
+            "label": "a",
+            "type": "any"
+          },
+          {
+            "id": "out",
+            "label": "Result",
+            "type": "any"
+          }
+        ],
+        "type": "code/onesub-1768824985793-1768824994309",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "code/onesub-1768824985793-1768824994309-1768824994309",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825054376",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "selected": false,
+      "type": "code/onesub-1768824985793-1768824994309"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mul",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/mul-1768825020943",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825054376",
+      "position": {
+        "x": 439.6929857767045,
+        "y": 136.89740013806852
+      },
+      "selected": false,
+      "type": "math/mul"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "geo/time",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "geo/time-1768825026327",
+      "measured": {
+        "height": 113,
+        "width": 220
+      },
+      "parentId": "group-1768825054376",
+      "position": {
+        "x": 55.69298577670452,
+        "y": 240.89740013806852
+      },
+      "selected": false,
+      "type": "geo/time"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/add",
+        "values": {
+          "a": 0,
+          "b": 0
+        }
+      },
+      "extent": "parent",
+      "id": "math/add-1768825041617",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825054376",
+      "position": {
+        "x": 781.6929857767045,
+        "y": 254.89740013806852
+      },
+      "selected": false,
+      "type": "math/add"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "pos"
+        }
+      },
+      "id": "group-1768825156142",
+      "measured": {
+        "height": 553,
+        "width": 1006
+      },
+      "position": {
+        "x": 3505.4845783092533,
+        "y": 696.1286650786069
+      },
+      "selected": false,
+      "style": {
+        "height": 553,
+        "width": 1006
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/cos",
+        "values": {
+          "x": 0
+        }
+      },
+      "extent": "parent",
+      "id": "math/cos-1768825078917",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825156142",
+      "position": {
+        "x": 48,
+        "y": 40
+      },
+      "selected": false,
+      "type": "math/cos"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/sin",
+        "values": {
+          "x": 0
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/sin-1768825082915",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825156142",
+      "position": {
+        "x": 40,
+        "y": 372
+      },
+      "selected": false,
+      "type": "math/sin"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/vec3",
+        "values": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "extent": "parent",
+      "id": "const/vec3-1768825089882",
+      "measured": {
+        "height": 197,
+        "width": 220
+      },
+      "parentId": "group-1768825156142",
+      "position": {
+        "x": 378,
+        "y": 116
+      },
+      "selected": false,
+      "type": "const/vec3"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mul",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "extent": "parent",
+      "id": "math/mul-1768825109582",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825156142",
+      "position": {
+        "x": 746,
+        "y": 288
+      },
+      "selected": false,
+      "type": "math/mul"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "random offset"
+        }
+      },
+      "dragging": false,
+      "id": "group-1768825305392",
+      "measured": {
+        "height": 563,
+        "width": 1502
+      },
+      "position": {
+        "x": 2693.670195113018,
+        "y": 1304.13150288635
+      },
+      "selected": false,
+      "style": {
+        "height": 562.620657051938,
+        "width": 1502.1212725694263
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/vec3",
+        "values": {
+          "x": -1,
+          "y": -1,
+          "z": -1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/vec3-1768825178226",
+      "measured": {
+        "height": 197,
+        "width": 220
+      },
+      "parentId": "group-1768825305392",
+      "position": {
+        "x": 43.67702428318489,
+        "y": 40
+      },
+      "selected": false,
+      "type": "const/vec3"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/vec3",
+        "values": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/vec3-1768825218808",
+      "measured": {
+        "height": 197,
+        "width": 220
+      },
+      "parentId": "group-1768825305392",
+      "position": {
+        "x": 40,
+        "y": 255.24846035472274
+      },
+      "selected": false,
+      "type": "const/vec3"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/range",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/range-1768825233159",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825305392",
+      "position": {
+        "x": 359.93944977475894,
+        "y": 185.0968974292955
+      },
+      "selected": false,
+      "type": "math/range"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/pow",
+        "values": {
+          "x": 2,
+          "y": 3
+        }
+      },
+      "extent": "parent",
+      "id": "math/pow-1768825241407",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825305392",
+      "position": {
+        "x": 656.9997845635044,
+        "y": 203.86648426667307
+      },
+      "selected": false,
+      "type": "math/pow"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mul",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/mul-1768825253043",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825305392",
+      "position": {
+        "x": 913.4528804987117,
+        "y": 276.2608430526782
+      },
+      "selected": false,
+      "type": "math/mul"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/add",
+        "values": {
+          "a": 0,
+          "b": 0.2
+        }
+      },
+      "extent": "parent",
+      "id": "math/add-1768825291309",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825305392",
+      "position": {
+        "x": 1242.1212725694263,
+        "y": 353.620657051938
+      },
+      "selected": false,
+      "type": "math/add"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/add",
+        "values": {
+          "a": 0,
+          "b": 0
+        }
+      },
+      "id": "math/add-1768825327909",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "position": {
+        "x": 4629.791467682444,
+        "y": 1131.752159938288
+      },
+      "selected": false,
+      "type": "math/add"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "colorFinal"
+        }
+      },
+      "id": "group-1768825619873",
+      "measured": {
+        "height": 755,
+        "width": 1206
+      },
+      "position": {
+        "x": 3666.041467682444,
+        "y": -194.3683041803269
+      },
+      "selected": false,
+      "style": {
+        "height": 755.120464118615,
+        "width": 1206
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/color",
+        "values": {
+          "localName": "colorOutside",
+          "value": "#311599"
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/color-1768825457975",
+      "measured": {
+        "height": 225,
+        "width": 220
+      },
+      "parentId": "group-1768825619873",
+      "position": {
+        "x": 63.8837818360671,
+        "y": 314.4319677237115
+      },
+      "selected": false,
+      "type": "const/color"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/color",
+        "values": {
+          "localName": "colorInside",
+          "value": "#edbe4c"
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/color-1768825458123",
+      "measured": {
+        "height": 225,
+        "width": 220
+      },
+      "parentId": "group-1768825619873",
+      "position": {
+        "x": 66.34327811217645,
+        "y": 40
+      },
+      "selected": true,
+      "type": "const/color"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/mix",
+        "values": {
+          "a": 0,
+          "b": 1,
+          "t": 0.5
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/mix-1768825542149",
+      "measured": {
+        "height": 197,
+        "width": 220
+      },
+      "parentId": "group-1768825619873",
+      "position": {
+        "x": 946,
+        "y": 238.12046411861496
+      },
+      "selected": false,
+      "type": "math/mix"
+    },
+    {
+      "data": {
+        "connected": {},
+        "dynamicPorts": [
+          {
+            "id": "in_0",
+            "label": "a",
+            "type": "any"
+          },
+          {
+            "id": "out",
+            "label": "Result",
+            "type": "any"
+          }
+        ],
+        "type": "code/onesub-1768824985793",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "code/onesub-1768824985793-1768825564624",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825619873",
+      "position": {
+        "x": 40,
+        "y": 556.120464118615
+      },
+      "selected": false,
+      "type": "code/onesub-1768824985793"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/pow",
+        "values": {
+          "x": 2,
+          "y": 2
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/pow-1768825582152",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825619873",
+      "position": {
+        "x": 280,
+        "y": 546.120464118615
+      },
+      "selected": false,
+      "type": "math/pow"
+    },
+    {
+      "data": {
+        "connected": {},
+        "dynamicPorts": [
+          {
+            "id": "in_0",
+            "label": "a",
+            "type": "any"
+          },
+          {
+            "id": "out",
+            "label": "Result",
+            "type": "any"
+          }
+        ],
+        "type": "code/onesub-1768824985793",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "code/onesub-1768824985793-1768825589307",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825619873",
+      "position": {
+        "x": 542,
+        "y": 514.120464118615
+      },
+      "selected": false,
+      "type": "code/onesub-1768824985793"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/split",
+        "values": {
+          "in": 0
+        }
+      },
+      "dragging": false,
+      "id": "math/split-1768825641470",
+      "measured": {
+        "height": 253,
+        "width": 220
+      },
+      "position": {
+        "x": 4966.041467682444,
+        "y": -94.24784006171194
+      },
+      "selected": false,
+      "type": "math/split"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "group",
+        "values": {
+          "label": "alpha"
+        }
+      },
+      "id": "group-1768825740188",
+      "measured": {
+        "height": 566,
+        "width": 1469
+      },
+      "position": {
+        "x": 4925.003486922036,
+        "y": 234.89109262767522
+      },
+      "selected": false,
+      "style": {
+        "height": 565.8610673106128,
+        "width": 1469.0379807604077
+      },
+      "type": "group"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/float",
+        "values": {
+          "value": 0.1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "const/float-1768825653169",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825740188",
+      "position": {
+        "x": 43.853027304538955,
+        "y": 40
+      },
+      "selected": false,
+      "type": "const/float"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "geo/uv",
+        "values": {}
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "geo/uv-1768825671426",
+      "measured": {
+        "height": 197,
+        "width": 220
+      },
+      "parentId": "group-1768825740188",
+      "position": {
+        "x": 40,
+        "y": 230.33399287765383
+      },
+      "selected": false,
+      "type": "geo/uv"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/sub",
+        "values": {
+          "a": 0,
+          "b": 0.5
+        }
+      },
+      "extent": "parent",
+      "id": "math/sub-1768825682291",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825740188",
+      "position": {
+        "x": 351.03798076040766,
+        "y": 308.86106731061284
+      },
+      "selected": false,
+      "type": "math/sub"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/length",
+        "values": {
+          "x": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "extent": "parent",
+      "id": "math/length-1768825688091",
+      "measured": {
+        "height": 141,
+        "width": 220
+      },
+      "parentId": "group-1768825740188",
+      "position": {
+        "x": 615.0379807604077,
+        "y": 384.86106731061284
+      },
+      "selected": false,
+      "type": "math/length"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/div",
+        "values": {
+          "a": 1,
+          "b": 1
+        }
+      },
+      "dragging": false,
+      "extent": "parent",
+      "id": "math/div-1768825697223",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825740188",
+      "position": {
+        "x": 901.0379807604077,
+        "y": 102.86106731061284
+      },
+      "selected": false,
+      "type": "math/div"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "math/sub",
+        "values": {
+          "a": 0,
+          "b": 0.2
+        }
+      },
+      "extent": "parent",
+      "id": "math/sub-1768825723888",
+      "measured": {
+        "height": 169,
+        "width": 220
+      },
+      "parentId": "group-1768825740188",
+      "position": {
+        "x": 1209.0379807604077,
+        "y": 226.86106731061284
+      },
+      "selected": false,
+      "type": "math/sub"
+    },
+    {
+      "data": {
+        "connected": {},
+        "type": "const/vec4",
+        "values": {
+          "w": 1,
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "dragging": false,
+      "id": "const/vec4-1768825753812",
+      "measured": {
+        "height": 225,
+        "width": 220
+      },
+      "position": {
+        "x": 6464.041467682444,
+        "y": 111.75215993828806
+      },
+      "selected": false,
+      "type": "const/vec4"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-math/range-1768824422985-out-math/mul-1768824435448-a",
+      "source": "math/range-1768824422985",
+      "sourceHandle": "out",
+      "target": "math/mul-1768824435448",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__const/float-1768824395663out-math/mul-1768824435448b",
+      "source": "const/float-1768824395663",
+      "sourceHandle": "out",
+      "target": "math/mul-1768824435448",
+      "targetHandle": "b"
+    },
+    {
+      "id": "xy-edge__math/mul-1768824435448out-material/sprite-1768809014161scaleNode",
+      "source": "math/mul-1768824435448",
+      "sourceHandle": "out",
+      "target": "material/sprite-1768809014161",
+      "targetHandle": "scaleNode"
+    },
+    {
+      "id": "edge-math/range-1768824508496-out-math/pow-1768824546572-x",
+      "source": "math/range-1768824508496",
+      "sourceHandle": "out",
+      "target": "math/pow-1768824546572",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-math/pow-1768824546572-out-math/mul-1768824560982-a",
+      "source": "math/pow-1768824546572",
+      "sourceHandle": "out",
+      "target": "math/mul-1768824560982",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__const/float-1768824599794out-math/range-1768824626231max",
+      "source": "const/float-1768824599794",
+      "sourceHandle": "out",
+      "target": "math/range-1768824626231",
+      "targetHandle": "max"
+    },
+    {
+      "id": "edge-math/range-1768824626231-out-math/floor-1768824648078-x",
+      "source": "math/range-1768824626231",
+      "sourceHandle": "out",
+      "target": "math/floor-1768824648078",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-code/twopi-1768824726228-1768824731211-1768824731211-out-math/div-1768824743183-a",
+      "source": "code/twopi-1768824726228-1768824731211-1768824731211",
+      "sourceHandle": "out",
+      "target": "math/div-1768824743183",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__const/float-1768824599794out-math/div-1768824743183b",
+      "source": "const/float-1768824599794",
+      "sourceHandle": "out",
+      "target": "math/div-1768824743183",
+      "targetHandle": "b"
+    },
+    {
+      "id": "edge-math/floor-1768824648078-out-math/mul-1768824763570-a",
+      "source": "math/floor-1768824648078",
+      "sourceHandle": "out",
+      "target": "math/mul-1768824763570",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__math/div-1768824743183out-math/mul-1768824763570b",
+      "source": "math/div-1768824743183",
+      "sourceHandle": "out",
+      "target": "math/mul-1768824763570",
+      "targetHandle": "b"
+    },
+    {
+      "id": "xy-edge__math/range-1768824508496out-code/onesub-1768824985793-1768824994309-1768824994309in_0",
+      "source": "math/range-1768824508496",
+      "sourceHandle": "out",
+      "target": "code/onesub-1768824985793-1768824994309-1768824994309",
+      "targetHandle": "in_0"
+    },
+    {
+      "id": "edge-code/onesub-1768824985793-1768824994309-1768824994309-out-math/mul-1768825020943-a",
+      "source": "code/onesub-1768824985793-1768824994309-1768824994309",
+      "sourceHandle": "out",
+      "target": "math/mul-1768825020943",
+      "targetHandle": "a"
+    },
+    {
+      "id": "edge-geo/time-1768825026327-out-math/mul-1768825020943-b",
+      "source": "geo/time-1768825026327",
+      "sourceHandle": "out",
+      "target": "math/mul-1768825020943",
+      "targetHandle": "b"
+    },
+    {
+      "id": "edge-math/mul-1768825020943-out-math/add-1768825041617-a",
+      "source": "math/mul-1768825020943",
+      "sourceHandle": "out",
+      "target": "math/add-1768825041617",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__math/mul-1768824763570out-math/add-1768825041617b",
+      "source": "math/mul-1768824763570",
+      "sourceHandle": "out",
+      "target": "math/add-1768825041617",
+      "targetHandle": "b"
+    },
+    {
+      "id": "edge-math/add-1768825041617-out-math/cos-1768825078917-x",
+      "source": "math/add-1768825041617",
+      "sourceHandle": "out",
+      "target": "math/cos-1768825078917",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-math/add-1768825041617-out-math/sin-1768825082915-x",
+      "source": "math/add-1768825041617",
+      "sourceHandle": "out",
+      "target": "math/sin-1768825082915",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-math/cos-1768825078917-out-const/vec3-1768825089882-x",
+      "source": "math/cos-1768825078917",
+      "sourceHandle": "out",
+      "target": "const/vec3-1768825089882",
+      "targetHandle": "x"
+    },
+    {
+      "id": "xy-edge__math/sin-1768825082915out-const/vec3-1768825089882z",
+      "source": "math/sin-1768825082915",
+      "sourceHandle": "out",
+      "target": "const/vec3-1768825089882",
+      "targetHandle": "z"
+    },
+    {
+      "id": "edge-const/vec3-1768825089882-out-math/mul-1768825109582-a",
+      "source": "const/vec3-1768825089882",
+      "sourceHandle": "out",
+      "target": "math/mul-1768825109582",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__math/mul-1768824560982out-math/mul-1768825109582b",
+      "source": "math/mul-1768824560982",
+      "sourceHandle": "out",
+      "target": "math/mul-1768825109582",
+      "targetHandle": "b"
+    },
+    {
+      "id": "xy-edge__const/vec3-1768825178226out-math/range-1768825233159min",
+      "source": "const/vec3-1768825178226",
+      "sourceHandle": "out",
+      "target": "math/range-1768825233159",
+      "targetHandle": "min"
+    },
+    {
+      "id": "xy-edge__const/vec3-1768825218808out-math/range-1768825233159max",
+      "source": "const/vec3-1768825218808",
+      "sourceHandle": "out",
+      "target": "math/range-1768825233159",
+      "targetHandle": "max"
+    },
+    {
+      "id": "edge-math/range-1768825233159-out-math/pow-1768825241407-x",
+      "source": "math/range-1768825233159",
+      "sourceHandle": "out",
+      "target": "math/pow-1768825241407",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-math/pow-1768825241407-out-math/mul-1768825253043-a",
+      "source": "math/pow-1768825241407",
+      "sourceHandle": "out",
+      "target": "math/mul-1768825253043",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__math/range-1768824508496out-math/mul-1768825253043b",
+      "source": "math/range-1768824508496",
+      "sourceHandle": "out",
+      "target": "math/mul-1768825253043",
+      "targetHandle": "b"
+    },
+    {
+      "id": "edge-math/mul-1768825253043-out-math/add-1768825291309-a",
+      "source": "math/mul-1768825253043",
+      "sourceHandle": "out",
+      "target": "math/add-1768825291309",
+      "targetHandle": "a"
+    },
+    {
+      "id": "edge-math/mul-1768825109582-out-math/add-1768825327909-a",
+      "source": "math/mul-1768825109582",
+      "sourceHandle": "out",
+      "target": "math/add-1768825327909",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__math/add-1768825291309out-math/add-1768825327909b",
+      "source": "math/add-1768825291309",
+      "sourceHandle": "out",
+      "target": "math/add-1768825327909",
+      "targetHandle": "b"
+    },
+    {
+      "id": "xy-edge__math/add-1768825327909out-material/sprite-1768809014161positionNode",
+      "source": "math/add-1768825327909",
+      "sourceHandle": "out",
+      "target": "material/sprite-1768809014161",
+      "targetHandle": "positionNode"
+    },
+    {
+      "id": "edge-const/color-1768825458123-out-math/mix-1768825542149-a",
+      "source": "const/color-1768825458123",
+      "sourceHandle": "out",
+      "target": "math/mix-1768825542149",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__const/color-1768825457975out-math/mix-1768825542149b",
+      "source": "const/color-1768825457975",
+      "sourceHandle": "out",
+      "target": "math/mix-1768825542149",
+      "targetHandle": "b"
+    },
+    {
+      "id": "edge-math/range-1768824508496-out-code/onesub-1768824985793-1768825564624-in_0",
+      "source": "math/range-1768824508496",
+      "sourceHandle": "out",
+      "target": "code/onesub-1768824985793-1768825564624",
+      "targetHandle": "in_0"
+    },
+    {
+      "id": "edge-code/onesub-1768824985793-1768825564624-out-math/pow-1768825582152-x",
+      "source": "code/onesub-1768824985793-1768825564624",
+      "sourceHandle": "out",
+      "target": "math/pow-1768825582152",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-math/pow-1768825582152-out-code/onesub-1768824985793-1768825589307-in_0",
+      "source": "math/pow-1768825582152",
+      "sourceHandle": "out",
+      "target": "code/onesub-1768824985793-1768825589307",
+      "targetHandle": "in_0"
+    },
+    {
+      "id": "xy-edge__code/onesub-1768824985793-1768825589307out-math/mix-1768825542149t",
+      "source": "code/onesub-1768824985793-1768825589307",
+      "sourceHandle": "out",
+      "target": "math/mix-1768825542149",
+      "targetHandle": "t"
+    },
+    {
+      "id": "edge-math/mix-1768825542149-out-math/split-1768825641470-in",
+      "source": "math/mix-1768825542149",
+      "sourceHandle": "out",
+      "target": "math/split-1768825641470",
+      "targetHandle": "in"
+    },
+    {
+      "id": "edge-geo/uv-1768825671426-out-math/sub-1768825682291-a",
+      "source": "geo/uv-1768825671426",
+      "sourceHandle": "out",
+      "target": "math/sub-1768825682291",
+      "targetHandle": "a"
+    },
+    {
+      "id": "edge-math/sub-1768825682291-out-math/length-1768825688091-x",
+      "source": "math/sub-1768825682291",
+      "sourceHandle": "out",
+      "target": "math/length-1768825688091",
+      "targetHandle": "x"
+    },
+    {
+      "id": "edge-const/float-1768825653169-out-math/div-1768825697223-a",
+      "source": "const/float-1768825653169",
+      "sourceHandle": "out",
+      "target": "math/div-1768825697223",
+      "targetHandle": "a"
+    },
+    {
+      "id": "xy-edge__math/length-1768825688091out-math/div-1768825697223b",
+      "source": "math/length-1768825688091",
+      "sourceHandle": "out",
+      "target": "math/div-1768825697223",
+      "targetHandle": "b"
+    },
+    {
+      "id": "edge-math/div-1768825697223-out-math/sub-1768825723888-a",
+      "source": "math/div-1768825697223",
+      "sourceHandle": "out",
+      "target": "math/sub-1768825723888",
+      "targetHandle": "a"
+    },
+    {
+      "id": "edge-math/split-1768825641470-x-const/vec4-1768825753812-x",
+      "source": "math/split-1768825641470",
+      "sourceHandle": "x",
+      "target": "const/vec4-1768825753812",
+      "targetHandle": "x"
+    },
+    {
+      "id": "xy-edge__math/split-1768825641470y-const/vec4-1768825753812y",
+      "source": "math/split-1768825641470",
+      "sourceHandle": "y",
+      "target": "const/vec4-1768825753812",
+      "targetHandle": "y"
+    },
+    {
+      "id": "xy-edge__math/split-1768825641470z-const/vec4-1768825753812z",
+      "source": "math/split-1768825641470",
+      "sourceHandle": "z",
+      "target": "const/vec4-1768825753812",
+      "targetHandle": "z"
+    },
+    {
+      "id": "xy-edge__math/sub-1768825723888out-const/vec4-1768825753812w",
+      "source": "math/sub-1768825723888",
+      "sourceHandle": "out",
+      "target": "const/vec4-1768825753812",
+      "targetHandle": "w"
+    },
+    {
+      "id": "xy-edge__const/vec4-1768825753812out-material/sprite-1768809014161colorNode",
+      "source": "const/vec4-1768825753812",
+      "sourceHandle": "out",
+      "target": "material/sprite-1768809014161",
+      "targetHandle": "colorNode"
+    }
+  ],
+  "subgraphs": {},
+  "codeNodes": {
+    "code/onepro-1768703901736-1768703904267-1768742527102": {
+      "code": "Fn(() => {\nconst one = Fn(([in1]) => {\nreturn float(1)\n})\nreturn float(0).add(one())\n})",
+      "createdAt": 1768742527102,
+      "id": "code/onepro-1768703901736-1768703904267-1768742527102",
+      "inputs": [],
+      "name": "onepro",
+      "output": {
+        "id": "out",
+        "label": "Result",
+        "type": "any"
+      },
+      "templateId": "j576ncpv4xg7ktvw59yvtj5t1n7zfxpn",
+      "templateVersion": 7,
+      "updatedAt": 1768742527102
+    },
+    "code/onesub-1768824985793": {
+      "code": "Fn(([a]) => {\nreturn float(1).sub(a)\n})",
+      "createdAt": 1768824985793,
+      "id": "code/onesub-1768824985793",
+      "inputs": [
+        {
+          "id": "in_0",
+          "label": "a",
+          "type": "any"
+        }
+      ],
+      "name": "onesub",
+      "output": {
+        "id": "out",
+        "label": "Result",
+        "type": "any"
+      },
+      "templateId": "j571jez3j3an8wn7ke5z6s2rt97zhnp1",
+      "templateVersion": 1,
+      "updatedAt": 1768824985793
+    },
+    "code/onesub-1768824985793-1768824994309": {
+      "code": "Fn(([a]) => {\nreturn float(1).sub(a)\n})",
+      "createdAt": 1768824994309,
+      "id": "code/onesub-1768824985793-1768824994309",
+      "inputs": [
+        {
+          "id": "in_0",
+          "label": "a",
+          "type": "any"
+        }
+      ],
+      "name": "onesub",
+      "output": {
+        "id": "out",
+        "label": "Result",
+        "type": "any"
+      },
+      "templateId": "j571jez3j3an8wn7ke5z6s2rt97zhnp1",
+      "templateVersion": 1,
+      "updatedAt": 1768824994309
+    },
+    "code/twopi-1768824726228": {
+      "code": "Fn(() => {\nreturn 6.2831\n})",
+      "createdAt": 1768824726228,
+      "id": "code/twopi-1768824726228",
+      "inputs": [],
+      "name": "TWOPI",
+      "output": {
+        "id": "out",
+        "label": "Result",
+        "type": "any"
+      },
+      "templateId": "j572r8y6bxgjywnm46zd4hxs7d7zgf71",
+      "templateVersion": 1,
+      "updatedAt": 1768824726228
+    },
+    "code/twopi-1768824726228-1768824731211": {
+      "code": "Fn(() => {\nreturn 6.2831\n})",
+      "createdAt": 1768824731211,
+      "id": "code/twopi-1768824726228-1768824731211",
+      "inputs": [],
+      "name": "TWOPI",
+      "output": {
+        "id": "out",
+        "label": "Result",
+        "type": "any"
+      },
+      "templateId": "j572r8y6bxgjywnm46zd4hxs7d7zgf71",
+      "templateVersion": 1,
+      "updatedAt": 1768824731211
+    }
+  },
+  "previewSettings": {
+    "instanceCount": 2000,
+    "isInstanced": true,
+    "mesh": "plane"
+  }
+}

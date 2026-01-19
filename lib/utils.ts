@@ -25,3 +25,22 @@ export const getAbsolutePosition = (node: Node<TSLNodeData>, nodes: Node<TSLNode
   }
   return { x, y };
 };
+
+import { ConvexError } from "convex/values";
+
+/**
+ * Extracts a user-friendly error message from an error object.
+ * Handles ConvexError with structured data { code, message } as well as standard Errors.
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ConvexError) {
+    // Handle structured error data { code, message }
+    const data = error.data as { message?: string; code?: number } | string;
+    if (typeof data === 'string') return data;
+    return data.message || 'An unexpected error occurred';
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'An unexpected error occurred';
+}

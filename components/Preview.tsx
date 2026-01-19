@@ -1,27 +1,27 @@
 'use client';
 
-import { useRef, useEffect, useState, useMemo } from 'react';
-import { useEditorStore } from '@/store/editor';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useEditorStore, PreviewMeshType } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input'; // Keeping it if instance count uses it or we can replace that too
+import { DebouncedInput } from './DebouncedInput';
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
-type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
+import { Maximize2, Minimize2, Settings2 } from 'lucide-react';
+import { Id } from '@/convex/_generated/dataModel';
 
-import { Maximize2, Minimize2 } from 'lucide-react';
-
-export function Preview() {
+export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -31,14 +31,98 @@ export function Preview() {
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
 
-    const [currentMesh, setCurrentMesh] = useState<PreviewMesh>('sphere');
-    const isInstanced = useEditorStore((state) => state.isInstanced);
-    const setIsInstanced = useEditorStore((state) => state.setIsInstanced);
-    const instanceCount = useEditorStore((state) => state.instanceCount);
-    const setInstanceCount = useEditorStore((state) => state.setInstanceCount);
+    const previewSettings = useEditorStore((state) => state.previewSettings);
+    const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
+
     const [isReady, setIsReady] = useState(false);
+
+    // Thumbnail generation
+    const generateThumbnailUploadUrl = useMutation(api.projects.generateThumbnailUploadUrl);
+    const updateThumbnail = useMutation(api.projects.updateThumbnail);
+    const nodes = useEditorStore((state) => state.nodes);
+    const lastSnapshotNodeCount = useRef(nodes.length);
+    // Track if we've done the initial snapshot for this session
+    const initialSnapshotTaken = useRef(false);
+
+    const captureSnapshot = useCallback(async () => {
+        if (!rendererRef.current || !props.projectId) return;
+
+        try {
+            // Convert canvas to blob
+            const canvas = rendererRef.current.domElement;
+            const blob = await new Promise<Blob | null>((resolve) => {
+                canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.7);
+            });
+
+            if (!blob) {
+                console.error('Failed to create blob from canvas');
+                return;
+            }
+
+            // Get upload URL from Convex
+            const uploadUrl = await generateThumbnailUploadUrl();
+
+            // Upload blob to Convex storage
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'image/jpeg' },
+                body: blob,
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to upload thumbnail');
+            }
+
+            const { storageId } = await response.json();
+
+            // Update project with new thumbnail (old one will be deleted by mutation)
+            await updateThumbnail({
+                id: props.projectId as Id<"projects">,
+                storageId,
+            });
+
+            console.log('Thumbnail updated');
+        } catch (err) {
+            console.error('Failed to update thumbnail:', err);
+        }
+    }, [props.projectId, generateThumbnailUploadUrl, updateThumbnail]);
+
+    // Initial snapshot when landing in editor
+    useEffect(() => {
+        if (isReady && props.projectId && !props.hasThumbnail && !initialSnapshotTaken.current) {
+            // Wait a bit for scene to settle/render
+            const timeout = setTimeout(() => {
+                captureSnapshot();
+                initialSnapshotTaken.current = true;
+            }, 1000);
+            return () => clearTimeout(timeout);
+        }
+    }, [isReady, props.projectId, props.hasThumbnail, captureSnapshot]);
+
+    // Snapshot every 5 nodes added
+    useEffect(() => {
+        if (!isReady || !props.projectId) return;
+
+        // If nodes decreased, just sync the ref to avoid getting stuck
+        if (nodes.length < lastSnapshotNodeCount.current) {
+            lastSnapshotNodeCount.current = nodes.length;
+            return;
+        }
+
+        // Check if we added 5+ nodes since last snapshot
+        if (nodes.length - lastSnapshotNodeCount.current >= 5) {
+            // Wait small delay for new node to render
+            const timeout = setTimeout(() => {
+                captureSnapshot();
+                lastSnapshotNodeCount.current = nodes.length;
+            }, 1000);
+            return () => clearTimeout(timeout);
+        }
+    }, [nodes.length, isReady, props.projectId, captureSnapshot]);
+
+
 
 
 
@@ -71,20 +155,56 @@ export function Preview() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
 
+    // Dispose material when it changes
+    useEffect(() => {
+        return () => {
+            material?.dispose();
+        };
+    }, [material]);
+
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {
-        switch (currentMesh) {
-            case 'cube':
-                return new THREE.BoxGeometry(1.5, 1.5, 1.5, 64, 64, 64);
+        const config = previewSettings.config || {};
+        switch (previewSettings.mesh) {
+            case 'box':
+                return new THREE.BoxGeometry(
+                    config.width ?? 1.5,
+                    config.height ?? 1.5,
+                    config.depth ?? 1.5,
+                    config.widthSegments ?? 1,
+                    config.heightSegments ?? 1,
+                    config.depthSegments ?? 1
+                );
             case 'torus':
-                return new THREE.TorusKnotGeometry(0.8, 0.3, 256, 64);
+                return new THREE.TorusKnotGeometry(
+                    config.radiusTorus ?? 0.8,
+                    config.tube ?? 0.3,
+                    config.tubularSegments ?? 32, // Lower default
+                    config.radialSegments ?? 16
+                );
             case 'plane':
-                return new THREE.PlaneGeometry(2, 2, 128, 128);
+                return new THREE.PlaneGeometry(
+                    config.widthPlane ?? 1,
+                    config.heightPlane ?? 1,
+                    config.widthSegmentsPlane ?? 1,
+                    config.heightSegmentsPlane ?? 1
+                );
             case 'sphere':
             default:
-                return new THREE.SphereGeometry(1, 128, 128);
+                return new THREE.SphereGeometry(
+                    config.radius ?? 1,
+                    config.widthSegmentsSphere ?? 32,
+                    config.heightSegmentsSphere ?? 16
+                );
         }
-    }, [currentMesh]);
+    }, [previewSettings.mesh, previewSettings.config]);
+
+    // Dispose geometry when it changes
+    useEffect(() => {
+        return () => {
+            geometry?.dispose();
+        };
+    }, [geometry]);
 
     const handleResize = () => {
         if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
@@ -94,6 +214,7 @@ export function Preview() {
         cameraRef.current.updateProjectionMatrix();
         rendererRef.current.setSize(w, h);
     };
+
 
     // Initialize Three.js with WebGPU
     useEffect(() => {
@@ -170,6 +291,26 @@ export function Preview() {
             if (controlsRef.current) {
                 controlsRef.current.dispose();
             }
+
+            // Clean up scene
+            if (sceneRef.current) {
+                sceneRef.current.traverse((object) => {
+                    if (object instanceof THREE.Mesh) {
+                        object.geometry?.dispose();
+                        if (Array.isArray(object.material)) {
+                            object.material.forEach(m => m.dispose());
+                        } else {
+                            object.material?.dispose();
+                        }
+                    }
+                    // Dispose helpers
+                    if (object instanceof THREE.GridHelper) {
+                        object.dispose();
+                    }
+                });
+                sceneRef.current.clear();
+            }
+
             if (rendererRef.current) {
                 rendererRef.current.dispose();
                 if (container.contains(rendererRef.current.domElement)) {
@@ -193,24 +334,9 @@ export function Preview() {
 
         let mesh: THREE.Mesh;
 
-        if (isInstanced) {
-            mesh = new THREE.InstancedMesh(geometry, material, instanceCount);
+        if (previewSettings.isInstanced) {
+            mesh = new THREE.InstancedMesh(geometry, material, previewSettings.instanceCount);
             mesh.position.set(0, 0, 0); // Galaxy usually centered
-            // We don't need to set matrices if the material handles positioning via storage/attributes,
-            // BUT for TSL SpriteNodeMaterial examples, it often uses instanceIndex.
-            // If it's a TSL example relying on `range(0, count)`, the dummy matrices are fine.
-            // If it relies on standard instanceMatrix, we might need to populate it.
-            // For the specific Galaxy example, it uses `range(0, 1).mul(size)` for scale
-            // and `range(0, 1)` for other calc.
-            // It essentially needs TSL to handle position.
-            // Standard InstancedMesh initialized with identity matrices is usually enough if TSL overrides position.
-
-            // However, to be safe, let's fill it with dummy data so it renders if TSL doesn't fully override
-            for (let i = 0; i < instanceCount; i++) {
-                const matrix = new THREE.Matrix4();
-                matrix.setPosition(0, 0, 0);
-                (mesh as THREE.InstancedMesh).setMatrixAt(i, matrix);
-            }
         } else {
             mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(0, 0, 0);
@@ -219,7 +345,17 @@ export function Preview() {
         sceneRef.current.add(mesh);
         meshRef.current = mesh;
 
-    }, [geometry, material, isInstanced, instanceCount]);
+
+
+    }, [geometry, material, previewSettings.isInstanced, previewSettings.instanceCount]);
+
+    useEffect(() => {
+        handleResize();
+    }, [isFullScreen])
+
+    useEffect(() => {
+        handleResize();
+    }, [isFullScreen])
 
     useEffect(() => {
         handleResize();
@@ -231,10 +367,10 @@ export function Preview() {
         const instanceCountNodes = nodes.filter(n => n.data.type === 'geo/instanceCount');
 
         instanceCountNodes.forEach(node => {
-            if (isInstanced) {
+            if (previewSettings.isInstanced) {
                 // Only update if value matches to avoid loops (though 100 !== 100 is false, so safe)
-                if (node.data.values?.value !== instanceCount) {
-                    updateNodeValue(node.id, 'value', instanceCount);
+                if (node.data.values?.value !== previewSettings.instanceCount) {
+                    updateNodeValue(node.id, 'value', previewSettings.instanceCount);
                 }
             } else {
                 if (node.data.values?.value !== 1) {
@@ -242,11 +378,11 @@ export function Preview() {
                 }
             }
         });
-    }, [instanceCount, isInstanced]);
+    }, [previewSettings.instanceCount, previewSettings.isInstanced]);
 
-    const meshOptions: { value: PreviewMesh; name: string }[] = [
+    const meshOptions: { value: PreviewMeshType; name: string }[] = [
         { value: 'sphere', name: 'Sphere' },
-        { value: 'cube', name: 'Cube' },
+        { value: 'box', name: 'Box' },
         { value: 'torus', name: 'Torus' },
         { value: 'plane', name: 'Plane' },
     ];
@@ -269,51 +405,226 @@ export function Preview() {
                 >
                     {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-auto px-2 text-xs">
-                            {meshOptions.find((opt) => opt.value === currentMesh)?.name}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Geometry</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            {meshOptions.map((opt) => (
-                                <DropdownMenuItem
-                                    key={opt.value}
-                                    onClick={() => setCurrentMesh(opt.value)}
-                                >
-                                    <span>{opt.name}</span>
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuGroup>
 
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Instancing</DropdownMenuLabel>
-                        <div className="p-2 flex flex-col gap-2">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs">Enable</label>
-                                <input
-                                    type="checkbox"
-                                    checked={isInstanced}
-                                    onChange={(e) => setIsInstanced(e.target.checked)}
-                                />
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Settings2 className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                        <div className="grid gap-4">
+                            <div className="space-y-2">
+                                <h4 className="font-medium leading-none">Preview Settings</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    Configure the preview geometry and instancing.
+                                </p>
                             </div>
-                            {isInstanced && (
-                                <div className="flex items-center gap-2">
-                                    <label className="text-xs">Count</label>
+
+                            <div className="grid gap-4">
+                                <div className="grid grid-cols-2 items-center gap-4">
+                                    <Label>Geometry</Label>
+                                    <select
+                                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
+                                        value={previewSettings.mesh}
+                                        onChange={(e) => updatePreviewSettings({ mesh: e.target.value as PreviewMeshType })}
+                                    >
+                                        {meshOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>
+                                                {opt.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Geometry Specific Controls */}
+                                {previewSettings.mesh === 'box' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Size (W/H/D)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.width ?? 1.5}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, width: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.height ?? 1.5}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, height: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.depth ?? 1.5}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, depth: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthSegments ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegments ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.depthSegments ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, depthSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'sphere' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Radius</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.radius ?? 1}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radius: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (W/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthSegmentsSphere ?? 32}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthSegmentsSphere: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegmentsSphere ?? 16}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegmentsSphere: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'torus' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Radius</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.radiusTorus ?? 0.8}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radiusTorus: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Tube</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.tube ?? 0.3}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, tube: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (T/R)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.tubularSegments ?? 32}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, tubularSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radialSegments ?? 16}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radialSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'plane' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Size (W/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (W/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthSegmentsPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthSegmentsPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegmentsPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegmentsPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="h-[1px] bg-border my-1" />
+
+                                <div className="flex items-center justify-between">
+                                    <Label>Instancing</Label>
                                     <input
-                                        type="number"
-                                        value={instanceCount}
-                                        onChange={(e) => setInstanceCount(Number(e.target.value))}
-                                        className="w-16 h-6 text-xs border rounded px-1 text-black"
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-primary"
+                                        checked={previewSettings.isInstanced}
+                                        onChange={(e) => updatePreviewSettings({ isInstanced: e.target.checked })}
                                     />
                                 </div>
-                            )}
+                                {previewSettings.isInstanced && (
+                                    <div className="grid grid-cols-2 items-center gap-4">
+                                        <Label>Instance Count</Label>
+                                        <Input
+                                            type="number"
+                                            value={previewSettings.instanceCount}
+                                            onChange={(e) => updatePreviewSettings({ instanceCount: Number(e.target.value) })}
+                                            className="h-8"
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </PopoverContent>
+                </Popover>
             </div>
 
             {/* Error display */}

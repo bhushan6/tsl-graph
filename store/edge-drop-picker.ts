@@ -1,10 +1,11 @@
 import { create } from 'zustand';
+import { TSLType } from '@/lib/types';
 
 type EdgeDropPickerState = {
     isOpen: boolean;
     screenPosition: { x: number; y: number };
     flowPosition: { x: number; y: number };
-    sourceDataType: string;
+    sourceDataType: TSLType | '';
     sourceNodeId: string;
     sourceHandleId: string;
     handleDirection: 'input' | 'output';

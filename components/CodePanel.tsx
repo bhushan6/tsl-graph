@@ -49,7 +49,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
-            <DialogContent className="max-h-[80vh] flex flex-col sm:max-w-fit z-[10000]">
+            <DialogContent className="max-h-[80vh] flex flex-col sm:max-w-[90vw] z-[10000]">
                 <DialogHeader>
                     <DialogTitle className="flex flex-col gap-1">
                         <span>TSL Output</span>
@@ -59,7 +59,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg w-fit">
+                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg w-full">
                     {/* Imports line */}
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border shrink-0">
                         <span className="text-xs text-muted-foreground font-mono truncate">

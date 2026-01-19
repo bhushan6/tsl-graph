@@ -2,13 +2,15 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
-import { cn } from '@/lib/utils';
+import { cn, getErrorMessage } from '@/lib/utils';
 import { NodeType } from '@/lib/types';
-import { X, ChevronDown, Search, Code, Plus, Layers, Cloud, Loader2 } from 'lucide-react';
+import { X, ChevronDown, Search, Code, Plus, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
     SidebarGroup,
     SidebarGroupLabel,
@@ -17,6 +19,12 @@ import {
     SidebarMenuItem,
     SidebarInput,
 } from '@/components/ui/sidebar';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Anchor node types that need special handling
 const ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'] as const;
@@ -225,6 +233,57 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
         [screenToFlowPosition, addNode, addCodeNodeDefinition]
     );
 
+    // Delete mutations
+    const deleteSubgraphTemplate = useMutation(api.templates.deleteSubgraphTemplate);
+    const deleteCodeNodeTemplate = useMutation(api.templates.deleteCodeNodeTemplate);
+    const [deletingTemplates, setDeletingTemplates] = useState<Set<string>>(new Set());
+
+    const handleDeleteSubgraphTemplate = useCallback(
+        async (templateId: Id<"subgraphTemplates">, templateName: string, e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (deletingTemplates.has(templateId)) return;
+
+            setDeletingTemplates(prev => new Set(prev).add(templateId));
+            try {
+                await deleteSubgraphTemplate({ id: templateId });
+                toast.success(`Deleted "${templateName}"`);
+            } catch (error) {
+                console.error('Failed to delete subgraph template:', error);
+                toast.error(getErrorMessage(error));
+            } finally {
+                setDeletingTemplates(prev => {
+                    const next = new Set(prev);
+                    next.delete(templateId);
+                    return next;
+                });
+            }
+        },
+        [deleteSubgraphTemplate, deletingTemplates]
+    );
+
+    const handleDeleteCodeNodeTemplate = useCallback(
+        async (templateId: Id<"codeNodeTemplates">, templateName: string, e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (deletingTemplates.has(templateId)) return;
+
+            setDeletingTemplates(prev => new Set(prev).add(templateId));
+            try {
+                await deleteCodeNodeTemplate({ id: templateId });
+                toast.success(`Deleted "${templateName}"`);
+            } catch (error) {
+                console.error('Failed to delete code node template:', error);
+                toast.error(getErrorMessage(error));
+            } finally {
+                setDeletingTemplates(prev => {
+                    const next = new Set(prev);
+                    next.delete(templateId);
+                    return next;
+                });
+            }
+        },
+        [deleteCodeNodeTemplate, deletingTemplates]
+    );
+
     // Show custom section if we have the code node dialog button or templates
     const showCustomSection = !!onOpenCodeNodeDialog;
 
@@ -355,32 +414,76 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
                             {/* User's Subgraph Templates */}
                             {filteredUserSubgraphTemplates.map((template) => (
                                 <SidebarMenuItem key={template._id}>
-                                    <button
-                                        onClick={() => handleAddSubgraphTemplate(template)}
-                                        className={cn(
-                                            menuButtonStyles,
-                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
-                                        )}
-                                    >
-                                        <Layers className="w-3 h-3" />
-                                        {template.name}
-                                    </button>
+                                    <div className="flex items-center w-full group">
+                                        <button
+                                            onClick={() => handleAddSubgraphTemplate(template)}
+                                            className={cn(
+                                                menuButtonStyles,
+                                                'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2 flex-1'
+                                            )}
+                                        >
+                                            <Layers className="w-3 h-3" />
+                                            <span className="truncate flex-1 text-left">{template.name}</span>
+                                        </button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    className="p-1 opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent rounded transition-opacity"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <MoreVertical className="w-3 h-3 text-muted-foreground" />
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="w-32">
+                                                <DropdownMenuItem
+                                                    variant="destructive"
+                                                    onClick={(e) => handleDeleteSubgraphTemplate(template._id, template.name, e)}
+                                                    disabled={deletingTemplates.has(template._id)}
+                                                >
+                                                    <Trash2 className="w-3 h-3 mr-2" />
+                                                    {deletingTemplates.has(template._id) ? 'Deleting...' : 'Delete'}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </SidebarMenuItem>
                             ))}
 
                             {/* User's Code Node Templates */}
                             {filteredUserCodeNodeTemplates.map((template) => (
                                 <SidebarMenuItem key={template._id}>
-                                    <button
-                                        onClick={() => handleAddCodeNodeTemplate(template)}
-                                        className={cn(
-                                            menuButtonStyles,
-                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
-                                        )}
-                                    >
-                                        <Code className="w-3 h-3" />
-                                        {template.name}
-                                    </button>
+                                    <div className="flex items-center w-full group">
+                                        <button
+                                            onClick={() => handleAddCodeNodeTemplate(template)}
+                                            className={cn(
+                                                menuButtonStyles,
+                                                'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2 flex-1'
+                                            )}
+                                        >
+                                            <Code className="w-3 h-3" />
+                                            <span className="truncate flex-1 text-left">{template.name}</span>
+                                        </button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    className="p-1 opacity-0 group-hover:opacity-100 hover:bg-sidebar-accent rounded transition-opacity"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <MoreVertical className="w-3 h-3 text-muted-foreground" />
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="w-32">
+                                                <DropdownMenuItem
+                                                    variant="destructive"
+                                                    onClick={(e) => handleDeleteCodeNodeTemplate(template._id, template.name, e)}
+                                                    disabled={deletingTemplates.has(template._id)}
+                                                >
+                                                    <Trash2 className="w-3 h-3 mr-2" />
+                                                    {deletingTemplates.has(template._id) ? 'Deleting...' : 'Delete'}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </SidebarMenuItem>
                             ))}
 

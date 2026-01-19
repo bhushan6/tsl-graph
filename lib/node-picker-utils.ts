@@ -1,8 +1,8 @@
 import { registry } from './registry';
 import { NodeDef } from './types';
 
-export interface GroupedNodeList {
-    [category: string]: NodeDef[];
+export interface GroupedNodeList<T> {
+    [category: string]: T[];
 }
 
 /**
@@ -52,8 +52,8 @@ export const getNodesWithOutputType = (targetDataType: string): NodeDef[] => {
     });
 };
 
-export const getGroupedCompatibleNodes = (nodes: NodeDef[]): GroupedNodeList => {
-    const grouped: GroupedNodeList = {};
+export const getGroupedCompatibleNodes = <T extends { category: string }>(nodes: T[]): GroupedNodeList<T> => {
+    const grouped: GroupedNodeList<T> = {};
     for (const def of nodes) {
         (grouped[def.category] ??= []).push(def);
     }

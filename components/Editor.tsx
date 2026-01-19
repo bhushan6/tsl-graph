@@ -11,11 +11,12 @@ import {
     useReactFlow,
     type Connection,
     type Edge,
+    type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
-import { AppNode } from '@/lib/types';
+import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import GroupNode from './GroupNode';
@@ -35,6 +36,7 @@ import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
+import type { Id } from '@/convex/_generated/dataModel';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -45,9 +47,15 @@ const edgeTypes = {
 
 interface NavbarProps {
     projectName?: string;
+    projectId?: Id<"projects">;
 }
 
-function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
+interface EditorProps extends NavbarProps {
+    projectId?: Id<"projects">;
+    hasThumbnail?: boolean;
+}
+
+function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: NavbarProps; projectId?: Id<"projects">; hasThumbnail?: boolean }) {
     const {
         nodes,
         edges,
@@ -68,26 +76,26 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
     const { screenToFlowPosition } = useReactFlow();
 
-    const isInitialized = useRef(false);
+    // const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
 
     // Load from localStorage on mount (for standalone editor without project)
-    useEffect(() => {
-        if (!isInitialized.current) {
-            isInitialized.current = true;
-            const loaded = loadFromLocalStorage();
-            if (!loaded) {
-                fetch('/demo-2.json')
-                    .then(response => response.text())
-                    .then(json => {
-                        loadFromJSON(json);
-                    })
-                    .catch(err => console.error('Failed to load demo graph:', err));
-            }
-        }
-    }, [loadFromLocalStorage, loadFromJSON]);
+    // useEffect(() => {
+    //     if (!isInitialized.current) {
+    //         isInitialized.current = true;
+    //         const loaded = loadFromLocalStorage();
+    //         if (!loaded) {
+    //             fetch('/demo-2.json')
+    //                 .then(response => response.text())
+    //                 .then(json => {
+    //                     loadFromJSON(json);
+    //                 })
+    //                 .catch(err => console.error('Failed to load demo graph:', err));
+    //         }
+    //     }
+    // }, [loadFromLocalStorage, loadFromJSON]);
 
 
     // Keyboard shortcuts for Undo/Redo
@@ -176,7 +184,7 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
     // Generate node types from registry + subgraphs - all use the same TSLNode component
     const nodeTypes: NodeTypes = useMemo(() => {
         const types: NodeTypes = {
-            group: GroupNode as any,
+            group: GroupNode,
         };
         // Add registry types
         for (const def of registry.all()) {
@@ -215,11 +223,11 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
         [getNodes, getEdges]
     );
 
-    const onConnectEnd = useCallback(
-        (event: MouseEvent | TouchEvent, connectionState: any) => {
+    const onConnectEnd: OnConnectEnd = useCallback(
+        (event, connectionState) => {
             if (!connectionState.isValid && connectionState.fromHandle && connectionState.fromNode) {
                 const { clientX, clientY } =
-                    'changedTouches' in event ? (event as any).changedTouches[0] : event;
+                    'changedTouches' in event ? (event as TouchEvent).changedTouches[0] : (event as MouseEvent);
 
                 const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
 
@@ -228,7 +236,7 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
                 const nodeType = node.type || node.data?.type;
                 const def = registry.get(nodeType);
 
-                let dataType = 'any';
+                let dataType: TSLType | '' = 'any';
                 let direction: 'input' | 'output' = 'output';
 
                 if (connectionState.fromHandle.type === 'target') {
@@ -293,7 +301,7 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
             {/* UI Layer */}
             < UILayer >
                 <UILayer.TopBar>
-                    <Navbar {...navbarProps} />
+                    <Navbar {...navbarProps} projectId={projectId} />
                 </UILayer.TopBar>
 
                 <UILayer.LeftPanel>
@@ -316,7 +324,7 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
                 </UILayer.LeftPanel>
 
                 <UILayer.RightPanel>
-                    {editorMode === 'main' && <Preview />}
+                    {editorMode === 'main' && <Preview projectId={projectId} hasThumbnail={hasThumbnail} />}
                     <PropertiesPanel />
                 </UILayer.RightPanel>
 
@@ -348,11 +356,11 @@ function EditorCanvas({ navbarProps }: { navbarProps?: NavbarProps }) {
     );
 }
 
-export function Editor(props: NavbarProps) {
+export function Editor(props: EditorProps) {
     return (
         <div className="w-full h-full relative">
             <ReactFlowProvider>
-                <EditorCanvas navbarProps={props} />
+                <EditorCanvas navbarProps={props} projectId={props.projectId} hasThumbnail={props.hasThumbnail} />
             </ReactFlowProvider>
         </div>
     );
