@@ -11,6 +11,8 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { PresetSelector } from "@/components/PresetSelector";
+import { useState } from "react";
 
 function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
     const project = useQuery(api.projects.get, { id: projectId });
@@ -29,6 +31,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
     const resetEditor = useEditorStore((s) => s.resetEditor);
 
     const hasLoadedRef = useRef(false);
+    const [showPresetSelector, setShowPresetSelector] = useState(false);
 
     // Reset editor on unmount
     useEffect(() => {
@@ -130,17 +133,49 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
 
     // Load project data when it arrives
     useEffect(() => {
-        if (project?.graphData && !hasLoadedRef.current) {
-            const json = JSON.stringify(project.graphData);
-            loadFromJSON(json);
+        if (project && !hasLoadedRef.current) {
+            const graphData = project.graphData;
+            const hasNodes = graphData && graphData.nodes && graphData.nodes.length > 0;
+
             setProjectId(projectId);
+
+            if (hasNodes) {
+                const json = JSON.stringify(graphData);
+                loadFromJSON(json);
+                // Set lastSavedVersion to current to prevent immediate re-save
+                useEditorStore.setState({
+                    isDirty: false
+                });
+            } else {
+                // Empty project - show selector
+                setShowPresetSelector(true);
+            }
             hasLoadedRef.current = true;
-            // Set lastSavedVersion to current to prevent immediate re-save
-            useEditorStore.setState({
-                isDirty: false
-            });
         }
     }, [project, loadFromJSON, projectId, setProjectId]);
+
+    const handlePresetSelect = async (url: string) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Failed to fetch preset");
+
+            const json = await response.text();
+            loadFromJSON(json);
+
+            // Save to backend immediately
+            const graphData = JSON.parse(json);
+            await updateProject({
+                id: projectId,
+                graphData,
+            });
+
+            useEditorStore.setState({ isDirty: false });
+            setShowPresetSelector(false);
+        } catch (error) {
+            console.error("Error loading preset:", error);
+            // Optionally show toast error here
+        }
+    };
 
     if (project === undefined) {
         return (
@@ -172,6 +207,12 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                     projectId={projectId}
                     hasThumbnail={!!project.thumbnail}
                 />
+                {showPresetSelector && (
+                    <PresetSelector
+                        onSelect={handlePresetSelect}
+                        onCancel={() => setShowPresetSelector(false)}
+                    />
+                )}
             </main>
         </div>
     );
