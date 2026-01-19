@@ -78,9 +78,8 @@ function getInputValue(
     const value = node.data.values?.[inputKey] ?? inputDef.default;
 
     if (inputDef.type === 'color') {
-        // Return just the quoted hex string - the TSL function wrapper is added by the caller
         const hex = String(value ?? '#ffffff');
-        return `"${hex}"`;
+        return `color("${hex}")`;
     }
 
     if (inputDef.type === 'bool') {
@@ -759,10 +758,7 @@ export function compileGraph(
                 // Wrap values in TSL constructors if they are primitives (to ensure they are Nodes)
                 let wrappedVal = valExpression;
 
-                if (inputDef.type === 'color') {
-                    // getInputValue returns quoted string for color, wrap in color()
-                    wrappedVal = `color(${valExpression})`;
-                } else if (inputDef.type === 'float') {
+                if (inputDef.type === 'float') {
                     // getInputValue returns number string, wrap in float()
                     wrappedVal = `float(${valExpression})`;
                 } else if (inputDef.type === 'int' || inputDef.type === 'uint') {
