@@ -215,23 +215,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         rendererRef.current.setSize(w, h);
     };
 
-    const handleResize = () => {
-        if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-        cameraRef.current.aspect = w / h;
-        cameraRef.current.updateProjectionMatrix();
-        rendererRef.current.setSize(w, h);
-    };
-
-    const handleResize = () => {
-        if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-        cameraRef.current.aspect = w / h;
-        cameraRef.current.updateProjectionMatrix();
-        rendererRef.current.setSize(w, h);
-    };
 
     // Initialize Three.js with WebGPU
     useEffect(() => {
