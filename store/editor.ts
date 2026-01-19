@@ -1598,6 +1598,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             history: { past: [], future: [] },
             canvasMode: 'pan',
             codeNodes: {},
+            previewSettings: {
+                mesh: 'sphere',
+                isInstanced: false,
+                instanceCount: 100,
+            },
             // Reset template callbacks as well? Probably no, they are set by the component. 
             // The component usually sets them in useEffect.
         });
