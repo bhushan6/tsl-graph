@@ -1,25 +1,24 @@
 'use client';
 
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { useEditorStore, PreviewMesh } from '@/store/editor';
+import { useEditorStore, PreviewMeshType } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input'; // Keeping it if instance count uses it or we can replace that too
+import { DebouncedInput } from './DebouncedInput';
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, Settings2 } from 'lucide-react';
 import { Id } from '@/convex/_generated/dataModel';
 
 export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
@@ -165,18 +164,40 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {
+        const config = previewSettings.config || {};
         switch (previewSettings.mesh) {
-            case 'cube':
-                return new THREE.BoxGeometry(1.5, 1.5, 1.5, 64, 64, 64);
+            case 'box':
+                return new THREE.BoxGeometry(
+                    config.width ?? 1.5,
+                    config.height ?? 1.5,
+                    config.depth ?? 1.5,
+                    config.widthSegments ?? 1,
+                    config.heightSegments ?? 1,
+                    config.depthSegments ?? 1
+                );
             case 'torus':
-                return new THREE.TorusKnotGeometry(0.8, 0.3, 256, 64);
+                return new THREE.TorusKnotGeometry(
+                    config.radiusTorus ?? 0.8,
+                    config.tube ?? 0.3,
+                    config.tubularSegments ?? 32, // Lower default
+                    config.radialSegments ?? 16
+                );
             case 'plane':
-                return new THREE.PlaneGeometry(1, 1);
+                return new THREE.PlaneGeometry(
+                    config.widthPlane ?? 1,
+                    config.heightPlane ?? 1,
+                    config.widthSegmentsPlane ?? 1,
+                    config.heightSegmentsPlane ?? 1
+                );
             case 'sphere':
             default:
-                return new THREE.SphereGeometry(1, 128, 128);
+                return new THREE.SphereGeometry(
+                    config.radius ?? 1,
+                    config.widthSegmentsSphere ?? 32,
+                    config.heightSegmentsSphere ?? 16
+                );
         }
-    }, [previewSettings.mesh]);
+    }, [previewSettings.mesh, previewSettings.config]);
 
     // Dispose geometry when it changes
     useEffect(() => {
@@ -315,21 +336,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         if (previewSettings.isInstanced) {
             mesh = new THREE.InstancedMesh(geometry, material, previewSettings.instanceCount);
             mesh.position.set(0, 0, 0); // Galaxy usually centered
-            // We don't need to set matrices if the material handles positioning via storage/attributes,
-            // BUT for TSL SpriteNodeMaterial examples, it often uses instanceIndex.
-            // If it's a TSL example relying on `range(0, count)`, the dummy matrices are fine.
-            // If it relies on standard instanceMatrix, we might need to populate it.
-            // For the specific Galaxy example, it uses `range(0, 1).mul(size)` for scale
-            // and `range(0, 1)` for other calc.
-            // It essentially needs TSL to handle position.
-            // Standard InstancedMesh initialized with identity matrices is usually enough if TSL overrides position.
-
-            // However, to be safe, let's fill it with dummy data so it renders if TSL doesn't fully override
-            // for (let i = 0; i < previewSettings.instanceCount; i++) {
-            //     const matrix = new THREE.Matrix4();
-            //     matrix.setPosition(0, 0, 0);
-            //     (mesh as THREE.InstancedMesh).setMatrixAt(i, matrix);
-            // }
         } else {
             mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(0, 0, 0);
@@ -365,9 +371,9 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         });
     }, [previewSettings.instanceCount, previewSettings.isInstanced]);
 
-    const meshOptions: { value: PreviewMesh; name: string }[] = [
+    const meshOptions: { value: PreviewMeshType; name: string }[] = [
         { value: 'sphere', name: 'Sphere' },
-        { value: 'cube', name: 'Cube' },
+        { value: 'box', name: 'Box' },
         { value: 'torus', name: 'Torus' },
         { value: 'plane', name: 'Plane' },
     ];
@@ -390,51 +396,226 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 >
                     {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-auto px-2 text-xs">
-                            {meshOptions.find((opt) => opt.value === previewSettings.mesh)?.name}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Geometry</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            {meshOptions.map((opt) => (
-                                <DropdownMenuItem
-                                    key={opt.value}
-                                    onClick={() => updatePreviewSettings({ mesh: opt.value })}
-                                >
-                                    <span>{opt.name}</span>
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuGroup>
 
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Instancing</DropdownMenuLabel>
-                        <div className="p-2 flex flex-col gap-2">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs">Enable</label>
-                                <input
-                                    type="checkbox"
-                                    checked={previewSettings.isInstanced}
-                                    onChange={(e) => updatePreviewSettings({ isInstanced: e.target.checked })}
-                                />
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Settings2 className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                        <div className="grid gap-4">
+                            <div className="space-y-2">
+                                <h4 className="font-medium leading-none">Preview Settings</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    Configure the preview geometry and instancing.
+                                </p>
                             </div>
-                            {previewSettings.isInstanced && (
-                                <div className="flex items-center gap-2">
-                                    <label className="text-xs">Count</label>
+
+                            <div className="grid gap-4">
+                                <div className="grid grid-cols-2 items-center gap-4">
+                                    <Label>Geometry</Label>
+                                    <select
+                                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
+                                        value={previewSettings.mesh}
+                                        onChange={(e) => updatePreviewSettings({ mesh: e.target.value as PreviewMeshType })}
+                                    >
+                                        {meshOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>
+                                                {opt.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Geometry Specific Controls */}
+                                {previewSettings.mesh === 'box' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Size (W/H/D)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.width ?? 1.5}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, width: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.height ?? 1.5}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, height: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.depth ?? 1.5}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, depth: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthSegments ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegments ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.depthSegments ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, depthSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'sphere' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Radius</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.radius ?? 1}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radius: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (W/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthSegmentsSphere ?? 32}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthSegmentsSphere: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegmentsSphere ?? 16}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegmentsSphere: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'torus' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Radius</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.radiusTorus ?? 0.8}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radiusTorus: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Tube</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.tube ?? 0.3}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, tube: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (T/R)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.tubularSegments ?? 32}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, tubularSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radialSegments ?? 16}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radialSegments: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'plane' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Size (W/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (W/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.widthSegmentsPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, widthSegmentsPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegmentsPlane ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegmentsPlane: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="h-[1px] bg-border my-1" />
+
+                                <div className="flex items-center justify-between">
+                                    <Label>Instancing</Label>
                                     <input
-                                        type="number"
-                                        value={previewSettings.instanceCount}
-                                        onChange={(e) => updatePreviewSettings({ instanceCount: Number(e.target.value) })}
-                                        className="w-16 h-6 text-xs border rounded px-1 text-black"
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-primary"
+                                        checked={previewSettings.isInstanced}
+                                        onChange={(e) => updatePreviewSettings({ isInstanced: e.target.checked })}
                                     />
                                 </div>
-                            )}
+                                {previewSettings.isInstanced && (
+                                    <div className="grid grid-cols-2 items-center gap-4">
+                                        <Label>Instance Count</Label>
+                                        <Input
+                                            type="number"
+                                            value={previewSettings.instanceCount}
+                                            onChange={(e) => updatePreviewSettings({ instanceCount: Number(e.target.value) })}
+                                            className="h-8"
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </PopoverContent>
+                </Popover>
             </div>
 
             {/* Error display */}

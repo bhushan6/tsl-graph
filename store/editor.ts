@@ -17,11 +17,40 @@ import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefini
 import { toast } from 'sonner';
 
 // Preview mesh type
-export type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
+export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane';
+
+// Geometry configuration
+export interface GeometryConfig {
+    // Box
+    width?: number;
+    height?: number;
+    depth?: number;
+    widthSegments?: number;
+    heightSegments?: number;
+    depthSegments?: number;
+
+    // Sphere
+    radius?: number;
+    widthSegmentsSphere?: number;
+    heightSegmentsSphere?: number;
+
+    // Torus
+    radiusTorus?: number;
+    tube?: number;
+    radialSegments?: number;
+    tubularSegments?: number;
+
+    // Plane
+    widthPlane?: number;
+    heightPlane?: number;
+    widthSegmentsPlane?: number;
+    heightSegmentsPlane?: number;
+}
 
 // Preview settings interface
 export interface PreviewSettings {
-    mesh: PreviewMesh;
+    mesh: PreviewMeshType;
+    config: GeometryConfig;
     isInstanced: boolean;
     instanceCount: number;
 }
@@ -196,9 +225,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Preview settings
     previewSettings: {
-        mesh: 'sphere' as PreviewMesh,
+        mesh: 'sphere' as PreviewMeshType,
         isInstanced: false,
         instanceCount: 100,
+        config: {
+            // Defaults with low resolution as requested
+            // Box
+            width: 1.5,
+            height: 1.5,
+            depth: 1.5,
+            widthSegments: 1,
+            heightSegments: 1,
+            depthSegments: 1,
+
+            // Sphere
+            radius: 1,
+            widthSegmentsSphere: 32,
+            heightSegmentsSphere: 16,
+
+            // Torus
+            radiusTorus: 0.8,
+            tube: 0.3,
+            radialSegments: 16,
+            tubularSegments: 32,
+
+            // Plane
+            widthPlane: 1,
+            heightPlane: 1,
+            widthSegmentsPlane: 1,
+            heightSegmentsPlane: 1,
+        }
     },
     updatePreviewSettings: (updates) => {
         set({ previewSettings: { ...get().previewSettings, ...updates } });
@@ -603,6 +659,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         mesh: 'sphere',
                         isInstanced: false,
                         instanceCount: 100,
+                        config: {
+                            width: 1.5,
+                            height: 1.5,
+                            depth: 1.5,
+                            widthSegments: 1,
+                            heightSegments: 1,
+                            depthSegments: 1,
+                            radius: 1,
+                            widthSegmentsSphere: 32,
+                            heightSegmentsSphere: 16,
+                            radiusTorus: 0.8,
+                            tube: 0.3,
+                            radialSegments: 16,
+                            tubularSegments: 32,
+                            widthPlane: 1,
+                            heightPlane: 1,
+                            widthSegmentsPlane: 1,
+                            heightSegmentsPlane: 1,
+                        }
                     },
                     // Reset subgraph state on load
                     editorMode: 'main',
@@ -1615,6 +1690,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 mesh: 'sphere',
                 isInstanced: false,
                 instanceCount: 100,
+                config: {
+                    width: 1.5,
+                    height: 1.5,
+                    depth: 1.5,
+                    widthSegments: 1,
+                    heightSegments: 1,
+                    depthSegments: 1,
+                    radius: 1,
+                    widthSegmentsSphere: 32,
+                    heightSegmentsSphere: 16,
+                    radiusTorus: 0.8,
+                    tube: 0.3,
+                    radialSegments: 16,
+                    tubularSegments: 32,
+                    widthPlane: 1,
+                    heightPlane: 1,
+                    widthSegmentsPlane: 1,
+                    heightSegmentsPlane: 1,
+                }
             },
             // Reset template callbacks as well? Probably no, they are set by the component. 
             // The component usually sets them in useEffect.
