@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Code, CheckCircle, AlertCircle } from 'lucide-react';
+import { Code, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -43,6 +43,7 @@ export function CodeNodeDialog({
 }: CodeNodeDialogProps) {
     const [name, setName] = useState(initialName);
     const [code, setCode] = useState(initialCode);
+    const [isSaving, setIsSaving] = useState(false);
     const { createCodeNode, updateCodeNode, subgraphs } = useEditorStore();
 
 
@@ -85,44 +86,50 @@ export function CodeNodeDialog({
 
     const canCreate = parseResult.isValid && name.trim() && !nameConflict;
 
-    const handleSave = useCallback(() => {
-        if (!canCreate) return;
+    const handleSave = useCallback(async () => {
+        if (!canCreate || isSaving) return;
+        setIsSaving(true);
+        try {
 
-        // Create input ports from parsed arguments
-        const inputs: SubgraphPort[] = parseResult.arguments.map((arg, i) => ({
-            id: `in_${i}`,
-            label: arg,
-            type: 'any',
-        }));
+            // Create input ports from parsed arguments
+            const inputs: SubgraphPort[] = parseResult.arguments.map((arg, i) => ({
+                id: `in_${i}`,
+                label: arg,
+                type: 'any',
+            }));
 
-        // Single output port
-        const output: SubgraphPort = {
-            id: 'out',
-            label: 'Result',
-            type: 'any',
-        };
+            // Single output port
+            const output: SubgraphPort = {
+                id: 'out',
+                label: 'Result',
+                type: 'any',
+            };
 
-        if (mode === 'create') {
-            const id = createCodeNode(name.trim(), code.trim(), inputs, output);
-            if (id) {
-                toast.success(`Created code node "${name}"`);
-                setName('');
-                setCode('');
-                onOpenChange(false);
+            if (mode === 'create') {
+                const id = await createCodeNode(name.trim(), code.trim(), inputs, output);
+                if (id) {
+                    toast.success(`Created code node "${name}"`);
+                    setName('');
+                    setCode('');
+                    onOpenChange(false);
+                }
+                // Error toast is already shown by createCodeNode
+            } else {
+                if (nodeId) {
+                    updateCodeNode(nodeId, {
+                        name: name.trim(),
+                        code: code.trim(),
+                        inputs,
+                        output
+                    });
+                    toast.success(`Updated code node "${name}"`);
+                    onOpenChange(false);
+                }
             }
-        } else {
-            if (nodeId) {
-                updateCodeNode(nodeId, {
-                    name: name.trim(),
-                    code: code.trim(),
-                    inputs,
-                    output
-                });
-                toast.success(`Updated code node "${name}"`);
-                onOpenChange(false);
-            }
+        } finally {
+            setIsSaving(false);
         }
-    }, [canCreate, name, code, parseResult.arguments, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId]);
+    }, [canCreate, isSaving, name, code, parseResult.arguments, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId]);
 
     const handleClose = useCallback(() => {
         // Reset to initial values on close without saving
@@ -205,8 +212,9 @@ export function CodeNodeDialog({
                     <Button variant="outline" onClick={handleClose}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSave} disabled={!canCreate}>
-                        {mode === 'create' ? 'Create Node' : 'Save Changes'}
+                    <Button onClick={handleSave} disabled={!canCreate || isSaving}>
+                        {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        {mode === 'create' ? (isSaving ? 'Creating...' : 'Create Node') : (isSaving ? 'Saving...' : 'Save Changes')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

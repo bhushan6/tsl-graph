@@ -76,26 +76,26 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
     const { screenToFlowPosition } = useReactFlow();
 
-    const isInitialized = useRef(false);
+    // const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
 
     // Load from localStorage on mount (for standalone editor without project)
-    useEffect(() => {
-        if (!isInitialized.current) {
-            isInitialized.current = true;
-            const loaded = loadFromLocalStorage();
-            if (!loaded) {
-                fetch('/demo-2.json')
-                    .then(response => response.text())
-                    .then(json => {
-                        loadFromJSON(json);
-                    })
-                    .catch(err => console.error('Failed to load demo graph:', err));
-            }
-        }
-    }, [loadFromLocalStorage, loadFromJSON]);
+    // useEffect(() => {
+    //     if (!isInitialized.current) {
+    //         isInitialized.current = true;
+    //         const loaded = loadFromLocalStorage();
+    //         if (!loaded) {
+    //             fetch('/demo-2.json')
+    //                 .then(response => response.text())
+    //                 .then(json => {
+    //                     loadFromJSON(json);
+    //                 })
+    //                 .catch(err => console.error('Failed to load demo graph:', err));
+    //         }
+    //     }
+    // }, [loadFromLocalStorage, loadFromJSON]);
 
 
     // Keyboard shortcuts for Undo/Redo

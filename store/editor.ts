@@ -11,9 +11,10 @@ import {
     type Connection,
     getNodesBounds,
 } from '@xyflow/react';
-import { getAbsolutePosition } from '@/lib/utils';
+import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
+import { toast } from 'sonner';
 
 // Preview mesh type
 export type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane';
@@ -176,7 +177,7 @@ interface EditorState {
     isSubgraphMode: () => boolean;
 
     // Code node actions
-    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => string | null;
+    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => Promise<string | null>;
     updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => void;
     addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => void;
     deleteCodeNode: (id: string) => void;
@@ -952,6 +953,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         }
                     } catch (error) {
                         console.error('Failed to update subgraph template in DB:', error);
+                        toast.error(getErrorMessage(error));
                     }
                 }
             } else {
@@ -975,6 +977,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         }
                     } catch (error) {
                         console.error('Failed to create subgraph template in DB:', error);
+                        toast.error(getErrorMessage(error));
                     }
                 }
             }
@@ -1189,7 +1192,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Code Node Actions
 
-    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => {
+    createCodeNode: async (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => {
         get().takeSnapshot();
 
         // Generate unique ID
@@ -1213,7 +1216,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // Auto-save to DB as private template
         const { onCodeNodeTemplateCreate } = get();
         if (onCodeNodeTemplateCreate) {
-            onCodeNodeTemplateCreate(codeNode).then(result => {
+            try {
+                const result = await onCodeNodeTemplateCreate(codeNode);
                 // Update local definition with template reference
                 const currentCodeNodes = useEditorStore.getState().codeNodes;
                 if (currentCodeNodes[id]) {
@@ -1228,9 +1232,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         },
                     });
                 }
-            }).catch(error => {
+                return id;
+            } catch (error) {
+                // Rollback: remove the code node from local state
+                const currentCodeNodes = useEditorStore.getState().codeNodes;
+                const { [id]: _, ...rest } = currentCodeNodes;
+                useEditorStore.setState({ codeNodes: rest });
+
                 console.error('Failed to save code node template to DB:', error);
-            });
+                toast.error(getErrorMessage(error));
+                return null;
+            }
         }
 
         return id;
@@ -1322,6 +1334,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             }).catch(error => {
                 console.error('Failed to update code node template in DB:', error);
+                toast.error(getErrorMessage(error));
             });
         }
     },

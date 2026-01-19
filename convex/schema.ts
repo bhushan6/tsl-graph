@@ -30,6 +30,7 @@ export default defineSchema({
         updatedAt: v.number(),
     })
         .index("by_user", ["userId"])
+        .index("by_user_name", ["userId", "name"])
         .index("by_public", ["isPublic"]),
 
     // Future: Shareable code node templates
@@ -44,6 +45,7 @@ export default defineSchema({
         updatedAt: v.number(),
     })
         .index("by_user", ["userId"])
+        .index("by_user_name", ["userId", "name"])
         .index("by_public", ["isPublic"]),
 
     // ========== Asset Management ==========

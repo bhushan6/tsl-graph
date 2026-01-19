@@ -1,6 +1,7 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
+import { TemplateErrors } from "./errors";
 
 // ============================================
 // SUBGRAPH TEMPLATES
@@ -17,7 +18,21 @@ export const createSubgraphTemplate = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(TemplateErrors.notAuthenticated());
+        }
+
+        // Check for existing template with same name (case-insensitive)
+        const existingTemplates = await ctx.db
+            .query("subgraphTemplates")
+            .withIndex("by_user", (q) => q.eq("userId", user._id))
+            .collect();
+
+        const nameExists = existingTemplates.some(
+            (t) => t.name.toLowerCase() === args.name.toLowerCase()
+        );
+
+        if (nameExists) {
+            throw new ConvexError(TemplateErrors.subgraphNameExists(args.name));
         }
 
         const now = Date.now();
@@ -48,15 +63,31 @@ export const updateSubgraphTemplate = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(TemplateErrors.notAuthenticated());
         }
 
         const template = await ctx.db.get(args.id);
         if (!template) {
-            throw new Error("Template not found");
+            throw new ConvexError(TemplateErrors.templateNotFound());
         }
         if (template.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(TemplateErrors.notAuthorized());
+        }
+
+        // Check for name uniqueness if name is being changed
+        if (args.name !== undefined && args.name.toLowerCase() !== template.name.toLowerCase()) {
+            const existingTemplates = await ctx.db
+                .query("subgraphTemplates")
+                .withIndex("by_user", (q) => q.eq("userId", user._id))
+                .collect();
+
+            const nameExists = existingTemplates.some(
+                (t) => t._id !== args.id && t.name.toLowerCase() === args.name!.toLowerCase()
+            );
+
+            if (nameExists) {
+                throw new ConvexError(TemplateErrors.subgraphNameExists(args.name));
+            }
         }
 
         const updates: Record<string, unknown> = {
@@ -82,15 +113,15 @@ export const deleteSubgraphTemplate = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(TemplateErrors.notAuthenticated());
         }
 
         const template = await ctx.db.get(args.id);
         if (!template) {
-            throw new Error("Template not found");
+            throw new ConvexError(TemplateErrors.templateNotFound());
         }
         if (template.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(TemplateErrors.notAuthorized());
         }
 
         await ctx.db.delete(args.id);
@@ -151,13 +182,14 @@ export const getSubgraphTemplate = query({
     },
 });
 
-// Get multiple templates by IDs (for staleness check)
+// Get multiple templates by IDs (for staleness and ownership check)
 export const getSubgraphTemplateVersions = query({
     args: {
         ids: v.array(v.id("subgraphTemplates")),
     },
     handler: async (ctx, args) => {
-        const results: Record<string, { version: number; updatedAt: number } | null> = {};
+        const user = await authComponent.getAuthUser(ctx);
+        const results: Record<string, { version: number; updatedAt: number; isOwned: boolean } | null> = {};
 
         for (const id of args.ids) {
             const template = await ctx.db.get(id);
@@ -165,6 +197,7 @@ export const getSubgraphTemplateVersions = query({
                 results[id] = {
                     version: template.version,
                     updatedAt: template.updatedAt,
+                    isOwned: template.userId === user?._id,
                 };
             } else {
                 results[id] = null;
@@ -190,7 +223,21 @@ export const createCodeNodeTemplate = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(TemplateErrors.notAuthenticated());
+        }
+
+        // Check for existing template with same name (case-insensitive)
+        const existingTemplates = await ctx.db
+            .query("codeNodeTemplates")
+            .withIndex("by_user", (q) => q.eq("userId", user._id))
+            .collect();
+
+        const nameExists = existingTemplates.some(
+            (t) => t.name.toLowerCase() === args.name.toLowerCase()
+        );
+
+        if (nameExists) {
+            throw new ConvexError(TemplateErrors.codeNodeNameExists(args.name));
         }
 
         const now = Date.now();
@@ -221,15 +268,31 @@ export const updateCodeNodeTemplate = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(TemplateErrors.notAuthenticated());
         }
 
         const template = await ctx.db.get(args.id);
         if (!template) {
-            throw new Error("Template not found");
+            throw new ConvexError(TemplateErrors.templateNotFound());
         }
         if (template.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(TemplateErrors.notAuthorized());
+        }
+
+        // Check for name uniqueness if name is being changed
+        if (args.name !== undefined && args.name.toLowerCase() !== template.name.toLowerCase()) {
+            const existingTemplates = await ctx.db
+                .query("codeNodeTemplates")
+                .withIndex("by_user", (q) => q.eq("userId", user._id))
+                .collect();
+
+            const nameExists = existingTemplates.some(
+                (t) => t._id !== args.id && t.name.toLowerCase() === args.name!.toLowerCase()
+            );
+
+            if (nameExists) {
+                throw new ConvexError(TemplateErrors.codeNodeNameExists(args.name));
+            }
         }
 
         const updates: Record<string, unknown> = {
@@ -255,15 +318,15 @@ export const deleteCodeNodeTemplate = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(TemplateErrors.notAuthenticated());
         }
 
         const template = await ctx.db.get(args.id);
         if (!template) {
-            throw new Error("Template not found");
+            throw new ConvexError(TemplateErrors.templateNotFound());
         }
         if (template.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(TemplateErrors.notAuthorized());
         }
 
         await ctx.db.delete(args.id);
@@ -324,13 +387,14 @@ export const getCodeNodeTemplate = query({
     },
 });
 
-// Get multiple code node templates by IDs (for staleness check)
+// Get multiple code node templates by IDs (for staleness and ownership check)
 export const getCodeNodeTemplateVersions = query({
     args: {
         ids: v.array(v.id("codeNodeTemplates")),
     },
     handler: async (ctx, args) => {
-        const results: Record<string, { version: number; updatedAt: number } | null> = {};
+        const user = await authComponent.getAuthUser(ctx);
+        const results: Record<string, { version: number; updatedAt: number; isOwned: boolean } | null> = {};
 
         for (const id of args.ids) {
             const template = await ctx.db.get(id);
@@ -338,6 +402,7 @@ export const getCodeNodeTemplateVersions = query({
                 results[id] = {
                     version: template.version,
                     updatedAt: template.updatedAt,
+                    isOwned: template.userId === user?._id,
                 };
             } else {
                 results[id] = null;
