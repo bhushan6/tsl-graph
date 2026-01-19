@@ -36,6 +36,7 @@ import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
+import type { Id } from '@/convex/_generated/dataModel';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -46,14 +47,15 @@ const edgeTypes = {
 
 interface NavbarProps {
     projectName?: string;
+    projectId?: Id<"projects">;
 }
 
 interface EditorProps extends NavbarProps {
-    projectId?: string;
+    projectId?: Id<"projects">;
     hasThumbnail?: boolean;
 }
 
-function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: NavbarProps; projectId?: string; hasThumbnail?: boolean }) {
+function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: NavbarProps; projectId?: Id<"projects">; hasThumbnail?: boolean }) {
     const {
         nodes,
         edges,
@@ -299,7 +301,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
             {/* UI Layer */}
             < UILayer >
                 <UILayer.TopBar>
-                    <Navbar {...navbarProps} />
+                    <Navbar {...navbarProps} projectId={projectId} />
                 </UILayer.TopBar>
 
                 <UILayer.LeftPanel>

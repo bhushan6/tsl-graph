@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -6,9 +7,11 @@ import {
     DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Trash2, FolderOpen, Clock } from "lucide-react";
+import { MoreHorizontal, Trash2, FolderOpen, Clock, Loader2 } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface ProjectCardProps {
     project: {
@@ -31,11 +34,60 @@ const calculateTimeAgo = (updatedAt: number) => {
 
 export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const router = useRouter();
-    const timeAgo = calculateTimeAgo(project.updatedAt)
-
+    const updateProject = useMutation(api.projects.update);
+    const timeAgo = calculateTimeAgo(project.updatedAt);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
+    const [tempName, setTempName] = useState(project.name);
 
     const handleOpen = () => {
         router.push(`/editor/${project._id}`);
+    };
+
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleRenameStart = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsRenaming(true);
+        // Reset temp name to current name when starting rename
+        setTempName(project.name);
+        setTimeout(() => {
+            inputRef.current?.focus();
+        }, 500);
+    };
+
+    const handleRenameSave = async (e?: React.SyntheticEvent) => {
+        e?.stopPropagation();
+        if (tempName.trim() && tempName.trim() !== project.name) {
+            try {
+                setIsRenamingInProgress(true);
+                await updateProject({ id: project._id, name: tempName.trim() });
+                setIsRenaming(false);
+            } catch (error) {
+                console.error("Failed to rename project:", error);
+            } finally {
+                setIsRenamingInProgress(false);
+            }
+        } else {
+            setIsRenaming(false);
+        }
+    };
+
+    const handleRenameCancel = (e?: React.SyntheticEvent) => {
+        if (isRenamingInProgress) return;
+        e?.stopPropagation();
+        setIsRenaming(false);
+        setTempName(project.name);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (isRenamingInProgress) return;
+        if (e.key === "Enter") {
+            handleRenameSave(e);
+        } else if (e.key === "Escape") {
+            handleRenameCancel(e);
+        }
+        e.stopPropagation();
     };
 
     return (
@@ -63,7 +115,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             </div>
 
             {/* Overlay - Gradient Fade */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
+            <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-60 transition-opacity duration-300 ${isRenaming ? 'opacity-90' : 'group-hover:opacity-80'}`} />
 
             {/* Actions (Top Right) */}
             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20" onClick={(e) => e.stopPropagation()}>
@@ -77,6 +129,9 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpen(); }}>
                             <FolderOpen className="mr-2 h-4 w-4" /> Open
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleRenameStart}>
+                            <FolderOpen className="mr-2 h-4 w-4" /> Rename
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={(e) => { e.stopPropagation(); onDelete(project._id); }}
@@ -89,10 +144,29 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             </div>
 
             {/* Content (Bottom) */}
-            <div className="absolute bottom-0 left-0 right-0 p-5 flex flex-col gap-1 z-10 translate-y-2 group-hover:translate-y-0 transition-transform duration-300 ease-out">
-                <h3 className="text-white font-medium text-lg leading-tight tracking-wide transition-colors">
-                    {project.name}
-                </h3>
+            <div className={`absolute bottom-0 left-0 right-0 p-5 flex flex-col gap-1 z-10 transition-transform duration-300 ease-out ${isRenaming ? 'translate-y-0' : 'translate-y-2 group-hover:translate-y-0'}`}>
+                {isRenaming ? (
+                    <div onClick={(e) => e.stopPropagation()} className="relative flex items-center">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={tempName}
+                            onChange={(e) => setTempName(e.target.value)}
+                            onBlur={(e) => !isRenamingInProgress && handleRenameSave(e)}
+                            onKeyDown={handleKeyDown}
+                            autoFocus
+                            disabled={isRenamingInProgress}
+                            className="w-full bg-transparent text-lg font-medium text-white border-b border-white/50 focus:border-white focus:outline-none p-0 pb-1 disabled:opacity-50"
+                        />
+                        {isRenamingInProgress && (
+                            <Loader2 className="h-4 w-4 animate-spin absolute right-0 text-white" />
+                        )}
+                    </div>
+                ) : (
+                    <h3 className="text-white font-medium text-lg leading-tight tracking-wide transition-colors truncate">
+                        {project.name}
+                    </h3>
+                )}
                 <div className="flex items-center gap-2 text-white/50 text-xs font-medium uppercase tracking-wider">
                     <Clock className="w-3 h-3" />
                     <span>Updated {timeAgo}</span>

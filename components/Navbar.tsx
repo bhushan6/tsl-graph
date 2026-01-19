@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { FileText, Download, Upload, Trash2, ChevronDown, Loader2 } from 'lucide-react';
+import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -20,12 +20,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useEditorStore } from '@/store/editor';
 import { useRouter } from 'next/navigation';
+import { useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
+import { Input } from './ui/input';
 
 interface NavbarProps {
     projectName?: string;
+    projectId?: Id<"projects">;
 }
 
-export function Navbar({ projectName }: NavbarProps) {
+export function Navbar({ projectName, projectId }: NavbarProps) {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const {
@@ -36,6 +41,49 @@ export function Navbar({ projectName }: NavbarProps) {
         isSaving,
         isDirty,
     } = useEditorStore();
+
+    const updateProject = useMutation(api.projects.update);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
+    const [tempName, setTempName] = useState(projectName || "");
+
+    const handleRenameStart = () => {
+        if (projectId) {
+            setIsRenaming(true);
+            setTempName(projectName || "");
+        }
+    };
+
+    const handleRenameSave = async () => {
+        if (tempName.trim() && tempName.trim() !== projectName && projectId) {
+            try {
+                setIsRenamingInProgress(true);
+                await updateProject({ id: projectId, name: tempName.trim() });
+                setIsRenaming(false);
+            } catch (error) {
+                console.error("Failed to rename project:", error);
+            } finally {
+                setIsRenamingInProgress(false);
+            }
+        } else {
+            setIsRenaming(false);
+        }
+    };
+
+    const handleRenameCancel = () => {
+        if (isRenamingInProgress) return;
+        setIsRenaming(false);
+        setTempName(projectName || "");
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (isRenamingInProgress) return;
+        if (e.key === "Enter") {
+            handleRenameSave();
+        } else if (e.key === "Escape") {
+            handleRenameCancel();
+        }
+    };
 
     // Download as JSON file
     const handleSaveFile = useCallback(() => {
@@ -103,6 +151,35 @@ export function Navbar({ projectName }: NavbarProps) {
 
                 <div className="h-4 w-px bg-border mx-1" />
 
+                {isRenaming ? (
+                    <div className="relative flex items-center w-fit">
+                        <input
+                            type="text"
+                            value={tempName}
+                            onChange={(e) => setTempName(e.target.value)}
+                            onBlur={() => !isRenamingInProgress && handleRenameSave()}
+                            onKeyDown={handleKeyDown}
+                            autoFocus
+                            disabled={isRenamingInProgress}
+                            className="text-sm font-medium mr-2 bg-transparent border-b focus:ring-0 focus:ring-offset-0 focus:outline-none text-foreground disabled:opacity-50 !flex !items-center !gap-1 w-full p-1"
+                        />
+                        {isRenamingInProgress && (
+                            <Loader2 className="h-3 w-3 animate-spin absolute right-2 text-primary" />
+                        )}
+                    </div>
+                ) : (
+                    projectName && (
+                        <div
+                            onDoubleClick={handleRenameStart}
+                            className="text-sm font-medium mr-2 hidden sm:inline-block text-muted-foreground cursor-text hover:text-foreground transition-colors select-none !flex !items-center !gap-1 group"
+                            title="Double-click to rename"
+                        >
+                            <span>{projectName}</span>
+                            <Pen className="w-3 h-3 ml-1 hidden group-hover:block" />
+                        </div>
+                    )
+                )}
+
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
@@ -133,12 +210,8 @@ export function Navbar({ projectName }: NavbarProps) {
                 </DropdownMenu>
             </div>
 
-            <div className="flex items-center gap-2">
-                {projectName && (
-                    <span className="text-sm font-medium mr-2 hidden sm:inline-block text-muted-foreground">
-                        {projectName}
-                    </span>
-                )}
+            <div className="flex items-center gap-2 group">
+
 
                 {/* Sync Status Badge */}
                 {isSaving ? (

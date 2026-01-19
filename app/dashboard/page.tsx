@@ -5,15 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-    DialogFooter,
-    DialogDescription,
-} from "@/components/ui/dialog";
+
 import {
     AlertDialog,
     AlertDialogAction,
@@ -40,8 +32,7 @@ import { ProjectCard } from "@/components/dashboard/ProjectCard";
 function DashboardContent() {
     const router = useRouter();
     const { data: session } = authClient.useSession();
-    const [newProjectName, setNewProjectName] = useState("");
-    const [isCreateOpen, setIsCreateOpen] = useState(false);
+    // Removed newProjectName and isCreateOpen states as they are no longer needed
     const [searchQuery, setSearchQuery] = useState("");
     const [projectToDelete, setProjectToDelete] = useState<Id<"projects"> | null>(null);
 
@@ -50,16 +41,12 @@ function DashboardContent() {
     const deleteProject = useMutation(api.projects.remove);
 
     const handleCreateProject = async () => {
-        if (!newProjectName.trim()) return;
-
         try {
+            // No name provided, backend handles "Untitled" + auto-increment
             const projectId = await createProject({
-                name: newProjectName.trim(),
                 graphData: { version: 1, nodes: [], edges: [], subgraphs: {}, codeNodes: {} },
             });
 
-            setNewProjectName("");
-            setIsCreateOpen(false);
             router.push(`/editor/${projectId}`);
         } catch (error) {
             console.error("Failed to create project:", error);
@@ -86,8 +73,8 @@ function DashboardContent() {
                     {/* Header Section */}
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-12">
                         <div>
-                            <h2 className="text-4xl font-light tracking-tight text-foreground">My Sketches</h2>
-                            <p className="text-muted-foreground mt-2 font-light">Manage your shader experiments and nodes.</p>
+                            <h2 className="text-4xl font-light tracking-tight text-foreground">My Projects</h2>
+                            <p className="text-muted-foreground mt-2 font-light">Manage your shader graphs.</p>
                         </div>
 
                         <div className="flex items-center gap-4 w-full md:w-auto">
@@ -102,38 +89,13 @@ function DashboardContent() {
                                 />
                             </div>
 
-                            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="rounded-md px-6 bg-primary text-primary-foreground hover:bg-primary/90 font-medium">
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        New Sketch
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Create New Sketch</DialogTitle>
-                                        <DialogDescription>
-                                            Give your shader a name to get started.
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="flex flex-col gap-4 py-4">
-                                        <Input
-                                            placeholder="Project name (e.g., Neon Rain)"
-                                            value={newProjectName}
-                                            onChange={(e) => setNewProjectName(e.target.value)}
-                                            onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
-                                            autoFocus
-                                            className="bg-muted/50"
-                                        />
-                                    </div>
-                                    <DialogFooter>
-                                        <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-                                        <Button onClick={handleCreateProject} disabled={!newProjectName.trim()}>
-                                            Create Sketch
-                                        </Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                            <Button
+                                onClick={handleCreateProject}
+                                className="rounded-md px-6 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                New Project
+                            </Button>
                         </div>
                     </div>
 
@@ -163,7 +125,7 @@ function DashboardContent() {
                                     <p className="text-muted-foreground max-w-sm mt-2 mb-8 font-light">
                                         Create your first shader project to get started with TSL Editor.
                                     </p>
-                                    <Button onClick={() => setIsCreateOpen(true)} className="rounded-md px-8 bg-primary text-primary-foreground hover:bg-primary/90">
+                                    <Button onClick={handleCreateProject} className="rounded-md px-8 bg-primary text-primary-foreground hover:bg-primary/90">
                                         <Plus className="h-4 w-4 mr-2" />
                                         Create Project
                                     </Button>

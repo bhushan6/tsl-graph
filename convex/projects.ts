@@ -5,7 +5,7 @@ import { authComponent } from "./auth";
 // Create a new project
 export const create = mutation({
     args: {
-        name: v.string(),
+        name: v.optional(v.string()), // Made optional
         description: v.optional(v.string()),
         isPublic: v.optional(v.boolean()),
         graphData: v.any(),
@@ -17,9 +17,29 @@ export const create = mutation({
         }
 
         const now = Date.now();
+        let finalName = args.name?.trim() || "Untitled";
+
+        // Fetch all user projects to check for name collisions
+        // Note: For a very large number of projects, a more specific index/query might be better,
+        // but for now, fetching all is reasonable for checking uniqueness locally.
+        const userProjects = await ctx.db
+            .query("projects")
+            .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
+            .collect();
+
+        const existingNames = new Set(userProjects.map(p => p.name));
+
+        if (existingNames.has(finalName)) {
+            let counter = 1;
+            while (existingNames.has(`${finalName} ${counter}`)) {
+                counter++;
+            }
+            finalName = `${finalName} ${counter}`;
+        }
+
         const projectId = await ctx.db.insert("projects", {
             userId: user._id,
-            name: args.name,
+            name: finalName,
             description: args.description,
             isPublic: args.isPublic ?? false,
             graphData: args.graphData,
