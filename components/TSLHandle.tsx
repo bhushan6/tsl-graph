@@ -83,7 +83,7 @@ export function TSLHandle({
                         />
                     </div>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs rounded-sm">
+                <TooltipContent side={isOutput ? 'right' : 'left'} className="text-xs rounded-sm">
                     <p>{dataType}</p>
                 </TooltipContent>
             </Tooltip>
