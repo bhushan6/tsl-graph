@@ -19,8 +19,11 @@ describe('Editor Store Persistence', () => {
 
         store.updatePreviewSettings(newSettings);
 
-        // Verify state is updated
-        expect(useEditorStore.getState().previewSettings).toEqual(newSettings);
+        // Verify state is updated (shallow merge preserves config)
+        const updatedSettings = useEditorStore.getState().previewSettings;
+        expect(updatedSettings.mesh).toBe(newSettings.mesh);
+        expect(updatedSettings.isInstanced).toBe(newSettings.isInstanced);
+        expect(updatedSettings.instanceCount).toBe(newSettings.instanceCount);
 
         // 2. Save to JSON
         const json = store.saveToJSON();
@@ -28,7 +31,10 @@ describe('Editor Store Persistence', () => {
 
         // Verify JSON content
         expect(data.previewSettings).toBeDefined();
-        expect(data.previewSettings).toEqual(newSettings);
+        expect(data.previewSettings.mesh).toBe(newSettings.mesh);
+        expect(data.previewSettings.isInstanced).toBe(newSettings.isInstanced);
+        expect(data.previewSettings.instanceCount).toBe(newSettings.instanceCount);
+        expect(data.previewSettings.config).toBeDefined();
 
         // 3. Reset store to defaults
         store.resetEditor();
@@ -40,7 +46,11 @@ describe('Editor Store Persistence', () => {
 
         // 5. Verify settings are restored
         const restoredSettings = useEditorStore.getState().previewSettings;
-        expect(restoredSettings).toEqual(newSettings);
+        expect(restoredSettings.mesh).toBe(newSettings.mesh);
+        expect(restoredSettings.isInstanced).toBe(newSettings.isInstanced);
+        expect(restoredSettings.instanceCount).toBe(newSettings.instanceCount);
+        // Config should be preserved from defaults
+        expect(restoredSettings.config).toBeDefined();
     });
 
     it('should use default settings if missing in JSON', () => {
