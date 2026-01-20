@@ -18,7 +18,7 @@ import { DebouncedInput } from './DebouncedInput';
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-import { Maximize2, Minimize2, Settings2 } from 'lucide-react';
+import { Maximize2, Minimize2, Settings2, Camera } from 'lucide-react';
 import { Id } from '@/convex/_generated/dataModel';
 
 export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
@@ -45,6 +45,20 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const lastSnapshotNodeCount = useRef(nodes.length);
     // Track if we've done the initial snapshot for this session
     const initialSnapshotTaken = useRef(false);
+
+    const handleDownloadSnapshot = useCallback(() => {
+        if (!rendererRef.current) return;
+
+        try {
+            const canvas = rendererRef.current.domElement;
+            const link = document.createElement('a');
+            link.download = `snapshot-${new Date().toISOString()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (err) {
+            console.error('Failed to download snapshot:', err);
+        }
+    }, []);
 
     const captureSnapshot = useCallback(async () => {
         if (!rendererRef.current || !props.projectId) return;
@@ -234,7 +248,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
             // Camera
             const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-            camera.position.set(3, 2, 3);
+            camera.position.set(3.6, 2, 2);
             camera.lookAt(0, 0, 0);
             cameraRef.current = camera;
 
@@ -262,7 +276,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             const controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
-            controls.target.set(0, 0.75, 0);
+            controls.target.set(0, 0, 0);
             controls.update();
             controlsRef.current = controls;
 
@@ -404,6 +418,16 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     onClick={() => setIsFullScreen(!isFullScreen)}
                 >
                     {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
+
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleDownloadSnapshot}
+                    title="Take Snapshot"
+                >
+                    <Camera className="h-4 w-4" />
                 </Button>
 
                 <Popover>
