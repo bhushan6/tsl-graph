@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TSL Editor",
-  description: "Visual node-based shader editor for Three.js TSL",
+  title: "TSL Graph",
+  description: "Visual node-based shader editor for Three.js shading language (TSL)",
 };
 
 export default function RootLayout({

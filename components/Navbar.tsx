@@ -24,6 +24,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Input } from './ui/input';
+import { Logo } from '@/components/ui/logo';
 
 interface NavbarProps {
     projectName?: string;
@@ -141,12 +142,9 @@ export function Navbar({ projectName, projectId }: NavbarProps) {
             <div className="flex items-center gap-2">
                 <div
                     onClick={() => router.push('/dashboard')}
-                    className="flex items-center gap-2 font-medium text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none mr-2"
+                    className="flex items-center gap-2 mr-2 cursor-pointer select-none transition-opacity hover:opacity-80"
                 >
-                    {/* <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-primary">
-                        <Sparkles className="w-3 h-3" />
-                    </div> */}
-                    <span>TSL Editor</span>
+                    <Logo size="sm" />
                 </div>
 
                 <div className="h-4 w-px bg-border mx-1" />
