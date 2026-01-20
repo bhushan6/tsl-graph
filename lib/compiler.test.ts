@@ -128,8 +128,38 @@ const mockDefs: NodeDef[] = [
         tsl: 'normalWorld',
         pure: true,
         outputs: { out: { type: 'vec3', label: 'XYZ' } }
+    },
+    // Logic Nodes
+    {
+        type: 'logic/select',
+        label: 'Select',
+        category: 'Logic',
+        tsl: 'select',
+        inputs: {
+            cond: { type: 'bool', default: false, label: 'Cond' },
+            trueVal: { type: 'any', default: 1, label: 'True' },
+            falseVal: { type: 'any', default: 0, label: 'False' }
+        },
+        outputs: { out: { type: 'any', label: 'Out' } }
+    },
+    {
+        type: 'logic/lessThan',
+        label: 'Less Than',
+        category: 'Logic',
+        tsl: 'lessThan',
+        inputs: { a: { type: 'any', default: 0, label: 'A' }, b: { type: 'any', default: 0, label: 'B' } },
+        outputs: { out: { type: 'bool', label: 'Out' } }
+    },
+    {
+        type: 'logic/and',
+        label: 'And',
+        category: 'Logic',
+        tsl: 'and',
+        inputs: { a: { type: 'bool', default: false, label: 'A' }, b: { type: 'bool', default: false, label: 'B' } },
+        outputs: { out: { type: 'bool', label: 'Out' } }
     }
 ];
+
 
 // Register mocks before tests
 beforeAll(() => {
@@ -369,7 +399,82 @@ describe('compileGraph', () => {
     });
 });
 
+describe('Logic Nodes', () => {
+    it('should compile select node (ternary)', () => {
+        const nodes = [createNode('sel1', 'logic/select', { values: { cond: true, trueVal: 1.0, falseVal: 0.0 } })];
+        const code = compileGraph(nodes, []);
+        expect(code).toContain('select(true, 1, 0)');
+    });
+
+    it('should compile comparison node', () => {
+        const nodes = [createNode('lt1', 'logic/lessThan', { values: { a: 1, b: 2 } })];
+        const code = compileGraph(nodes, []);
+        expect(code).toContain('lessThan(1, 2)');
+    });
+
+    it('should compile boolean logic node', () => {
+        const nodes = [createNode('and1', 'logic/and', { values: { a: true, b: false } })];
+        const code = compileGraph(nodes, []);
+        expect(code).toContain('and(true, false)');
+    });
+
+    it('should compile complex conditional color', () => {
+        // if (time > 0.5) ? red : blue
+        const nodes = [
+            createNode('t1', 'geo/time'),
+            createNode('lt1', 'logic/lessThan', { values: { b: 0.5 } }),
+            createNode('c_red', 'const/color', { values: { value: '#ff0000' } }),
+            createNode('c_blue', 'const/color', { values: { value: '#0000ff' } }),
+            createNode('sel1', 'logic/select')
+        ];
+
+        const edges: Edge[] = [
+            { id: 'e1', source: 't1', sourceHandle: 'out', target: 'lt1', targetHandle: 'a' },
+            { id: 'e2', source: 'lt1', sourceHandle: 'out', target: 'sel1', targetHandle: 'cond' },
+            { id: 'e3', source: 'c_red', sourceHandle: 'out', target: 'sel1', targetHandle: 'trueVal' },
+            { id: 'e4', source: 'c_blue', sourceHandle: 'out', target: 'sel1', targetHandle: 'falseVal' }
+        ];
+
+        const code = compileGraph(nodes, edges);
+
+        // Check for existence of all parts
+        expect(code).toContain('const _node0 = time;'); // t1
+        expect(code).toContain('lessThan(_node0, 0.5)'); // lt1
+        expect(code).toContain('color("#ff0000")'); // red
+        expect(code).toContain('color("#0000ff")'); // blue
+        expect(code).toContain('select(');
+    });
+
+    it('should compile component-wise vector comparison', () => {
+        // select(vec3(0,1,0) < vec3(1,0,0), red, blue)
+        // This should result in component-wise selection
+        const nodes = [
+            createNode('v_a', 'const/vec3', { values: { x: 0, y: 1, z: 0 } }),
+            createNode('v_b', 'const/vec3', { values: { x: 1, y: 0, z: 0 } }),
+            createNode('less', 'logic/lessThan'),
+            createNode('c_red', 'const/color', { values: { value: '#ff0000' } }),
+            createNode('c_blue', 'const/color', { values: { value: '#0000ff' } }),
+            createNode('sel1', 'logic/select')
+        ];
+
+        const edges: Edge[] = [
+            { id: 'e1', source: 'v_a', sourceHandle: 'out', target: 'less', targetHandle: 'a' },
+            { id: 'e2', source: 'v_b', sourceHandle: 'out', target: 'less', targetHandle: 'b' },
+            { id: 'e3', source: 'less', sourceHandle: 'out', target: 'sel1', targetHandle: 'cond' },
+            { id: 'e4', source: 'c_red', sourceHandle: 'out', target: 'sel1', targetHandle: 'trueVal' },
+            { id: 'e5', source: 'c_blue', sourceHandle: 'out', target: 'sel1', targetHandle: 'falseVal' }
+        ];
+
+        const code = compileGraph(nodes, edges);
+        // The compiler generates matches using variables, so we check for the structure
+        expect(code).toContain('lessThan(_node');
+        expect(code).toContain('select(_node');
+
+    });
+});
+
 describe('getRequiredImports', () => {
+
     it('should return empty array for no nodes', () => {
         const imports = getRequiredImports([]);
         expect(imports).toEqual([]);
