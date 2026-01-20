@@ -2,12 +2,14 @@
 
 import { memo, useCallback } from "react";
 import { addEdge, useReactFlow, Edge } from "@xyflow/react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { EdgeDropNodePicker } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
 import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
-import { NodeType, AppNode, TSLNodeData, TSLValueType } from "@/lib/types";
+import { NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -22,15 +24,91 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     const handleDirection = useEdgeDropPickerStore(state => state.handleDirection);
     const close = useEdgeDropPickerStore(state => state.close);
 
+    // Fetch templates (cached by Convex, no extra network request if NodePicker already subscribed)
+    const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
+    const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
+
     const handleNodeSelect = useCallback(
         (nodeType: NodeType) => {
             const definition = registry.get(nodeType);
             const isCodeNode = nodeType.startsWith('code/');
-            const codeNodes = useEditorStore.getState().codeNodes;
-            const codeNode = isCodeNode ? codeNodes[nodeType] : null;
+            const isSubgraphNode = nodeType.startsWith('subgraph/') && !nodeType.startsWith('subgraph/input') && !nodeType.startsWith('subgraph/output');
 
-            // Must have either a registry definition or be a valid code node
-            if (!definition && !codeNode) return;
+            // For code nodes, look up the template from the fetched templates
+            // nodeType is in format "code/{templateId}"
+            let codeTemplateData: {
+                id: string;
+                name: string;
+                code: string;
+                inputs: SubgraphPort[];
+                output: SubgraphPort;
+            } | null = null;
+            let codeTemplateId: string | undefined;
+            let codeTemplateVersion: number | undefined;
+
+            if (isCodeNode && userCodeNodeTemplates) {
+                const tplId = nodeType.slice('code/'.length); // Extract template ID
+                const template = userCodeNodeTemplates.find(t => t._id === tplId);
+                if (template) {
+                    const data = template.data as {
+                        id: string;
+                        name: string;
+                        code: string;
+                        inputs: Array<{ id: string; label: string; type: string }>;
+                        output: { id: string; label: string; type: string };
+                    };
+                    codeTemplateData = {
+                        id: data.id,
+                        name: data.name || template.name,
+                        code: data.code,
+                        inputs: data.inputs.map(inp => ({ id: inp.id, label: inp.label, type: inp.type as SubgraphPort['type'] })),
+                        output: { id: data.output.id, label: data.output.label, type: data.output.type as SubgraphPort['type'] },
+                    };
+                    codeTemplateId = template._id;
+                    codeTemplateVersion = template.version;
+                }
+            }
+
+            // For subgraph nodes, look up the template from the fetched templates
+            // nodeType is in format "subgraph/{templateId}"
+            let subgraphTemplateData: {
+                id: string;
+                name: string;
+                inputs: SubgraphPort[];
+                outputs: SubgraphPort[];
+                nodes: AppNode[];
+                edges: import('@xyflow/react').Edge[];
+            } | null = null;
+            let subgraphTemplateId: string | undefined;
+            let subgraphTemplateVersion: number | undefined;
+
+            if (isSubgraphNode && userSubgraphTemplates) {
+                const tplId = nodeType.slice('subgraph/'.length); // Extract template ID
+                const template = userSubgraphTemplates.find(t => t._id === tplId);
+                if (template) {
+                    const data = template.data as {
+                        id: string;
+                        name: string;
+                        inputs: Array<{ id: string; label: string; type: string }>;
+                        outputs: Array<{ id: string; label: string; type: string }>;
+                        nodes: AppNode[];
+                        edges: import('@xyflow/react').Edge[];
+                    };
+                    subgraphTemplateData = {
+                        id: data.id,
+                        name: data.name || template.name,
+                        inputs: data.inputs.map(inp => ({ id: inp.id, label: inp.label, type: inp.type as SubgraphPort['type'] })),
+                        outputs: data.outputs.map(out => ({ id: out.id, label: out.label, type: out.type as SubgraphPort['type'] })),
+                        nodes: data.nodes || [],
+                        edges: data.edges || [],
+                    };
+                    subgraphTemplateId = template._id;
+                    subgraphTemplateVersion = template.version;
+                }
+            }
+
+            // Must have either a registry definition or be a valid template
+            if (!definition && !codeTemplateData && !subgraphTemplateData) return;
 
             // Build default values from definition
             // Note: definition.inputs is a Record<string, Port>
@@ -50,7 +128,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             // Validation: Only one material node allowed
             const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
-            const { nodes, edges } = useEditorStore.getState();
+            const { nodes } = useEditorStore.getState();
 
             if (isMaterialNode) {
                 const existingMaterial = nodes.find(n =>
@@ -97,28 +175,80 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 }
             }
 
-            // Create the new node - handle code nodes specially
+            // Create the new node - handle custom nodes specially
             let newNode: AppNode;
+            let actualNodeType = nodeType; // May be overwritten for custom nodes
 
-            if (isCodeNode && codeNode) {
+            if (isCodeNode && codeTemplateData) {
+                // Generate a unique instance ID for this code node
+                const instanceId = `${codeTemplateData.id || 'code-template'}-${Date.now()}`;
+                actualNodeType = instanceId as NodeType;
+
+                // Add the code node definition to the store
+                const codeDefinition = {
+                    id: instanceId,
+                    name: codeTemplateData.name,
+                    templateId: codeTemplateId,
+                    templateVersion: codeTemplateVersion,
+                    code: codeTemplateData.code,
+                    inputs: codeTemplateData.inputs,
+                    output: codeTemplateData.output,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                };
+                useEditorStore.getState().addCodeNodeDefinition(codeDefinition);
+
                 // Code node instance
                 newNode = {
                     id: newNodeId,
-                    type: nodeType,
+                    type: actualNodeType,
                     position: flowPosition,
                     selected: true,
                     data: {
-                        type: nodeType,
+                        type: actualNodeType,
                         values: {},
                         connected: {},
-                        dynamicPorts: [...codeNode.inputs, codeNode.output],
+                        dynamicPorts: [...codeTemplateData.inputs, codeTemplateData.output],
+                    } as TSLNodeData,
+                };
+            } else if (isSubgraphNode && subgraphTemplateData) {
+                // Generate a unique instance ID for this subgraph node
+                const instanceId = `${subgraphTemplateData.id || 'subgraph-template'}-${Date.now()}`;
+                actualNodeType = instanceId as NodeType;
+
+                // Add the subgraph definition to the store
+                const subgraphDefinition = {
+                    id: instanceId,
+                    name: subgraphTemplateData.name,
+                    templateId: subgraphTemplateId,
+                    templateVersion: subgraphTemplateVersion,
+                    inputs: subgraphTemplateData.inputs,
+                    outputs: subgraphTemplateData.outputs,
+                    nodes: subgraphTemplateData.nodes,
+                    edges: subgraphTemplateData.edges,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                };
+                useEditorStore.getState().addSubgraphDefinition(subgraphDefinition);
+
+                // Subgraph node instance
+                newNode = {
+                    id: newNodeId,
+                    type: actualNodeType,
+                    position: flowPosition,
+                    selected: true,
+                    data: {
+                        type: actualNodeType,
+                        values: {},
+                        connected: {},
+                        dynamicPorts: [...subgraphTemplateData.inputs, ...subgraphTemplateData.outputs],
                     } as TSLNodeData,
                 };
             } else {
                 // Regular node from registry
                 newNode = {
                     id: newNodeId,
-                    type: nodeType, // This assumes 'nodeType' is valid for TSLNode (AppNode includes GroupNode | TSLNode)
+                    type: nodeType,
                     position: flowPosition,
                     selected: true,
                     data: {
@@ -136,16 +266,21 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             if (handleDirection === 'output') {
                 // We are dragging FROM source (output) TO new node (input)
-                if (isCodeNode && codeNode) {
+                if (isCodeNode && codeTemplateData) {
                     // Code node: find first input
-                    if (codeNode.inputs.length > 0) {
-                        targetHandleId = codeNode.inputs[0].id;
+                    if (codeTemplateData.inputs.length > 0) {
+                        targetHandleId = codeTemplateData.inputs[0].id;
+                    }
+                } else if (isSubgraphNode && subgraphTemplateData) {
+                    // Subgraph node: find first input
+                    if (subgraphTemplateData.inputs.length > 0) {
+                        targetHandleId = subgraphTemplateData.inputs[0].id;
                     }
                 } else if (definition) {
                     // Find compatible input on new node
                     const inputs = definition.inputs || {};
                     // Find first input that matches
-                    const matchingInput = Object.entries(inputs).find(([key, port]) => {
+                    const matchingInput = Object.entries(inputs).find(([, port]) => {
                         return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
                     });
                     if (matchingInput) {
@@ -156,13 +291,18 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 }
             } else {
                 // We are dragging FROM source (input) TO new node (output)
-                if (isCodeNode && codeNode) {
+                if (isCodeNode && codeTemplateData) {
                     // Code node: use the single output
-                    targetHandleId = codeNode.output.id;
+                    targetHandleId = codeTemplateData.output.id;
+                } else if (isSubgraphNode && subgraphTemplateData) {
+                    // Subgraph node: find first output
+                    if (subgraphTemplateData.outputs.length > 0) {
+                        targetHandleId = subgraphTemplateData.outputs[0].id;
+                    }
                 } else if (definition) {
                     // Find compatible output on new node
                     const outputs = definition.outputs || {};
-                    const matchingOutput = Object.entries(outputs).find(([key, port]) => {
+                    const matchingOutput = Object.entries(outputs).find(([, port]) => {
                         return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
                     });
                     if (matchingOutput) {
@@ -196,7 +336,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             close();
         },
-        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes]
+        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates]
     );
 
     if (!isOpen) return null;

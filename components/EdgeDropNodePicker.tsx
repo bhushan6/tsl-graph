@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useEffect, useRef, useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes } from '@/lib/node-picker-utils';
 import { useEditorStore } from '@/store/editor';
 import { NodeType, NodeDef, TSLType } from '@/lib/types';
@@ -27,6 +29,11 @@ interface CodeNodeDef extends Omit<NodeDef, 'tsl'> {
     tsl: string;
 }
 
+interface SubgraphNodeDef extends Omit<NodeDef, 'tsl'> {
+    isSubgraphNode: true;
+    tsl: string;
+}
+
 export function EdgeDropNodePicker({
     position,
     sourceDataType,
@@ -38,7 +45,7 @@ export function EdgeDropNodePicker({
 
     // Close on click outside
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
+        const handleClickOutside = (event: PointerEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 onClose();
             }
@@ -46,19 +53,24 @@ export function EdgeDropNodePicker({
 
         // Delay attaching to avoid immediate closing if triggered by click
         const timeout = setTimeout(() => {
-            document.addEventListener('mousedown', handleClickOutside);
+            // Use capture phase to intercept before any stopPropagation calls
+            document.addEventListener('pointerdown', handleClickOutside, true);
         }, 100);
 
         return () => {
             clearTimeout(timeout);
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('pointerdown', handleClickOutside, true);
         };
     }, [onClose]);
 
     // Get store state for filtering
     const nodes = useEditorStore((s) => s.nodes);
     const editorMode = useEditorStore((s) => s.editorMode);
-    const codeNodes = useEditorStore((s) => s.codeNodes);
+
+    // Fetch user's code node templates from server (cached by Convex)
+    const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
+    // Fetch user's subgraph templates from server (cached by Convex)
+    const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
 
     // Check which anchor nodes are present in the current graph
     const hasInputAnchor = useMemo(() =>
@@ -90,33 +102,74 @@ export function EdgeDropNodePicker({
         });
     }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor, nodes]); // nodes dependency for memo safety though logic uses filtered booleans
 
-    // Build code nodes that are compatible
+    // Build code nodes from templates (fetched from server, cached by Convex)
     const compatibleCodeNodes = useMemo((): CodeNodeDef[] => {
+        if (!userCodeNodeTemplates) return [];
+
         // Code nodes always have 'any' type for inputs/output, so they're compatible with everything
-        return Object.values(codeNodes).map(cn => ({
-            type: cn.id as NodeType,
-            label: cn.name,
-            category: 'Custom' as const,
-            isCodeNode: true as const,
-            inputs: cn.inputs.reduce((acc, inp) => {
-                acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
-                return acc;
-            }, {} as Record<string, { label: string; type: TSLType }>),
-            outputs: { out: { label: cn.output.label, type: cn.output.type as TSLType } },
-            tsl: cn.id, // Use the code node ID as TSL reference
-        }));
-    }, [codeNodes]);
+        return userCodeNodeTemplates.map(template => {
+            const data = template.data as {
+                id: string;
+                inputs: Array<{ id: string; label: string; type: string }>;
+                output: { label: string; type: string };
+            };
+            return {
+                type: `code/${template._id}` as NodeType,
+                label: template.name,
+                category: 'Custom' as const,
+                isCodeNode: true as const,
+                inputs: data.inputs.reduce((acc, inp) => {
+                    acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                outputs: { out: { label: data.output.label, type: data.output.type as TSLType } },
+                tsl: data.id, // Use the code node ID as TSL reference
+            };
+        });
+    }, [userCodeNodeTemplates]);
+
+    // Build subgraph nodes from templates (fetched from server, cached by Convex)
+    const compatibleSubgraphNodes = useMemo((): SubgraphNodeDef[] => {
+        if (!userSubgraphTemplates) return [];
+
+        return userSubgraphTemplates.map(template => {
+            const data = template.data as {
+                id: string;
+                inputs: Array<{ id: string; label: string; type: string }>;
+                outputs: Array<{ id: string; label: string; type: string }>;
+            };
+            return {
+                type: `subgraph/${template._id}` as NodeType,
+                label: template.name,
+                category: 'Custom' as const,
+                isSubgraphNode: true as const,
+                inputs: data.inputs.reduce((acc, inp) => {
+                    acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                outputs: data.outputs.reduce((acc, out) => {
+                    acc[out.id] = { label: out.label, type: out.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                tsl: data.id,
+            };
+        });
+    }, [userSubgraphTemplates]);
 
     const groupedNodes = useMemo(() => {
         const grouped = getGroupedCompatibleNodes(compatibleNodes);
 
-        // Add code nodes to Custom category if they exist
-        if (compatibleCodeNodes.length > 0) {
-            grouped['Custom'] = [...(grouped['Custom'] || []), ...compatibleCodeNodes];
+        // Add custom nodes to Custom category
+        const customNodes: (CodeNodeDef | SubgraphNodeDef)[] = [
+            ...compatibleSubgraphNodes,
+            ...compatibleCodeNodes,
+        ];
+        if (customNodes.length > 0) {
+            grouped['Custom'] = [...(grouped['Custom'] || []), ...customNodes];
         }
 
         return grouped;
-    }, [compatibleNodes, compatibleCodeNodes]);
+    }, [compatibleNodes, compatibleCodeNodes, compatibleSubgraphNodes]);
 
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -172,7 +225,14 @@ export function EdgeDropNodePicker({
             }}
             onKeyDown={handleKeyDown}
         >
-            <Command className="rounded-lg border shadow-md">
+            <Command
+                className="rounded-lg border shadow-md"
+                filter={(value, search) => {
+                    // Use case-insensitive substring matching instead of fuzzy matching
+                    if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                    return 0;
+                }}
+            >
                 <CommandInput placeholder="Search nodes..." autoFocus />
                 <CommandList className="max-h-[300px]">
                     <CommandEmpty>No compatible nodes found.</CommandEmpty>
@@ -181,12 +241,12 @@ export function EdgeDropNodePicker({
                             {nodes.map((node) => (
                                 <CommandItem
                                     key={node.type}
-                                    value={`${category} ${node.label}`} // Include category in search
+                                    value={node.label}
                                     onSelect={() => onNodeSelect(node.type as NodeType)}
                                     className="gap-2"
                                 >
                                     {(node as { isCodeNode?: boolean }).isCodeNode && <Code className="w-3 h-3 text-primary" />}
-                                    {category === 'Custom' && !(node as { isCodeNode?: boolean }).isCodeNode && <Layers className="w-3 h-3 text-primary" />}
+                                    {(node as { isSubgraphNode?: boolean }).isSubgraphNode && <Layers className="w-3 h-3 text-primary" />}
                                     <span>{node.label}</span>
                                 </CommandItem>
                             ))}
