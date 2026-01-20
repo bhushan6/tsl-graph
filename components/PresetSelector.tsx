@@ -1,12 +1,11 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CopyPlus, Sparkles, Zap, Box } from "lucide-react";
+import { CopyPlus } from "lucide-react";
 
 interface Preset {
     name: string;
     description: string;
     url: string;
-    // icon: React.ElementType;
     gradient: string;
 }
 
@@ -15,7 +14,6 @@ const PRESETS: Preset[] = [
         name: "Galaxy",
         description: "A swirling galaxy particle simulation locally.",
         url: "/galaxy.json",
-        // icon: Sparkles,
         // Deep space purple/blue gradient
         gradient: "from-indigo-900 via-purple-900 to-black"
     },
@@ -23,7 +21,6 @@ const PRESETS: Preset[] = [
         name: "Noise Gradient",
         description: "Smooth procedural noise based color gradients.",
         url: "/noise-gradient.json",
-        // icon: Zap,
         // Vibrant neon gradients
         gradient: "from-pink-500 via-red-500 to-yellow-500"
     },
@@ -31,7 +28,6 @@ const PRESETS: Preset[] = [
         name: "SDF Circles",
         description: "SDF Circles pattern.",
         url: "/sdf-circles.json",
-        // icon: Box,
         // Calm blue/cyan gradient
         gradient: "from-cyan-500 to-blue-500"
     }
@@ -57,7 +53,7 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                         {PRESETS.map((preset) => (
                             <div
                                 key={preset.url}
-                                className="group relative cursor-pointer transition-all hover:-translate-y-1 hover:shadow-xl rounded-xl overflow-hidden border border-border/50 bg-card"
+                                className="group relative cursor-pointer transition-all hover:-translate-y-1 hover:shadow-xl rounded-xl overflow-hidden border border-border/50 bg-card flex flex-col"
                                 onClick={() => onSelect(preset.url)}
                             >
                                 {/* Preview Area */}
@@ -65,23 +61,24 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                                     {/* <preset.icon className="h-12 w-12 text-white/90 drop-shadow-md group-hover:scale-110 transition-transform duration-300" /> */}
                                 </div>
 
-                                <div className="p-5">
+                                <div className="p-5 flex flex-col flex-1">
                                     <h3 className="font-semibold text-lg mb-2 group-hover:text-primary transition-colors">
                                         {preset.name}
                                     </h3>
                                     <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                                         {preset.description}
                                     </p>
-                                    <Button variant="secondary" className="w-full cursor-pointer">
+                                    <Button variant="secondary" className="w-full cursor-pointer mt-auto">
                                         Select Template
                                     </Button>
                                 </div>
                             </div>
+
                         ))}
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-center pb-8">
-                    <Button variant="ghost" size="lg" onClick={onCancel} className="text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="lg" onClick={onCancel} className="text-muted-foreground hover:text-foreground cursor-pointer">
                         <CopyPlus className="mr-2 h-4 w-4" />
                         Start with Empty Project
                     </Button>
