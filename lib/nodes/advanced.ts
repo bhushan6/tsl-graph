@@ -11,7 +11,7 @@ export const advancedNodes = [
         outputs: {
             out: { label: 'Out', type: 'any' },
         },
-        tsl: 'varyingProperty',
+        tsl: 'varying',
     },
 ] as const;
 
