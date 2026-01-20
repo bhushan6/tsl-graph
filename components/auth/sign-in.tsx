@@ -4,13 +4,12 @@ import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { Loader2 } from "lucide-react";
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
-    CardTitle,
 } from "@/components/ui/card";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -66,16 +65,8 @@ export function SignIn() {
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-sm border-border bg-card shadow-lg">
                 <CardHeader className="space-y-4 flex flex-col items-center text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                        {/* <Layers className="h-6 w-6 text-primary" /> */}
-                    </div>
-                    <div className="space-y-1">
-                        <CardTitle className="text-2xl font-bold tracking-tight">
-                            Welcome
-                        </CardTitle>
-                        <CardDescription>
-                            Please sign in to get started
-                        </CardDescription>
+                    <div className="flex items-center justify-center">
+                        <Logo size="xl" />
                     </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">

@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 import {
     LayoutGrid,
     Settings,
-    Sparkles,
     LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Logo } from "@/components/ui/logo";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -58,9 +58,7 @@ export function Sidebar({ className, user }: SidebarProps) {
                 {/* Brand Icon */}
                 <div className="flex items-center justify-center w-full px-4">
                     <Link href="/dashboard" className="flex items-center gap-3">
-                        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-purple-600 shadow-lg shadow-primary/20">
-                            <Sparkles className="w-5 h-5 text-white" />
-                        </div>
+                        <Logo size="sm" />
                     </Link>
                 </div>
 
