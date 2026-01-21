@@ -24,6 +24,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Logo } from '@/components/ui/logo';
+import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 
 interface NavbarProps {
     projectName?: string;
@@ -225,6 +226,7 @@ export function Navbar({ projectName, projectId }: NavbarProps) {
                         Saved
                     </Badge>
                 )}
+                <FeedbackDialog />
                 <ThemeToggle />
             </div>
 

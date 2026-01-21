@@ -86,4 +86,20 @@ export default defineSchema({
         .index("by_node", ["graphId", "nodeId"])
         .index("by_asset", ["assetId"])
         .index("by_deleted_at", ["deletedAt"]),
+
+    // Feedback and Bug Reports
+    feedbacks: defineTable({
+        userId: v.string(),
+        userName: v.optional(v.string()),
+        userEmail: v.optional(v.string()),
+        title: v.string(),
+        description: v.string(),
+        type: v.string(), // "bug", "feature", "other"
+        createdAt: v.number(),
+        status: v.string(), // "new", "in_progress", "resolved"
+        attachment: v.optional(v.id("_storage")),
+    })
+        .index("by_user", ["userId"])
+        .index("by_type", ["type"])
+        .index("by_status", ["status"]),
 });
