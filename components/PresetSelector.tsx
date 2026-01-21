@@ -1,35 +1,33 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CopyPlus } from "lucide-react";
+import Image from "next/image";
 
 interface Preset {
     name: string;
     description: string;
     url: string;
-    gradient: string;
+    thumbnail: string;
 }
 
 const PRESETS: Preset[] = [
     {
         name: "Galaxy",
-        description: "A swirling galaxy particle simulation locally.",
+        description: "A swirling galaxy particle from three js journey",
         url: "/galaxy.json",
-        // Deep space purple/blue gradient
-        gradient: "from-indigo-900 via-purple-900 to-black"
+        thumbnail: "/galaxy.png"
     },
     {
         name: "Noise Gradient",
         description: "Smooth procedural noise based color gradients.",
         url: "/noise-gradient.json",
-        // Vibrant neon gradients
-        gradient: "from-pink-500 via-red-500 to-yellow-500"
+        thumbnail: "/noise-gradient.png"
     },
     {
         name: "SDF Circles",
         description: "SDF Circles pattern.",
         url: "/sdf-circles.json",
-        // Calm blue/cyan gradient
-        gradient: "from-cyan-500 to-blue-500"
+        thumbnail: "/sdf-circles.png"
     }
 ];
 
@@ -57,8 +55,8 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                                 onClick={() => onSelect(preset.url)}
                             >
                                 {/* Preview Area */}
-                                <div className={`h-32 w-full bg-gradient-to-br ${preset.gradient} flex items-center justify-center`}>
-                                    {/* <preset.icon className="h-12 w-12 text-white/90 drop-shadow-md group-hover:scale-110 transition-transform duration-300" /> */}
+                                <div className={`h-32 w-full bg-gradient-to-br flex items-center justify-center`}>
+                                    <Image src={preset.thumbnail} width={512} height={512} alt={preset.name} className="w-full h-full object-cover" />
                                 </div>
 
                                 <div className="p-5 flex flex-col flex-1">

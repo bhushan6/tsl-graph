@@ -19,6 +19,18 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TSL Graph",
   description: "Visual node-based shader editor for Three.js shading language (TSL)",
+  icons: [
+    {
+      rel: "icon",
+      url: "/light-logo.ico",
+      media: "(prefers-color-scheme: dark)",
+    },
+    {
+      rel: "icon",
+      url: "/dark-logo.ico",
+      media: "(prefers-color-scheme: light)",
+    },
+  ],
 };
 
 export default function RootLayout({
