@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import posthog from "posthog-js";
 import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +60,7 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
 
             if (!normalizedName) {
                 toast.error('Subgraph name cannot be empty.');
+                posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Subgraph name cannot be empty.' });
                 return;
             }
 
@@ -67,6 +69,7 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
             const registryConfict = registry.all().some(def => def.label.toLowerCase() === normalizedName.toLowerCase());
             if (registryConfict) {
                 toast.error(`Name "${normalizedName}" is reserved by a built-in node.`);
+                posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Name reserved by built-in node', name: normalizedName });
                 return;
             }
 
@@ -75,6 +78,7 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
             const subgraphConflict = otherSubgraphs.some(sg => sg.name.toLowerCase() === normalizedName.toLowerCase());
             if (subgraphConflict) {
                 toast.error(`A subgraph with the name "${normalizedName}" already exists.`);
+                posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Subgraph name already exists', name: normalizedName });
                 return;
             }
 

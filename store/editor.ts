@@ -1051,7 +1051,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         }
                     } catch (error) {
                         console.error('Failed to update subgraph template in DB:', error);
-                        toast.error(getErrorMessage(error));
+                        const message = getErrorMessage(error);
+                        toast.error(message);
+                        get().trackEvent('error_occurred', { context: 'create_subgraph_template', error: message });
                     }
                 }
             } else {
@@ -1075,7 +1077,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         }
                     } catch (error) {
                         console.error('Failed to create subgraph template in DB:', error);
-                        toast.error(getErrorMessage(error));
+                        const message = getErrorMessage(error);
+                        toast.error(message);
+                        get().trackEvent('error_occurred', { context: 'update_subgraph_template', error: message });
                     }
                 }
             }
@@ -1338,7 +1342,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 useEditorStore.setState({ codeNodes: rest });
 
                 console.error('Failed to save code node template to DB:', error);
-                toast.error(getErrorMessage(error));
+                const message = getErrorMessage(error);
+                toast.error(message);
+                get().trackEvent('error_occurred', { context: 'create_code_node_template', error: message });
                 return null;
             }
         }
@@ -1432,7 +1438,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             }).catch(error => {
                 console.error('Failed to update code node template in DB:', error);
-                toast.error(getErrorMessage(error));
+                const message = getErrorMessage(error);
+                toast.error(message);
+                get().trackEvent('error_occurred', { context: 'update_code_node_template', error: message });
             });
         }
     },

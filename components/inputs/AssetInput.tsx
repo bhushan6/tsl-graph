@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
+import posthog from "posthog-js";
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -123,6 +124,7 @@ export function AssetInput({
             const message = err instanceof Error ? err.message : 'Failed to upload asset';
             setError(message);
             toast.error(message);
+            posthog.capture('error_occurred', { context: 'asset_upload_failed', error: message });
         } finally {
             setIsUploading(false);
             e.target.value = '';
@@ -146,6 +148,7 @@ export function AssetInput({
         } catch (err) {
             console.error('[AssetInput] Asset unlink error:', err);
             toast.error('Failed to remove asset');
+            posthog.capture('error_occurred', { context: 'asset_remove_failed', error: 'Failed to remove asset' });
         }
     }, [graphId, nodeId, propertyName, value, unlinkAssetFromNode, onChange]);
 

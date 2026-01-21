@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import posthog from "posthog-js";
 import { useReactFlow } from '@xyflow/react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -249,7 +250,9 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
                 toast.success(`Deleted "${templateName}"`);
             } catch (error) {
                 console.error('Failed to delete subgraph template:', error);
-                toast.error(getErrorMessage(error));
+                const message = getErrorMessage(error);
+                toast.error(message);
+                posthog.capture('error_occurred', { context: 'delete_subgraph_template', error: message });
             } finally {
                 setDeletingTemplates(prev => {
                     const next = new Set(prev);
@@ -272,7 +275,9 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
                 toast.success(`Deleted "${templateName}"`);
             } catch (error) {
                 console.error('Failed to delete code node template:', error);
-                toast.error(getErrorMessage(error));
+                const message = getErrorMessage(error);
+                toast.error(message);
+                posthog.capture('error_occurred', { context: 'delete_code_node_template', error: message });
             } finally {
                 setDeletingTemplates(prev => {
                     const next = new Set(prev);

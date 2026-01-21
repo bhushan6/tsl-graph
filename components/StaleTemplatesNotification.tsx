@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import posthog from "posthog-js";
 import { useQuery, useMutation, useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -221,6 +222,9 @@ export function StaleTemplatesNotification() {
             setDismissed(prev => new Set(prev).add(template.id));
         } catch (error) {
             console.error('Failed to update template:', error);
+            const message = getErrorMessage(error);
+            toast.error(message);
+            posthog.capture('error_occurred', { context: 'clone_template_failed', error: message });
         } finally {
             setUpdating(prev => {
                 const next = new Set(prev);
@@ -297,7 +301,9 @@ export function StaleTemplatesNotification() {
             toast.success(`Cloned "${template.name}" to your library`);
         } catch (error) {
             console.error('Failed to clone template:', error);
-            toast.error(getErrorMessage(error));
+            const message = getErrorMessage(error);
+            toast.error(message);
+            posthog.capture('error_occurred', { context: 'clone_template_failed', error: message });
         } finally {
             setCloning(prev => {
                 const next = new Set(prev);
