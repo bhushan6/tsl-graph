@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
@@ -55,6 +56,11 @@ export function SignIn() {
             await authClient.signIn.social({
                 provider,
                 callbackURL: "/dashboard",
+                fetchOptions: {
+                    onSuccess: () => {
+                        posthog.capture('user_signed_in', { provider });
+                    }
+                }
             });
         } catch {
             setLoadingProvider(null);

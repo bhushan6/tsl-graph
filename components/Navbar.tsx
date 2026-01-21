@@ -23,7 +23,6 @@ import { useRouter } from 'next/navigation';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Input } from './ui/input';
 import { Logo } from '@/components/ui/logo';
 
 interface NavbarProps {

@@ -51,6 +51,14 @@ function DashboardContent() {
                 graphData: { version: 1, nodes: [], edges: [], subgraphs: {}, codeNodes: {} },
             });
 
+            // Track project creation
+            // We need to import posthog first.
+            // Since this file is use client, we can use posthog-js
+            const posthog = (await import("posthog-js")).default;
+            posthog.capture("project_created", {
+                project_id: projectId,
+            });
+
             router.push(`/editor/${projectId}`);
         } catch (error) {
             console.error("Failed to create project:", error);
@@ -63,6 +71,13 @@ function DashboardContent() {
         try {
             setIsDeleting(true);
             await deleteProject({ id: projectToDelete });
+
+            // Track project deletion
+            const posthog = (await import("posthog-js")).default;
+            posthog.capture("project_deleted", {
+                project_id: projectToDelete,
+            });
+
             setProjectToDelete(null);
         } catch (error) {
             console.error("Failed to delete project:", error);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import posthog from 'posthog-js';
 import {
     type Node,
     type Edge,
@@ -214,9 +215,14 @@ interface EditorState {
 
     // Reset entire store
     resetEditor: () => void;
+    // Track event helper
+    trackEvent: (event: string, properties?: Record<string, any>) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
+    trackEvent: (event, properties) => {
+        posthog.capture(event, properties);
+    },
     nodes: [],
     edges: [],
     selectedNodeId: null,
@@ -295,7 +301,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Auto-save methods
     setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
-    setProjectId: (projectId) => set({ projectId }),
+    setProjectId: (projectId) => {
+        const currentId = get().projectId;
+        if (currentId !== projectId && projectId) {
+            posthog.capture('project_opened', { project_id: projectId });
+        }
+        set({ projectId });
+    },
 
     // Template callbacks setter
     setTemplateCallbacks: (callbacks) => set({
@@ -353,6 +365,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
                 try {
                     await currentState.autoSaveCallback?.();
+
+                    // Track save
+                    if (currentState.projectId) {
+                        posthog.capture('project_saved', { project_id: currentState.projectId });
+                    }
 
                     useEditorStore.setState({ isSaving: false });
 
@@ -503,6 +520,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         };
         set({ nodes: [...get().nodes, newNode], graphStructureVersion: get().graphStructureVersion + 1 });
         get().markDirty();
+
+        posthog.capture('node_added', {
+            node_type: type,
+            project_id: get().projectId
+        });
+
         return true;
     },
 

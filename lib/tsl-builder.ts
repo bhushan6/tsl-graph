@@ -153,13 +153,11 @@ export function buildNodePreviewMaterial(
 
     try {
         const func = new Function(...scopeKeys, functionBody);
-        console.log({ functionBody });
 
         const material = func(...scopeValues);
         return material;
     } catch (err) {
         console.error('Node Preview Build Failed:', err);
-        console.log('Generated Code:', functionBody);
         // Return a fallback magenta material to indicate error
         const fallback = new THREE.MeshBasicNodeMaterial();
         fallback.color = new THREE.Color(0xff00ff);
