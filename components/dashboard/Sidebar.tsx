@@ -45,6 +45,8 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { ConvexError } from "convex/values";
+import { ErrorCodes } from "@/convex/errors";
 
 export function Sidebar({ className, user }: SidebarProps) {
     const pathname = usePathname();
@@ -79,6 +81,19 @@ export function Sidebar({ className, user }: SidebarProps) {
             });
         } catch (error) {
             console.error("Failed to delete account:", error);
+
+            // Check for NOT_AUTHENTICATED error and redirect to sign-in
+            if (
+                error instanceof ConvexError &&
+                typeof error.data === 'object' &&
+                error.data !== null &&
+                'code' in error.data &&
+                error.data.code === ErrorCodes.NOT_AUTHENTICATED
+            ) {
+                window.location.href = "/sign-in";
+                return;
+            }
+
             toast.error("Failed to delete account. Please try again.");
             setIsDeleting(false);
             setShowDeleteAlert(false);

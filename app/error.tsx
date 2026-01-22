@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ErrorCodes } from '@/convex/errors';
 
 export default function Error({
     error,
@@ -12,9 +13,21 @@ export default function Error({
     error: Error & { digest?: string };
     reset: () => void;
 }) {
-    useEffect(() => {
+    useLayoutEffect(() => {
         // Log the error to an error reporting service
         console.error('Application error:', error);
+
+        // Check for authentication errors and redirect to sign-in
+        // ConvexError wraps the error data - check for NOT_AUTHENTICATED code
+        const errorMessage = error.message || '';
+
+        // ConvexError messages contain the JSON data, so we check for the error code
+        if (
+            errorMessage.includes(`"code":${ErrorCodes.NOT_AUTHENTICATED}`) ||
+            errorMessage.includes(`"code": ${ErrorCodes.NOT_AUTHENTICATED}`)
+        ) {
+            window.location.href = '/sign-in';
+        }
     }, [error]);
 
     return (

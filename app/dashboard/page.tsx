@@ -29,6 +29,7 @@ import { ConvexError } from "convex/values";
 import { ErrorCodes } from "@/convex/errors";
 
 import { SignInModal } from "@/components/auth/sign-in-modal";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function DashboardContent() {
     const router = useRouter();
@@ -240,7 +241,9 @@ function DashboardContent() {
 export default function DashboardPage() {
     return (
         <ProtectedRoute>
-            <DashboardContent />
+            <ErrorBoundary>
+                <DashboardContent />
+            </ErrorBoundary>
         </ProtectedRoute>
     );
 }
