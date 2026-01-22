@@ -1,6 +1,7 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
+import { createErrorData, ErrorCodes } from "./errors";
 
 // Create a new project
 export const create = mutation({
@@ -11,9 +12,24 @@ export const create = mutation({
         graphData: v.any(),
     },
     handler: async (ctx, args) => {
+
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
+        }
+
+        if (user.isAnonymous) {
+            const userProjects = await ctx.db
+                .query("projects")
+                .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
+                .collect();
+
+            if (userProjects.length >= 1) {
+                throw new ConvexError(createErrorData(
+                    ErrorCodes.LIMIT_EXCEEDED,
+                    "Anonymous users are limited to 1 project. Please sign up to create more."
+                ));
+            }
         }
 
         const now = Date.now();
@@ -63,15 +79,15 @@ export const update = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
         }
 
         const project = await ctx.db.get(args.id);
         if (!project) {
-            throw new Error("Project not found");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND));
         }
         if (project.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHORIZED));
         }
 
         const updates: Record<string, unknown> = {
@@ -98,15 +114,15 @@ export const updateThumbnail = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
         }
 
         const project = await ctx.db.get(args.id);
         if (!project) {
-            throw new Error("Project not found");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND));
         }
         if (project.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHORIZED));
         }
 
         // Get the URL for the new thumbnail
@@ -144,7 +160,7 @@ export const generateThumbnailUploadUrl = mutation({
     handler: async (ctx) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
         }
         return await ctx.storage.generateUploadUrl();
     },
@@ -158,15 +174,15 @@ export const remove = mutation({
     handler: async (ctx, args) => {
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
-            throw new Error("Not authenticated");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
         }
 
         const project = await ctx.db.get(args.id);
         if (!project) {
-            throw new Error("Project not found");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND));
         }
         if (project.userId !== user._id) {
-            throw new Error("Not authorized");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHORIZED));
         }
 
         await ctx.db.delete(args.id);

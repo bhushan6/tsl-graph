@@ -13,6 +13,9 @@ export const ErrorCodes = {
     // Validation errors (3xx)
     INVALID_INPUT: 300,
     NAME_REQUIRED: 301,
+
+    // Limit errors (4xx)
+    LIMIT_EXCEEDED: 400,
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -25,6 +28,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
     [ErrorCodes.ALREADY_EXISTS]: "Resource already exists",
     [ErrorCodes.INVALID_INPUT]: "Invalid input",
     [ErrorCodes.NAME_REQUIRED]: "Name is required",
+    [ErrorCodes.LIMIT_EXCEEDED]: "Limit exceeded",
 };
 
 // Helper to create error data object
