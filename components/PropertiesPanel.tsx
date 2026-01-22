@@ -617,7 +617,7 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLV
     );
 }
 
-function NumberInput({ value, onChange, step }: { value: number; onChange: (value: TSLValueType) => void; step: number }) {
+function NumberInput({ value, onChange }: { value: number; onChange: (value: TSLValueType) => void; step?: number }) {
     const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 

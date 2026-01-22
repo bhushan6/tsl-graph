@@ -33,7 +33,10 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
 
     // Keep a ref to track the latest value for use in handleChange
     const valueRef = useRef(safeValue);
-    valueRef.current = safeValue;
+
+    useEffect(() => {
+        valueRef.current = safeValue;
+    });
 
     const currentLabels = labels || defaultLabels.slice(0, size);
 
