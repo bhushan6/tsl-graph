@@ -11,7 +11,7 @@ export const submitFeedback = mutation({
         title: v.string(),
         description: v.string(),
         type: v.string(),
-        attachment: v.optional(v.id("_storage")),
+        attachments: v.optional(v.array(v.id("_storage"))),
     },
     handler: async (ctx, args) => {
         const identity = await ctx.auth.getUserIdentity();
@@ -30,7 +30,7 @@ export const submitFeedback = mutation({
             type: args.type,
             status: "new",
             createdAt: Date.now(),
-            attachment: args.attachment,
+            attachments: args.attachments,
         });
     },
 });
@@ -49,10 +49,27 @@ export const getFeedbacks = query({
 
         const feedbacks = await ctx.db.query("feedbacks").order("desc").collect();
         return Promise.all(
-            feedbacks.map(async (f) => ({
-                ...f,
-                attachmentUrl: f.attachment ? await ctx.storage.getUrl(f.attachment) : null,
-            }))
+            feedbacks.map(async (f) => {
+                let attachmentUrl = null;
+                const attachmentUrls: string[] = [];
+
+                if (f.attachment) {
+                    attachmentUrl = await ctx.storage.getUrl(f.attachment);
+                }
+
+                if (f.attachments && f.attachments.length > 0) {
+                    for (const storageId of f.attachments) {
+                        const url = await ctx.storage.getUrl(storageId);
+                        if (url) attachmentUrls.push(url);
+                    }
+                }
+
+                return {
+                    ...f,
+                    attachmentUrl,
+                    attachmentUrls,
+                }
+            })
         );
     },
 });

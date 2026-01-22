@@ -68,19 +68,31 @@ function FeedbackList() {
                             </CardHeader>
                             <CardContent>
                                 <p className="whitespace-pre-wrap text-sm">{feedback.description}</p>
-                                {feedback.attachmentUrl && (
-                                    <div className="mt-4">
-                                        <Link
-                                            href={feedback.attachmentUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-2 text-sm text-blue-500 hover:underline"
-                                        >
-                                            <Paperclip className="h-4 w-4" />
-                                            View Attachment
-                                        </Link>
-                                    </div>
-                                )}
+                                {(() => {
+                                    const allAttachments = [
+                                        ...(feedback.attachmentUrl ? [feedback.attachmentUrl] : []),
+                                        ...(feedback.attachmentUrls || []),
+                                    ];
+
+                                    if (allAttachments.length === 0) return null;
+
+                                    return (
+                                        <div className="mt-4 flex flex-col gap-2">
+                                            {allAttachments.map((url, index) => (
+                                                <Link
+                                                    key={index}
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-2 text-sm text-blue-500 hover:underline"
+                                                >
+                                                    <Paperclip className="h-4 w-4" />
+                                                    View Attachment {allAttachments.length > 1 ? `#${index + 1}` : ""}
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
                             </CardContent>
                         </Card>
                     ))

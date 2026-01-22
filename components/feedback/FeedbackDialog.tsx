@@ -27,13 +27,14 @@ import { toast } from "sonner";
 import { MessageSquarePlus } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import { getErrorMessage } from "@/lib/utils";
+import FileUploadCompact from "@/components/file-upload/compact-upload";
 
 export function FeedbackDialog() {
     const [open, setOpen] = useState(false);
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [type, setType] = useState("feature");
-    const [selectedImage, setSelectedImage] = useState<File | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const generateUploadUrl = useMutation(api.feedback.generateUploadUrl);
@@ -48,29 +49,31 @@ export function FeedbackDialog() {
 
         setIsSubmitting(true);
         try {
-            let storageId: Id<"_storage"> | undefined;
+            const attachmentIds: Id<"_storage">[] = [];
 
-            if (selectedImage) {
-                const postUrl = await generateUploadUrl();
-                const result = await fetch(postUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": selectedImage.type },
-                    body: selectedImage,
-                });
+            if (selectedFiles.length > 0) {
+                for (const file of selectedFiles) {
+                    const postUrl = await generateUploadUrl();
+                    const result = await fetch(postUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": file.type },
+                        body: file,
+                    });
 
-                if (!result.ok) {
-                    throw new Error(`Upload failed: ${result.statusText}`);
+                    if (!result.ok) {
+                        throw new Error(`Upload failed for ${file.name}: ${result.statusText}`);
+                    }
+
+                    const { storageId } = await result.json();
+                    attachmentIds.push(storageId);
                 }
-
-                const { storageId: uploadedStorageId } = await result.json();
-                storageId = uploadedStorageId;
             }
 
             await submitFeedback({
                 title,
                 description,
                 type,
-                attachment: storageId,
+                attachments: attachmentIds,
             });
             toast.success("Feedback submitted successfully!");
             setOpen(false);
@@ -78,7 +81,7 @@ export function FeedbackDialog() {
             setTitle("");
             setDescription("");
             setType("feature");
-            setSelectedImage(null);
+            setSelectedFiles([]);
         } catch (error) {
             console.error("Error submitting feedback:", error);
             toast.error(getErrorMessage(error));
@@ -140,12 +143,16 @@ export function FeedbackDialog() {
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="attachment">Attachment (Optional)</Label>
-                        <Input
-                            id="attachment"
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => setSelectedImage(e.target.files?.[0] || null)}
+                        <Label>Attachments (Optional)</Label>
+                        <FileUploadCompact
+                            onFilesChange={(files) => {
+                                const newFiles = files
+                                    .map((f) => f.file)
+                                    .filter((f): f is File => f instanceof File);
+                                setSelectedFiles(newFiles);
+                            }}
+                            maxFiles={5}
+                            accept="image/*,application/pdf"
                         />
                     </div>
                     <DialogFooter>

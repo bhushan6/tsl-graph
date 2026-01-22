@@ -97,7 +97,8 @@ export default defineSchema({
         type: v.string(), // "bug", "feature", "other"
         createdAt: v.number(),
         status: v.string(), // "new", "in_progress", "resolved"
-        attachment: v.optional(v.id("_storage")),
+        attachment: v.optional(v.id("_storage")), // Deprecated: use attachments
+        attachments: v.optional(v.array(v.id("_storage"))),
     })
         .index("by_user", ["userId"])
         .index("by_type", ["type"])
