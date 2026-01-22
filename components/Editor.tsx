@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
+import { useMemo, useEffect, useCallback, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -62,8 +62,6 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
         onNodesChange,
         onEdgesChange,
         onConnect,
-        loadFromJSON,
-        loadFromLocalStorage,
         setSelectedNode,
         setSelectedNodes,
         editorMode,
@@ -81,22 +79,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
 
-    // Load from localStorage on mount (for standalone editor without project)
-    // useEffect(() => {
-    //     if (!isInitialized.current) {
-    //         isInitialized.current = true;
-    //         const loaded = loadFromLocalStorage();
-    //         if (!loaded) {
-    //             fetch('/demo-2.json')
-    //                 .then(response => response.text())
-    //                 .then(json => {
-    //                     loadFromJSON(json);
-    //                 })
-    //                 .catch(err => console.error('Failed to load demo graph:', err));
-    //         }
-    //     }
-    // }, [loadFromLocalStorage, loadFromJSON]);
-
+    const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
+    const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
 
     // Keyboard shortcuts for Undo/Redo
     useEffect(() => {
@@ -214,10 +198,6 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                 return false;
             }
 
-            // Cycle check
-            // We want to check if connecting source -> target creates a cycle.
-            // This happens if target can reach source (target -> ... -> source).
-            // Pass target first, then source to check if path target->source exists.
             return !hasCycle(target, source, nodes, edges);
         },
         [getNodes, getEdges]
@@ -284,17 +264,12 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                     isValidConnection={isValidConnection}
                     fitView
                     className="bg-background"
-                    // defaultEdgeOptions={{
-                    //     type: 'smoothstep',
-                    // }}
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
-                    selectionKeyCode={null} // Disable keyboard shortcut so it's mode-only (optional, but good UX if we have explicit modes)
-                    multiSelectionKeyCode="Shift" // Keep Shift for multi-selection additions
+                    selectionKeyCode={"Shift"}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>
-                {/* Edge Drop Picker Layer */}
                 <CanvasEdgeDropPicker />
             </div >
 
@@ -307,8 +282,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                 <UILayer.LeftPanel>
                     {isNodePickerOpen ? (
                         <NodePicker
-                            onClose={() => setIsNodePickerOpen(false)}
-                            onOpenCodeNodeDialog={() => setIsCodeNodeDialogOpen(true)}
+                            onClose={onNodePickerClose}
+                            onOpenCodeNodeDialog={onOpenCodeNodeDialog}
                         />
                     ) : (
                         <Button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import posthog from "posthog-js";
 import { useReactFlow } from '@xyflow/react';
 import { useQuery, useMutation } from 'convex/react';
@@ -66,7 +66,7 @@ interface NodePickerProps {
     onOpenCodeNodeDialog?: () => void;
 }
 
-export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
+function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
     const addNode = useEditorStore((s) => s.addNode);
     const editorMode = useEditorStore((s) => s.editorMode);
     const nodes = useEditorStore((s) => s.nodes);
@@ -540,3 +540,5 @@ export function NodePicker({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
         </div>
     );
 }
+
+export const NodePicker = memo(NodePickerComponent);
