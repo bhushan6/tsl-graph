@@ -39,7 +39,7 @@ export default function Error({
                         )}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        We've been notified of the issue. Please try refreshing the page.
+                        We&apos;ve been notified of the issue. Please try refreshing the page.
                     </p>
                 </CardContent>
                 <CardFooter className="flex justify-center gap-2">

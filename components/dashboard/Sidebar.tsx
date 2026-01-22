@@ -30,8 +30,27 @@ interface SidebarProps {
     };
 }
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
 export function Sidebar({ className, user }: SidebarProps) {
     const pathname = usePathname();
+    const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const deleteSelf = useMutation(api.users.deleteSelf);
 
     const navItems = [
         {
@@ -45,6 +64,25 @@ export function Sidebar({ className, user }: SidebarProps) {
     const handleSignOut = async () => {
         await authClient.signOut();
         window.location.href = "/sign-in";
+    };
+
+    const handleDeleteAccount = async () => {
+        try {
+            setIsDeleting(true);
+            await deleteSelf();
+            await authClient.deleteUser({
+                fetchOptions: {
+                    onSuccess: () => {
+                        window.location.href = "/";
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Failed to delete account:", error);
+            toast.error("Failed to delete account. Please try again.");
+            setIsDeleting(false);
+            setShowDeleteAlert(false);
+        }
     };
 
     return (
@@ -109,12 +147,50 @@ export function Sidebar({ className, user }: SidebarProps) {
                             <Settings className="mr-2 h-4 w-4" />
                             <span>Settings</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                        <DropdownMenuItem
+                            onClick={() => setShowDeleteAlert(true)}
+                            className="text-destructive focus:text-destructive"
+                        >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Delete Account</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleSignOut}>
                             <LogOut className="mr-2 h-4 w-4" />
                             <span>Sign Out</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+
+                <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Account?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete your account and all associated data (projects, assets, etc.). This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDeleteAccount();
+                                }}
+                                disabled={isDeleting}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                {isDeleting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    "Delete Account"
+                                )}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </aside>
     );

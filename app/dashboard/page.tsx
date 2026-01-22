@@ -17,18 +17,18 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-    Plus,
-    Search,
-    FolderOpen,
-    Loader2,
-} from "lucide-react";
+import { Plus, Search, FolderOpen, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
+import { toast } from "sonner";
+import { ConvexError } from "convex/values";
+import { ErrorCodes } from "@/convex/errors";
+
+import { SignInModal } from "@/components/auth/sign-in-modal";
 
 function DashboardContent() {
     const router = useRouter();
@@ -38,6 +38,7 @@ function DashboardContent() {
     const [projectToDelete, setProjectToDelete] = useState<Id<"projects"> | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
 
     const projects = useQuery(api.projects.list);
     const createProject = useMutation(api.projects.create);
@@ -62,6 +63,23 @@ function DashboardContent() {
             router.push(`/editor/${projectId}`);
         } catch (error) {
             console.error("Failed to create project:", error);
+            if (error instanceof ConvexError) {
+                const data = error.data as { code: number; message: string };
+                if (data.code === ErrorCodes.LIMIT_EXCEEDED) {
+                    toast.error(data.message, {
+                        action: {
+                            label: "Sign In",
+                            onClick: () => {
+                                setIsSignInModalOpen(true);
+                            }
+                        }
+                    });
+                } else {
+                    toast.error(data.message);
+                }
+            } else {
+                toast.error("Failed to create project");
+            }
             setIsCreating(false);
         }
     };
@@ -212,6 +230,8 @@ function DashboardContent() {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
+
+                <SignInModal open={isSignInModalOpen} onOpenChange={setIsSignInModalOpen} />
             </main>
         </div>
     );

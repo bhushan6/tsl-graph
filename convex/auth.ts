@@ -1,6 +1,7 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
-import { components } from "./_generated/api";
+import { anonymous } from "better-auth/plugins";
+import { api, components } from "./_generated/api";
 import { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { betterAuth } from "better-auth";
@@ -21,6 +22,15 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
             "https://www.tsl-graph.xyz",
             "https://tsl-graph.xyz",
         ],
+        user: {
+            deleteUser: {
+                enabled: true,
+            }
+        },
+        accountLinking: {
+            enabled: true,
+            trustedProviders: ["google", "github"],
+        },
         socialProviders: {
             google: {
                 clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -34,6 +44,19 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         plugins: [
             // The Convex plugin is required for Convex compatibility
             convex({ authConfig }),
+            anonymous({
+                onLinkAccount: async ({ anonymousUser, newUser }) => {
+                    console.log("ON LINK=============")
+                    const guestUserId = anonymousUser.user.id
+                    const targetUserId = newUser.user.id
+
+                    // Use ctx from the outer createAuth scope to run the mutation
+                    await (ctx as any).runMutation(api.users.transferGuestDataToUser, {
+                        guestUserId,
+                        targetUserId
+                    })
+                }
+            }),
         ],
     });
 };
