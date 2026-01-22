@@ -123,6 +123,10 @@ interface EditorState {
     canvasMode: 'pan' | 'select';
     setCanvasMode: (mode: 'pan' | 'select') => void;
 
+    // Debug Mode - controls node preview visibility
+    debugMode: boolean;
+    setDebugMode: (mode: boolean) => void;
+
     // Preview settings
     previewSettings: PreviewSettings;
     updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
@@ -294,6 +298,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Canvas Mode
     canvasMode: 'pan',
     setCanvasMode: (mode) => set({ canvasMode: mode }),
+
+    // Debug Mode - off by default
+    debugMode: false,
+    setDebugMode: (mode) => set({ debugMode: mode }),
 
     // History initialization
     history: { past: [], future: [] },

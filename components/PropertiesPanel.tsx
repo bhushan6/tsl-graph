@@ -272,6 +272,7 @@ function PropertiesPanelContent() {
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const getCodeNode = useEditorStore((s) => s.getCodeNode);
     const codeNodes = useEditorStore((s) => s.codeNodes);
+    const debugMode = useEditorStore((s) => s.debugMode);
     const edges = useEdges();
 
     const [editingCodeNodeId, setEditingCodeNodeId] = useState<string | null>(null);
@@ -372,10 +373,9 @@ function PropertiesPanelContent() {
                 </p>
             </div>
 
-            {/* Properties */}
             <div className="flex-1 overflow-y-auto p-4">
-                {/* Node Preview */}
-                <NodePreview />
+                {/* Node Preview - only shown in debug mode */}
+                {debugMode && <NodePreview />}
 
                 {editableInputs.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
