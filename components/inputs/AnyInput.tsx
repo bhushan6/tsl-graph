@@ -216,26 +216,45 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
 
 // Debounced float input with local state
 function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v: TSLValueType) => void }) {
-    const [localValue, setLocalValue] = useState(value);
+    const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
     useEffect(() => {
-        setLocalValue(value);
+        setLocalValue(String(value));
     }, [value]);
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const parsed = parseFloat(e.target.value);
-        const newValue = isNaN(parsed) ? 0 : parsed;
-        setLocalValue(newValue);
-        debouncedOnChange(newValue);
+        const inputValue = e.target.value;
+        // Allow empty, minus sign, or valid number patterns (including negative)
+        if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
+            setLocalValue(inputValue);
+            return;
+        }
+        // Check if it's a valid number pattern
+        if (/^-?\d*\.?\d*$/.test(inputValue)) {
+            setLocalValue(inputValue);
+            const parsed = parseFloat(inputValue);
+            if (!isNaN(parsed)) {
+                debouncedOnChange(parsed);
+            }
+        }
     }, [debouncedOnChange]);
+
+    const handleBlur = useCallback(() => {
+        // On blur, normalize the value
+        const parsed = parseFloat(localValue);
+        const normalized = isNaN(parsed) ? 0 : parsed;
+        setLocalValue(String(normalized));
+        onChange(normalized);
+    }, [localValue, onChange]);
 
     return (
         <SidebarInput
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={localValue}
             onChange={handleChange}
-            step={0.1}
+            onBlur={handleBlur}
             className="h-7 text-xs font-mono"
         />
     );

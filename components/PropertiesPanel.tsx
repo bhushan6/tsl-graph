@@ -618,24 +618,45 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLV
 }
 
 function NumberInput({ value, onChange, step }: { value: number; onChange: (value: TSLValueType) => void; step: number }) {
-    const [localValue, setLocalValue] = useState(value);
+    const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
     useEffect(() => {
-        setLocalValue(value);
+        setLocalValue(String(value));
     }, [value]);
 
-    const handleValueChange = useCallback((newValue: number) => {
-        setLocalValue(newValue);
-        debouncedOnChange(newValue);
+    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const inputValue = e.target.value;
+        // Allow empty, minus sign, or valid number patterns (including negative)
+        if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
+            setLocalValue(inputValue);
+            return;
+        }
+        // Check if it's a valid number pattern
+        if (/^-?\d*\.?\d*$/.test(inputValue)) {
+            setLocalValue(inputValue);
+            const parsed = parseFloat(inputValue);
+            if (!isNaN(parsed)) {
+                debouncedOnChange(parsed);
+            }
+        }
     }, [debouncedOnChange]);
+
+    const handleBlur = useCallback(() => {
+        // On blur, normalize the value
+        const parsed = parseFloat(localValue);
+        const normalized = isNaN(parsed) ? 0 : parsed;
+        setLocalValue(String(normalized));
+        onChange(normalized);
+    }, [localValue, onChange]);
 
     return (
         <SidebarInput
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={localValue}
-            onChange={(e) => handleValueChange(parseFloat(e.target.value) || 0)}
-            step={step}
+            onChange={handleChange}
+            onBlur={handleBlur}
             className="h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs"
         />
     );

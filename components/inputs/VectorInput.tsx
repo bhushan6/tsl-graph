@@ -62,23 +62,41 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
 }
 
 function NumberInput({ value, onChange, className }: { value: number; onChange: (val: number) => void; className?: string }) {
-    const [localValue, setLocalValue] = useState(value);
+    const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
     useEffect(() => {
-        setLocalValue(value);
+        setLocalValue(String(value));
     }, [value]);
 
     return (
         <SidebarInput
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={localValue}
             onChange={(e) => {
-                const f = parseFloat(e.target.value);
-                setLocalValue(isNaN(f) ? 0 : f);
-                debouncedOnChange(isNaN(f) ? 0 : f);
+                const inputValue = e.target.value;
+                // Allow empty, minus sign, or valid number patterns (including negative)
+                if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
+                    setLocalValue(inputValue);
+                    return;
+                }
+                // Check if it's a valid number pattern
+                if (/^-?\d*\.?\d*$/.test(inputValue)) {
+                    setLocalValue(inputValue);
+                    const f = parseFloat(inputValue);
+                    if (!isNaN(f)) {
+                        debouncedOnChange(f);
+                    }
+                }
             }}
-            step={0.1}
+            onBlur={() => {
+                // On blur, normalize the value
+                const f = parseFloat(localValue);
+                const normalized = isNaN(f) ? 0 : f;
+                setLocalValue(String(normalized));
+                onChange(normalized);
+            }}
             className={cn(
                 "h-7 text-xs px-2 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                 className
