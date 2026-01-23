@@ -1,7 +1,8 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CopyPlus } from "lucide-react";
+import { CopyPlus, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { useState } from "react";
 
 interface Preset {
     name: string;
@@ -32,11 +33,27 @@ const PRESETS: Preset[] = [
 ];
 
 interface PresetSelectorProps {
-    onSelect: (url: string) => void;
+    onSelect: (url: string) => Promise<void> | void;
     onCancel: () => void;
 }
 
 export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
+    const [loadingPreset, setLoadingPreset] = useState<string | null>(null);
+
+    const handleSelect = async (url: string) => {
+        if (loadingPreset) return;
+        setLoadingPreset(url);
+        try {
+            await onSelect(url);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoadingPreset(null);
+        }
+    };
+
+    const isProcessing = loadingPreset !== null;
+
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <Card className="w-full max-w-4xl shadow-2xl border-muted/40">
@@ -51,8 +68,9 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                         {PRESETS.map((preset) => (
                             <div
                                 key={preset.url}
-                                className="group relative cursor-pointer transition-all hover:-translate-y-1 hover:shadow-xl rounded-xl overflow-hidden border border-border/50 bg-card flex flex-col"
-                                onClick={() => onSelect(preset.url)}
+                                className={`group relative transition-all rounded-xl overflow-hidden border border-border/50 bg-card flex flex-col ${isProcessing && loadingPreset !== preset.url ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:-translate-y-1 hover:shadow-xl'
+                                    }`}
+                                onClick={() => !isProcessing && handleSelect(preset.url)}
                             >
                                 {/* Preview Area */}
                                 <div className={`h-32 w-full bg-gradient-to-br flex items-center justify-center`}>
@@ -66,8 +84,23 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                                     <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                                         {preset.description}
                                     </p>
-                                    <Button variant="secondary" className="w-full cursor-pointer mt-auto">
-                                        Select Template
+                                    <Button
+                                        variant="secondary"
+                                        className="w-full mt-auto"
+                                        disabled={isProcessing}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSelect(preset.url);
+                                        }}
+                                    >
+                                        {loadingPreset === preset.url ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Loading...
+                                            </>
+                                        ) : (
+                                            "Select Template"
+                                        )}
                                     </Button>
                                 </div>
                             </div>
@@ -76,7 +109,13 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-center pb-8">
-                    <Button variant="ghost" size="lg" onClick={onCancel} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                    <Button
+                        variant="ghost"
+                        size="lg"
+                        onClick={onCancel}
+                        disabled={isProcessing}
+                        className="text-muted-foreground hover:text-foreground"
+                    >
                         <CopyPlus className="mr-2 h-4 w-4" />
                         Start with Empty Project
                     </Button>
