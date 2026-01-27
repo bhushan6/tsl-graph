@@ -187,3 +187,11 @@
   border: 2px solid white !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
 }
+
+/* Override React Flow default group node styles */
+.react-flow__node-group {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}

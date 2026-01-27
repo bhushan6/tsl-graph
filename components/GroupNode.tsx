@@ -1,8 +1,9 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { NodeResizer, type NodeProps } from '@xyflow/react';
+import { type NodeProps } from '@xyflow/react';
 import { useEditorStore } from '@/store/editor';
 import { Edit2, Group } from 'lucide-react';
 import type { AppNode } from '@/lib/types';
+import "../app/globals.css"
 
 function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
@@ -57,19 +58,12 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
 
     return (
         <>
-            {/* Resizer handles - only when selected */}
-            {/* <NodeResizer
-                minWidth={200}
-                minHeight={150}
-                isVisible={selected}
-                lineClassName="!border-primary/50"
-                handleClassName="!w-2 !h-2 !bg-primary !border-primary"
-            /> */}
+
 
             {/* Group visual border - pointer-events-none so children can be interacted with */}
             <div
                 className={`
-                    w-full h-full min-w-[200px] min-h-[150px]
+                    w-full h-full
                     rounded-xl
                     bg-foreground/5
                     border-2 border-dashed
@@ -77,6 +71,9 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                     transition-colors duration-200
                     pointer-events-none
                 `}
+                style={{
+                    background: "#f0f0f040"
+                }}
             />
 
             {/* Header with label - separate element with pointer events enabled */}

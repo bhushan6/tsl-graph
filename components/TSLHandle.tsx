@@ -63,18 +63,22 @@ export function TSLHandle({
     return (
         <div
             className={cn(
-                'relative flex items-center py-1 group',
+                'relative flex items-center py-0.5 group', // Reduced py
                 isOutput ? 'flex-row-reverse' : 'flex-row'
             )}
         >
             {/* Handle styled as indicator */}
             <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
-                    <div className={cn('relative', isOutput ? 'ml-2' : 'mr-2')}>
+                    <div className={cn('relative flex items-center')}>
                         <Handle
                             {...props}
                             isConnectable={true}
-                            className="!relative !transform-none !inset-auto !w-4 !h-4 !rounded !border-0 transition-colors duration-150"
+
+                            className={cn(
+                                "!relative !transform-none !inset-auto !w-2 !h-4 !border-0 transition-colors duration-150",
+                                isOutput ? "!rounded-l-[3px] !rounded-r-none" : "!rounded-r-[3px] !rounded-l-none"
+                            )}
                             style={{
                                 '--handle-bg': defaultBg,
                                 '--handle-hover-bg': handleColor,
@@ -90,7 +94,7 @@ export function TSLHandle({
 
             {/* Label */}
             <span className={cn(
-                'text-[11px] uppercase tracking-wider font-medium whitespace-nowrap transition-colors duration-150 ',
+                'text-[10px] uppercase tracking-wider font-medium whitespace-nowrap transition-colors duration-150 px-1',
                 isConnected
                     ? 'text-gray-700 dark:text-white/90'
                     : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/90',
