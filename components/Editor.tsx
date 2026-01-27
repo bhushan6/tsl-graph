@@ -267,6 +267,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
                     selectionKeyCode={"Shift"}
+                    maxZoom={4}
+                    minZoom={0.05}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>

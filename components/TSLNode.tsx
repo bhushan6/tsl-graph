@@ -7,11 +7,30 @@ import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import type { AppNode, Port, TSLType, TSLValueType } from '@/lib/types';
 import { NodeProps } from '@xyflow/react';
 
 type TSLNodeProps = NodeProps<AppNode>;
+
+const categoryColors: Record<string, string> = {
+    'Math': 'border-red-200 bg-red-100 dark:bg-red-900/20',
+    'Constants': 'border-violet-500 bg-violet-100 dark:bg-violet-900/20',
+    'Geometry': 'border-emerald-500 bg-emerald-100 dark:bg-emerald-900/20',
+    'Material': 'border-orange-500 bg-orange-100 dark:bg-orange-900/20',
+    'Subgraph': 'border-blue-500 bg-blue-100 dark:bg-blue-900/20',
+    'Texture': 'border-pink-500 bg-pink-100 dark:bg-pink-900/20',
+    'Model': 'border-cyan-500 bg-cyan-100 dark:bg-cyan-900/20',
+    'Advanced': 'border-slate-500 bg-slate-100 dark:bg-slate-900/20',
+    'Noise': 'border-fuchsia-500 bg-fuchsia-100 dark:bg-fuchsia-900/20',
+    'Utils': 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20',
+    'Default': 'border-gray-500 bg-gray-100 dark:bg-gray-900/20',
+};
 
 function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const def = registry.get(data.type);
@@ -127,9 +146,25 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         nodeLabel = def.label;
     }
 
+    let category = 'Default';
+    if (def) {
+        category = def.category;
+    } else if (isSubgraphInstance || isSubgraphInput || isSubgraphOutput) {
+        category = 'Subgraph';
+    } else if (isCodeNodeInstance) {
+        category = 'Advanced';
+    }
+
+    const colorClass = categoryColors[category] || categoryColors['Default'];
+
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
-    const pairedOutputKeys = new Set<string>();
+
+    // Filter out hidden inputs/outputs if necessary, currently inputs support hidden
+    const visibleInputKeys = inputKeys.filter(k => !inputs[k].hidden);
+    // Include 'out' in the main list of outputs.
+    // We strictly align by index now for compactness
+    const maxRows = Math.max(visibleInputKeys.length, outputKeys.length);
 
     const rows: Array<{
         key: string;
@@ -137,51 +172,42 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         output: [string, typeof outputs[string]] | null;
     }> = [];
 
-    for (const inputKey of inputKeys) {
-        if (inputs[inputKey].hidden) continue;
+    for (let i = 0; i < maxRows; i++) {
+        const inputKey = visibleInputKeys[i];
+        const outputKey = outputKeys[i];
 
-        const hasMatchingOutput = outputKeys.includes(inputKey) && inputKey !== 'out';
         rows.push({
-            key: inputKey,
-            input: [inputKey, inputs[inputKey]],
-            output: hasMatchingOutput ? [inputKey, outputs[inputKey]] : null,
+            key: `row-${i}`,
+            input: inputKey ? [inputKey, inputs[inputKey]] : null,
+            output: outputKey ? [outputKey, outputs[outputKey]] : null,
         });
-        if (hasMatchingOutput) pairedOutputKeys.add(inputKey);
     }
-
-    for (const outputKey of outputKeys) {
-        if (outputKey !== 'out' && !pairedOutputKeys.has(outputKey) && !inputKeys.includes(outputKey)) {
-            rows.push({ key: outputKey, input: null, output: [outputKey, outputs[outputKey]] });
-        }
-    }
-
-    const hasMainOutput = 'out' in outputs;
 
     return (
         <div
             className={cn(
-                'min-w-[220px] flex flex-col rounded-xl shadow-lg',
+                'min-w-[50px] flex flex-col rounded-xl shadow-lg overflow-hidden', // Reduced min-w
                 'bg-white/95 shadow-gray-300/50',
                 'dark:bg-card/95 dark:shadow-black/30',
                 'backdrop-blur-sm transition-shadow duration-150',
                 selected && 'shadow-xl dark:shadow-black/50 shadow-gray-400/50'
             )}
         >
-            {/* Header */}
             <div
                 className={cn(
-                    'flex flex-col gap-0.5 px-3 py-3 rounded-t-xl',
-                    'border-b-2 transition-colors duration-150',
+                    'flex flex-col gap-0.5 px-3 pt-2 pb-1  rounded-t-xl', // Reduced py
+                    'border-b transition-colors duration-150',
+                    colorClass,
                     selected ? 'border-blue-500' : 'border-gray-200 dark:border-white/10'
                 )}
             >
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90 truncate">
                     {nodeLabel}
                 </span>
                 {isEditingName ? (
                     <input
                         type="text"
-                        className="bg-transparent border-0 border-b border-gray-300 dark:border-white/30 outline-none text-[10px] text-gray-500 dark:text-white/50 tracking-wider py-0.5 focus:border-blue-500"
+                        className="bg-transparent border-0 border-b border-gray-300 dark:border-white/30 outline-none text-[9px] text-gray-500 dark:text-white/50 tracking-wider py-0 focus:border-blue-500 max-w-[50px]"
                         value={localName}
                         onChange={(e) => setLocalName(e.target.value)}
                         onKeyDown={handleNameKeyDown}
@@ -191,65 +217,71 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                         onMouseDown={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <span
-                        className="text-[10px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate max-w-[180px]"
-                        onDoubleClick={() => {
-                            setLocalName(storedName);
-                            setIsEditingName(true);
-                        }}
-                    >
-                        ({storedName || 'Db Click to set name'})
-                    </span>
+                    <div className="w-0 min-w-full overflow-hidden">
+                        <Tooltip delayDuration={500}>
+                            <TooltipTrigger asChild>
+                                <span
+                                    className="text-[9px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate block"
+                                    onDoubleClick={() => {
+                                        setLocalName(storedName);
+                                        setIsEditingName(true);
+                                    }}
+                                >
+                                    {storedName || '(variable name)'}
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-[10px]">
+                                Double click to set variable name
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                 )}
             </div>
 
-            {/* Content */}
-            <div className="flex flex-col gap-0 py-2 px-2 rounded-b-xl">
+            {/* Content - Removed px-2 to allow handles to touch edges pattern. Added pb-3 for safe area near rounded corners */}
+            <div className="flex flex-col gap-0 pt-1 pb-1.5 rounded-b-xl">
                 {rows.map((row) => (
-                    <div key={row.key} className="flex items-center justify-between min-h-[28px]">
-                        {/* Input */}
-                        {row.input ? (
-                            <div className="flex items-center flex-1 min-w-0" style={{
-                                // border: '1px solid red'
-                            }}>
-                                {!row.input[1].propertyOnly && (
-                                    <TSLHandle
-                                        id={row.input[0]}
-                                        type="target"
-                                        position={Position.Left}
-                                        dataType={row.input[1].type as TSLType}
-                                        label={row.input[1].label}
-                                        isConnected={connectedInputs.has(row.input[0])}
-                                        isDark={isDark}
-                                        isMaterialNode={data.type.startsWith('material')}
-                                    />
-                                )}
-
-                                {row.input[1].propertyOnly && (
-                                    <span className="text-[9px] text-gray-500 dark:text-gray-400 mr-2 font-mono uppercase tracking-wider ml-1">
-                                        {row.input[1].label}
-                                    </span>
-                                )}
-
-                                {!connectedInputs.has(row.input[0]) && !row.input[1].connectionOnly && (
-                                    <div className={cn("flex-1 mx-2 flex items-center", row.input[1].propertyOnly && "justify-end")} style={{
-                                        // border: '1px solid red'
-                                    }}>
-                                        <ValuePreview
-                                            type={row.input[1].type}
-                                            value={data.values?.[row.input[0]] ?? row.input[1].default}
+                    <div key={row.key} className="flex items-center justify-between min-h-[22px]">
+                        {/* Input Side */}
+                        <div className="flex items-center flex-1 min-w-0 mr-2">
+                            {/* Added mr-2 to separate from output side */}
+                            {row.input ? (
+                                <>
+                                    {!row.input[1].propertyOnly && (
+                                        <TSLHandle
+                                            id={row.input[0]}
+                                            type="target"
+                                            position={Position.Left}
+                                            dataType={row.input[1].type as TSLType}
+                                            label={row.input[1].label}
+                                            isConnected={connectedInputs.has(row.input[0])}
+                                            isDark={isDark}
+                                            isMaterialNode={data.type.startsWith('material')}
                                         />
-                                    </div>
-                                )}
+                                    )}
 
-                            </div>
-                        ) : (
-                            <div className="flex-1" />
-                        )}
+                                    {row.input[1].propertyOnly && (
+                                        <span className="text-[9px] text-gray-500 dark:text-gray-400 mr-2 font-mono uppercase tracking-wider ml-2">
+                                            {row.input[1].label}
+                                        </span>
+                                    )}
 
-                        {/* Output */}
-                        {row.output && (
-                            <div className="flex items-center ml-auto">
+                                    {/* Value Preview / Control - only if not connected */}
+                                    {!connectedInputs.has(row.input[0]) && !row.input[1].connectionOnly && (
+                                        <div className={cn("flex-1 flex items-center min-w-0", row.input[1].propertyOnly && "justify-end")}>
+                                            <ValuePreview
+                                                type={row.input[1].type}
+                                                value={data.values?.[row.input[0]] ?? row.input[1].default}
+                                            />
+                                        </div>
+                                    )}
+                                </>
+                            ) : <div className="flex-1" />}
+                        </div>
+
+                        {/* Output Side */}
+                        <div className="flex items-center shrink-0">
+                            {row.output && (
                                 <TSLHandle
                                     id={row.output[0]}
                                     type="source"
@@ -257,31 +289,12 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     dataType={row.output[1].type as TSLType}
                                     label={row.output[1].label}
                                     isConnected={connectedOutputs.has(row.output[0])}
-                                    // isHovered={hoveredPort === row.output[0]}
-                                    // onHover={setHoveredPort}
                                     isDark={isDark}
                                 />
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 ))}
-
-                {/* Main output */}
-                {hasMainOutput && (
-                    <div className="flex items-center justify-end min-h-[28px] border-t border-gray-100 dark:border-white/5 pt-2 mt-1">
-                        <TSLHandle
-                            id="out"
-                            type="source"
-                            position={Position.Right}
-                            dataType={outputs['out'].type as TSLType}
-                            label={outputs['out'].label}
-                            isConnected={connectedOutputs.has('out')}
-                            // isHovered={hoveredPort === 'out'}
-                            // onHover={setHoveredPort}
-                            isDark={isDark}
-                        />
-                    </div>
-                )}
             </div>
         </div>
     );
@@ -333,7 +346,7 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
 function ColorInputPreview({ value }: { value: string }) {
     return (
         <div
-            className="h-4 w-4 rounded-sm shadow-sm border border-gray-200 dark:border-white/10"
+            className="h-3 w-3 rounded-[3px] shadow-sm border border-gray-200 dark:border-white/10"
             style={{ backgroundColor: value }}
             title={value}
         />
@@ -346,7 +359,7 @@ function NumberPreview({ value }: { value: number }) {
     return (
         //vertically center the text
         <span className="text-[9px] text-gray-500 font-mono tabular-nums flex items-center">
-            {Number.isInteger(value) ? value : value.toFixed(2)}
+            ({Number.isInteger(value) ? value : value.toFixed(2)})
         </span>
     );
 }

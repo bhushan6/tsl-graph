@@ -1,8 +1,9 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { NodeResizer, type NodeProps } from '@xyflow/react';
+import { type NodeProps } from '@xyflow/react';
 import { useEditorStore } from '@/store/editor';
 import { Edit2, Group } from 'lucide-react';
 import type { AppNode } from '@/lib/types';
+import "../app/globals.css"
 
 function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
@@ -12,12 +13,7 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const label = (data.values.label as string) || 'Group';
     const [inputValue, setInputValue] = useState(label);
 
-    // Sync local state with data when not editing
-    useEffect(() => {
-        if (!isEditing) {
-            setInputValue(label);
-        }
-    }, [label, isEditing]);
+
 
     const handleLabelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         setInputValue(e.target.value);
@@ -25,8 +21,9 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
 
     const handleEdit = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
+        setInputValue(label);
         setIsEditing(true);
-    }, []);
+    }, [label]);
 
     const handleBlur = useCallback(() => {
         setIsEditing(false);
@@ -57,26 +54,22 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
 
     return (
         <>
-            {/* Resizer handles - only when selected */}
-            {/* <NodeResizer
-                minWidth={200}
-                minHeight={150}
-                isVisible={selected}
-                lineClassName="!border-primary/50"
-                handleClassName="!w-2 !h-2 !bg-primary !border-primary"
-            /> */}
+
 
             {/* Group visual border - pointer-events-none so children can be interacted with */}
             <div
                 className={`
-                    w-full h-full min-w-[200px] min-h-[150px]
+                    w-full h-full
                     rounded-xl
                     bg-foreground/5
                     border-2 border-dashed
                     ${selected ? 'border-primary/60 bg-primary/5' : 'border-foreground/20'}
                     transition-colors duration-200
                     pointer-events-none
+                    dark:bg-[#f0f0f040]
+                    bg-[#f0f0f080]
                 `}
+
             />
 
             {/* Header with label - separate element with pointer events enabled */}
@@ -109,7 +102,7 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                 ) : (
                     <div className="flex items-center gap-2 group pointer-events-auto">
                         <span
-                            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                            onDoubleClick={handleEdit}
                             className="
                             text-sm font-medium
                             text-foreground/80
