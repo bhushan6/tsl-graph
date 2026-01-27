@@ -18,6 +18,20 @@ import { NodeProps } from '@xyflow/react';
 
 type TSLNodeProps = NodeProps<AppNode>;
 
+const categoryColors: Record<string, string> = {
+    'Math': 'border-red-200 bg-red-100 dark:bg-red-900/20',
+    'Constants': 'border-violet-500 bg-violet-100 dark:bg-violet-900/20',
+    'Geometry': 'border-emerald-500 bg-emerald-100 dark:bg-emerald-900/20',
+    'Material': 'border-orange-500 bg-orange-100 dark:bg-orange-900/20',
+    'Subgraph': 'border-blue-500 bg-blue-100 dark:bg-blue-900/20',
+    'Texture': 'border-pink-500 bg-pink-100 dark:bg-pink-900/20',
+    'Model': 'border-cyan-500 bg-cyan-100 dark:bg-cyan-900/20',
+    'Advanced': 'border-slate-500 bg-slate-100 dark:bg-slate-900/20',
+    'Noise': 'border-fuchsia-500 bg-fuchsia-100 dark:bg-fuchsia-900/20',
+    'Utils': 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20',
+    'Default': 'border-gray-500 bg-gray-100 dark:bg-gray-900/20',
+};
+
 function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const def = registry.get(data.type);
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
@@ -132,6 +146,17 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         nodeLabel = def.label;
     }
 
+    let category = 'Default';
+    if (def) {
+        category = def.category;
+    } else if (isSubgraphInstance || isSubgraphInput || isSubgraphOutput) {
+        category = 'Subgraph';
+    } else if (isCodeNodeInstance) {
+        category = 'Advanced';
+    }
+
+    const colorClass = categoryColors[category] || categoryColors['Default'];
+
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
 
@@ -168,11 +193,11 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                 selected && 'shadow-xl dark:shadow-black/50 shadow-gray-400/50'
             )}
         >
-            {/* Header */}
             <div
                 className={cn(
                     'flex flex-col gap-0.5 px-3 pt-2 pb-1  rounded-t-xl', // Reduced py
                     'border-b transition-colors duration-150',
+                    colorClass,
                     selected ? 'border-blue-500' : 'border-gray-200 dark:border-white/10'
                 )}
             >

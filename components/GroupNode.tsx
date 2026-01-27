@@ -66,10 +66,10 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                     ${selected ? 'border-primary/60 bg-primary/5' : 'border-foreground/20'}
                     transition-colors duration-200
                     pointer-events-none
+                    dark:bg-[#f0f0f040]
+                    bg-[#f0f0f080]
                 `}
-                style={{
-                    background: "#f0f0f040"
-                }}
+
             />
 
             {/* Header with label - separate element with pointer events enabled */}
