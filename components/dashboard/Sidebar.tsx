@@ -27,6 +27,7 @@ interface SidebarProps {
         name?: string | null;
         email?: string | null;
         image?: string | null;
+        isAnonymous?: boolean | null;
     };
 }
 
@@ -162,13 +163,15 @@ export function Sidebar({ className, user }: SidebarProps) {
                             <Settings className="mr-2 h-4 w-4" />
                             <span>Settings</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => setShowDeleteAlert(true)}
-                            className="text-destructive focus:text-destructive"
-                        >
-                            <LogOut className="mr-2 h-4 w-4" />
-                            <span>Delete Account</span>
-                        </DropdownMenuItem>
+                        {!user?.isAnonymous && (
+                            <DropdownMenuItem
+                                onClick={() => setShowDeleteAlert(true)}
+                                className="text-destructive focus:text-destructive"
+                            >
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Delete Account</span>
+                            </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={handleSignOut}>
                             <LogOut className="mr-2 h-4 w-4" />
                             <span>Sign Out</span>
