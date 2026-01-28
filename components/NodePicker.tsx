@@ -324,6 +324,8 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
             });
 
             if (filtered.length > 0) {
+                // Sort nodes alphabetically by label
+                filtered.sort((a, b) => a.label.localeCompare(b.label));
                 result[category] = filtered;
             }
         }
@@ -368,22 +370,24 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto">
-                {Object.entries(filteredNodesByCategory).map(([category, categoryNodes]) => (
-                    <CategoryGroup key={category} title={category} forceOpen={!!searchQuery}>
-                        <SidebarMenu>
-                            {categoryNodes.map((node) => (
-                                <SidebarMenuItem key={node.type}>
-                                    <button
-                                        onClick={() => handleAddNode(node.type)}
-                                        className={menuButtonStyles}
-                                    >
-                                        {node.label}
-                                    </button>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </CategoryGroup>
-                ))}
+                {Object.entries(filteredNodesByCategory)
+                    .sort(([catA], [catB]) => catA.localeCompare(catB))
+                    .map(([category, categoryNodes]) => (
+                        <CategoryGroup key={category} title={category} forceOpen={!!searchQuery}>
+                            <SidebarMenu>
+                                {categoryNodes.map((node) => (
+                                    <SidebarMenuItem key={node.type}>
+                                        <button
+                                            onClick={() => handleAddNode(node.type)}
+                                            className={menuButtonStyles}
+                                        >
+                                            {node.label}
+                                        </button>
+                                    </SidebarMenuItem>
+                                ))}
+                            </SidebarMenu>
+                        </CategoryGroup>
+                    ))}
 
                 {/* Custom Nodes Section - User's templates + Community templates */}
                 {(showCustomSection || hasUserTemplates || hasPublicTemplates) && (
