@@ -18,7 +18,7 @@ import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefini
 import { toast } from 'sonner';
 
 // Preview mesh type
-export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane';
+export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
 
 // Geometry configuration
 export interface GeometryConfig {
@@ -46,6 +46,14 @@ export interface GeometryConfig {
     heightPlane?: number;
     widthSegmentsPlane?: number;
     heightSegmentsPlane?: number;
+
+    // Cylinder
+    radiusTop?: number;
+    radiusBottom?: number;
+    heightCylinder?: number;
+    radialSegmentsCylinder?: number;
+    heightSegmentsCylinder?: number;
+    openEnded?: boolean;
 }
 
 // Preview settings interface
@@ -270,6 +278,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             heightPlane: 1,
             widthSegmentsPlane: 1,
             heightSegmentsPlane: 1,
+
+            // Cylinder
+            radiusTop: 1,
+            radiusBottom: 1,
+            heightCylinder: 1,
+            radialSegmentsCylinder: 20,
+            heightSegmentsCylinder: 20,
+            openEnded: true,
         }
     },
     updatePreviewSettings: (updates) => {
@@ -714,6 +730,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                             heightPlane: 1,
                             widthSegmentsPlane: 1,
                             heightSegmentsPlane: 1,
+                            radiusTop: 1,
+                            radiusBottom: 1,
+                            heightCylinder: 1,
+                            radialSegmentsCylinder: 20,
+                            heightSegmentsCylinder: 20,
+                            openEnded: true,
                         }
                     },
                     // Reset subgraph state on load

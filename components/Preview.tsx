@@ -211,6 +211,15 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     config.widthSegmentsSphere ?? 32,
                     config.heightSegmentsSphere ?? 16
                 );
+            case 'cylinder':
+                return new THREE.CylinderGeometry(
+                    config.radiusTop ?? 1,
+                    config.radiusBottom ?? 1,
+                    config.heightCylinder ?? 1,
+                    config.radialSegmentsCylinder ?? 20,
+                    config.heightSegmentsCylinder ?? 20,
+                    config.openEnded ?? true
+                );
         }
     }, [previewSettings.mesh, previewSettings.config]);
 
@@ -400,6 +409,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         { value: 'box', name: 'Box' },
         { value: 'torus', name: 'Torus' },
         { value: 'plane', name: 'Plane' },
+        { value: 'cylinder', name: 'Cylinder' },
     ];
 
     const hdriOptions = [
@@ -722,6 +732,63 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                                     className="h-8 px-2"
                                                 />
                                             </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'cylinder' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Radius (Top/Bot)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radiusTop ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radiusTop: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radiusBottom ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radiusBottom: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Height</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.heightCylinder ?? 1}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightCylinder: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (R/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radialSegmentsCylinder ?? 20}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radialSegmentsCylinder: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegmentsCylinder ?? 20}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegmentsCylinder: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Open Ended</Label>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={previewSettings.config?.openEnded ?? true}
+                                                onChange={(e) => updatePreviewSettings({ config: { ...previewSettings.config, openEnded: e.target.checked } })}
+                                            />
                                         </div>
                                     </>
                                 )}
