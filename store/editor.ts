@@ -54,6 +54,9 @@ export interface PreviewSettings {
     config: GeometryConfig;
     isInstanced: boolean;
     instanceCount: number;
+    environment?: string;
+    environmentIntensity?: number;
+    showEnvironmentBackground?: boolean;
 }
 
 // Graph save format
@@ -238,6 +241,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         mesh: 'sphere' as PreviewMeshType,
         isInstanced: false,
         instanceCount: 100,
+        environment: 'studio',
+        environmentIntensity: 1,
+        showEnvironmentBackground: false,
         config: {
             // Defaults with low resolution as requested
             // Box
