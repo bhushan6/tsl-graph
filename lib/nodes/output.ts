@@ -16,6 +16,26 @@ export const meshStandardMaterial = {
         aoNode: { label: 'AO', type: 'float', default: 1 },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
+        outputNode: { label: 'Output', type: 'vec4', connectionOnly: true },
+        side: {
+            label: 'Side',
+            type: 'int',
+            default: 0, // FrontSide
+            propertyOnly: true,
+            isMaterialProp: true,
+            options: [
+                { label: 'Front', value: 0 }, // THREE.FrontSide
+                { label: 'Back', value: 1 }, // THREE.BackSide
+                { label: 'Double', value: 2 }, // THREE.DoubleSide
+            ]
+        },
+        transparent: {
+            label: 'Transparent',
+            type: 'bool',
+            default: false,
+            propertyOnly: true,
+            isMaterialProp: true,
+        },
     },
     outputs: {},
     tsl: 'MeshStandardNodeMaterial',
@@ -29,6 +49,26 @@ export const meshBasicMaterial = {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
+        outputNode: { label: 'Output', type: 'vec4', connectionOnly: true },
+        side: {
+            label: 'Side',
+            type: 'int',
+            default: 0,
+            propertyOnly: true,
+            isMaterialProp: true,
+            options: [
+                { label: 'Front', value: 0 },
+                { label: 'Back', value: 1 },
+                { label: 'Double', value: 2 },
+            ]
+        },
+        transparent: {
+            label: 'Transparent',
+            type: 'bool',
+            default: false,
+            propertyOnly: true,
+            isMaterialProp: true,
+        },
     },
     outputs: {},
     tsl: 'MeshBasicNodeMaterial',
@@ -55,6 +95,26 @@ export const meshPhysicalMaterial = {
         aoNode: { label: 'AO', type: 'float', default: 1 },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
+        outputNode: { label: 'Output', type: 'vec4', connectionOnly: true },
+        side: {
+            label: 'Side',
+            type: 'int',
+            default: 0,
+            propertyOnly: true,
+            isMaterialProp: true,
+            options: [
+                { label: 'Front', value: 0 },
+                { label: 'Back', value: 1 },
+                { label: 'Double', value: 2 },
+            ]
+        },
+        transparent: {
+            label: 'Transparent',
+            type: 'bool',
+            default: false,
+            propertyOnly: true,
+            isMaterialProp: true,
+        },
     },
     outputs: {},
     tsl: 'MeshPhysicalNodeMaterial',
@@ -72,6 +132,26 @@ export const meshPhongMaterial = {
         emissiveNode: { label: 'Emissive', type: 'color', default: '#000000' },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
+        outputNode: { label: 'Output', type: 'vec4', connectionOnly: true },
+        side: {
+            label: 'Side',
+            type: 'int',
+            default: 0,
+            propertyOnly: true,
+            isMaterialProp: true,
+            options: [
+                { label: 'Front', value: 0 },
+                { label: 'Back', value: 1 },
+                { label: 'Double', value: 2 },
+            ]
+        },
+        transparent: {
+            label: 'Transparent',
+            type: 'bool',
+            default: false,
+            propertyOnly: true,
+            isMaterialProp: true,
+        },
     },
     outputs: {},
     tsl: 'MeshPhongNodeMaterial',

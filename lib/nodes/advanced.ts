@@ -13,6 +13,27 @@ export const advancedNodes = [
         },
         tsl: 'varying',
     },
+    // Fragment properties
+    {
+        type: 'advanced/output',
+        label: 'Output',
+        category: 'Advanced',
+        outputs: {
+            out: { label: 'Out', type: 'vec4' },
+        },
+        tsl: 'output',
+        pure: true,
+    },
+    {
+        type: 'advanced/frontFacing',
+        label: 'Front Facing',
+        category: 'Advanced',
+        outputs: {
+            out: { label: 'Out', type: 'bool' },
+        },
+        tsl: 'frontFacing',
+        pure: true,
+    },
 ] as const;
 
 // Type check
