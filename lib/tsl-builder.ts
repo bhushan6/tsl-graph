@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu'; // For Material classes
 import * as TSL from 'three/tsl'; // For TSL functions
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
 import { compileGraph } from './compiler';
-import { rotation3d, rotate2D } from './tsl-utils';
+import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
 
 /**
  * Build a Three.js material from the node graph by compiling to TSL and evaluating it.
@@ -31,6 +31,9 @@ export function buildTSLMaterial(
         THREE: THREE, // Expose THREE namespace for TextureLoader
         rotation3d,
         rotate2D,
+        uvTransform,
+        fresnelFull,
+        node_normalize: TSL.normalize,
     };
 
     const scopeKeys = Object.keys(scope);

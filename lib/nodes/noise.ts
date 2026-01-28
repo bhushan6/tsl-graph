@@ -1,23 +1,223 @@
 import { BaseNodeDef } from './definitions';
 
-export const noiseNodes = [
+// NOISE NODES with built-in TSL functions
+export const noiseNodes: BaseNodeDef[] = [
     {
-        type: 'noise/mx_fractal_noise_float',
+        type: 'noise/interleaved_gradient',
+        label: 'Interleaved Gradient Noise',
+        category: 'Noise',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'interleavedGradientNoise',
+    },
+    {
+        type: 'noise/cell_noise',
+        label: 'Cell Noise (Float)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'mx_cell_noise_float',
+    },
+    {
+        type: 'noise/fractal_noise_float',
         label: 'Fractal Noise (Float)',
         category: 'Noise',
         inputs: {
             position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
             octaves: { label: 'Octaves', type: 'int', default: 3 },
             lacunarity: { label: 'Lacunarity', type: 'float', default: 2.0 },
-            gain: { label: 'Gain', type: 'float', default: 0.5 },
-            amplitude: { label: 'Amplitude', type: 'float', default: 1.0 },
+            diminish: { label: 'Diminish', type: 'float', default: 0.5 },
+            amplitude: { label: 'Amplitude', type: 'float', default: 0.5 },
         },
-        outputs: {
-            out: { label: 'Out', type: 'float' },
-        },
+        outputs: { out: { label: 'Out', type: 'float' } },
         tsl: 'mx_fractal_noise_float',
     },
-] as const;
+    {
+        type: 'noise/fractal_noise_vec2',
+        label: 'Fractal Noise (Vec2)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            octaves: { label: 'Octaves', type: 'int', default: 3 },
+            lacunarity: { label: 'Lacunarity', type: 'float', default: 2.0 },
+            diminish: { label: 'Diminish', type: 'float', default: 0.5 },
+            amplitude: { label: 'Amplitude', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec2' } },
+        tsl: 'mx_fractal_noise_vec2',
+    },
+    {
+        type: 'noise/fractal_noise_vec3',
+        label: 'Fractal Noise (Vec3)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            octaves: { label: 'Octaves', type: 'int', default: 3 },
+            lacunarity: { label: 'Lacunarity', type: 'float', default: 2.0 },
+            diminish: { label: 'Diminish', type: 'float', default: 0.5 },
+            amplitude: { label: 'Amplitude', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'mx_fractal_noise_vec3',
+    },
+    {
+        type: 'noise/fractal_noise_vec4',
+        label: 'Fractal Noise (Vec4)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            octaves: { label: 'Octaves', type: 'int', default: 3 },
+            lacunarity: { label: 'Lacunarity', type: 'float', default: 2.0 },
+            diminish: { label: 'Diminish', type: 'float', default: 0.5 },
+            amplitude: { label: 'Amplitude', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'mx_fractal_noise_vec4',
+    },
+    {
+        type: 'noise/noise_float',
+        label: 'Noise (Float)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            amplitude: { label: 'Amplitude', type: 'float', default: 1.0 },
+            pivot: { label: 'Pivot', type: 'float', default: 0.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'mx_noise_float',
+    },
+    {
+        type: 'noise/noise_vec3',
+        label: 'Noise (Vec3)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            amplitude: { label: 'Amplitude', type: 'float', default: 1.0 },
+            pivot: { label: 'Pivot', type: 'float', default: 0.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'mx_noise_vec3',
+    },
+    {
+        type: 'noise/noise_vec4',
+        label: 'Noise (Vec4)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            amplitude: { label: 'Amplitude', type: 'float', default: 1.0 },
+            pivot: { label: 'Pivot', type: 'float', default: 0.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'mx_noise_vec4',
+    },
+    {
+        type: 'noise/worley_float',
+        label: 'Worley Noise (Float)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            jitter: { label: 'Jitter', type: 'float', default: 1.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'mx_worley_noise_float',
+    },
+    {
+        type: 'noise/worley_vec2',
+        label: 'Worley Noise (Vec2)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            jitter: { label: 'Jitter', type: 'float', default: 1.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec2' } },
+        tsl: 'mx_worley_noise_vec2',
+    },
+    {
+        type: 'noise/worley_vec3',
+        label: 'Worley Noise (Vec3)',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            jitter: { label: 'Jitter', type: 'float', default: 1.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'mx_worley_noise_vec3',
+    },
+    {
+        type: 'noise/unified_noise_2d',
+        label: 'Unified Noise 2D',
+        category: 'Noise',
+        inputs: {
+            noiseType: {
+                label: 'Type',
+                type: 'int',
+                default: 0,
+                options: [
+                    { label: 'Perlin', value: 0 },
+                    { label: 'Cell', value: 1 },
+                    { label: 'Worley', value: 2 },
+                ],
+            },
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+            freq: { label: 'Frequency', type: 'vec2', default: [1, 1] },
+            offset: { label: 'Offset', type: 'vec2', default: [0, 0] },
+            jitter: { label: 'Jitter', type: 'float', default: 1.0 },
+            outmin: { label: 'Out Min', type: 'float', default: 0.0 },
+            outmax: { label: 'Out Max', type: 'float', default: 1.0 },
+            clampoutput: { label: 'Clamp Output', type: 'bool', default: false },
+            octaves: { label: 'Octaves', type: 'int', default: 3 },
+            lacunarity: { label: 'Lacunarity', type: 'float', default: 2.0 },
+            diminish: { label: 'Diminish', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'mx_unifiednoise2d',
+    },
+    {
+        type: 'noise/unified_noise_3d',
+        label: 'Unified Noise 3D',
+        category: 'Noise',
+        inputs: {
+            noiseType: {
+                label: 'Type',
+                type: 'int',
+                default: 0,
+                options: [
+                    { label: 'Perlin', value: 0 },
+                    { label: 'Cell', value: 1 },
+                    { label: 'Worley', value: 2 },
+                ],
+            },
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            freq: { label: 'Frequency', type: 'vec3', default: [1, 1, 1] },
+            offset: { label: 'Offset', type: 'vec3', default: [0, 0, 0] },
+            jitter: { label: 'Jitter', type: 'float', default: 1.0 },
+            outmin: { label: 'Out Min', type: 'float', default: 0.0 },
+            outmax: { label: 'Out Max', type: 'float', default: 1.0 },
+            clampoutput: { label: 'Clamp Output', type: 'bool', default: false },
+            octaves: { label: 'Octaves', type: 'int', default: 3 },
+            lacunarity: { label: 'Lacunarity', type: 'float', default: 2.0 },
+            diminish: { label: 'Diminish', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'mx_unifiednoise3d',
+    },
+    {
+        type: 'noise/tri_noise_3d',
+        label: 'Tri Noise 3D',
+        category: 'Noise',
+        inputs: {
+            position: { label: 'Position', type: 'vec3', default: [0, 0, 0] },
+            speed: { label: 'Speed', type: 'float', default: 1.0 },
+            time: { label: 'Time', type: 'float', default: 0.0 },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'triNoise3D',
+    },
+];
 
 // Type check
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

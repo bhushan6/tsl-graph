@@ -137,4 +137,31 @@ export const utilsNodes: readonly BaseNodeDef[] = [
         outputs: { out: { label: 'Out', type: 'vec3' } },
         tsl: 'transformDirection',
     },
+    {
+        type: 'utils/uvTransform',
+        label: 'UV Transform',
+        category: 'Utils',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+            scale: { label: 'Scale', type: 'vec2', default: [1, 1] },
+            offset: { label: 'Offset', type: 'vec2', default: [0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec2' } },
+        tsl: 'uvTransform',
+        pure: true,
+    },
+    {
+        type: 'utils/fresnel',
+        label: 'Fresnel',
+        category: 'Utils',
+        inputs: {
+            bias: { label: 'Bias', type: 'float', default: 0 },
+            scale: { label: 'Scale', type: 'float', default: 1 },
+            power: { label: 'Power', type: 'float', default: 2 },
+            normal: { label: 'Normal', type: 'vec3', default: [0, 0, 1] },
+            viewDir: { label: 'View Dir', type: 'vec3', default: [0, 0, 1] },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'fresnelFull',
+    }
 ] as const;

@@ -1,4 +1,4 @@
-import { Fn, float, vec4, mat4, mat2, normalize, sin, cos } from 'three/tsl';
+import { Fn, float, vec4, mat4, mat2, normalize, sin, cos, pow, dot } from 'three/tsl';
 
 //@ts-expect-error: this is valid but TSL types seems off
 export const rotation3d = Fn(([pos, axis, angle]) => {
@@ -24,3 +24,18 @@ export const rotate2D = Fn(([pos, angle]) => {
     const m = mat2(c, s, s.mul(-1), c);
     return m.mul(pos);
 });
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const uvTransform = Fn(([uv, scale, offset]) => {
+    return uv.mul(scale).add(offset);
+});
+
+// manually implementing fresnel to control everything
+//@ts-expect-error: this is valid but TSL types seems off
+export const fresnelFull = Fn(([bias, scale, power, normal, viewDir]) => {
+    // 1.0 - dot(N, V)
+    // using abs() on dot to handle backfaces if desired, but usually saturate is safer
+    // TSL has saturate() ? or use clamp(0,1)
+    return bias.add(scale.mul(pow(float(1.0).sub(dot(normal, viewDir).clamp(0, 1)), power)));
+});
+

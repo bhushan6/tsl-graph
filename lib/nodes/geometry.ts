@@ -41,6 +41,14 @@ export const geometryNodes = [
         tsl: 'positionView',
         pure: true,
     },
+    {
+        type: 'geo/positionViewDirection',
+        label: 'Position View Direction',
+        category: 'Geometry',
+        outputs: vec3Outputs,
+        tsl: 'positionViewDirection',
+        pure: true,
+    },
     // Normal
     {
         type: 'geo/normalLocal',
