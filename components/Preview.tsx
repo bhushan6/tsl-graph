@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useEditorStore, PreviewMeshType } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -210,6 +211,15 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     config.widthSegmentsSphere ?? 32,
                     config.heightSegmentsSphere ?? 16
                 );
+            case 'cylinder':
+                return new THREE.CylinderGeometry(
+                    config.radiusTop ?? 1,
+                    config.radiusBottom ?? 1,
+                    config.heightCylinder ?? 1,
+                    config.radialSegmentsCylinder ?? 20,
+                    config.heightSegmentsCylinder ?? 20,
+                    config.openEnded ?? true
+                );
         }
     }, [previewSettings.mesh, previewSettings.config]);
 
@@ -399,7 +409,69 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         { value: 'box', name: 'Box' },
         { value: 'torus', name: 'Torus' },
         { value: 'plane', name: 'Plane' },
+        { value: 'cylinder', name: 'Cylinder' },
     ];
+
+    const hdriOptions = [
+        { value: 'none', label: 'None' },
+        { value: 'apartment', label: 'Apartment' },
+        { value: 'bridge', label: 'Bridge' },
+        { value: 'city', label: 'City' },
+        { value: 'dawn', label: 'Dawn' },
+        { value: 'esplanade', label: 'Esplanade' },
+        { value: 'forest', label: 'Forest' },
+        { value: 'hall', label: 'Hall' },
+        { value: 'lab', label: 'Lab' },
+        { value: 'lobby', label: 'Lobby' },
+        { value: 'night', label: 'Night' },
+        { value: 'park', label: 'Park' },
+        { value: 'sky', label: 'Sky' },
+        { value: 'studio', label: 'Studio' },
+        { value: 'sunrise', label: 'Sunrise' },
+        { value: 'sunset', label: 'Sunset' },
+        { value: 'venice', label: 'Venice' },
+        { value: 'warehouse', label: 'Warehouse' },
+        { value: 'workshop', label: 'Workshop' },
+    ];
+
+    // Load and apply HDRI environment
+    useEffect(() => {
+        if (!sceneRef.current || !isReady) return;
+
+        const scene = sceneRef.current;
+        const envName = previewSettings.environment;
+
+        if (!envName || envName === 'none') {
+            scene.environment = null;
+            scene.background = new THREE.Color(0x1a1a1a);
+            return;
+        }
+
+        const loader = new RGBELoader();
+        const url = `https://raw.githubusercontent.com/pmndrs/assets/main/src/hdri/${envName}.hdr`;
+
+        loader.load(
+            url,
+            (texture) => {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.environment = texture;
+                scene.environmentIntensity = previewSettings.environmentIntensity ?? 1;
+                if (previewSettings.showEnvironmentBackground) {
+                    scene.background = texture;
+                } else {
+                    scene.background = new THREE.Color(0x1a1a1a);
+                }
+            },
+            undefined,
+            (err) => {
+                console.error('Failed to load HDRI:', err);
+            }
+        );
+
+        return () => {
+            // Cleanup is handled by scene disposal
+        };
+    }, [previewSettings.environment, previewSettings.environmentIntensity, previewSettings.showEnvironmentBackground, isReady]);
 
     return (
         <div
@@ -460,6 +532,47 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                         ))}
                                     </select>
                                 </div>
+
+                                <div className="grid grid-cols-2 items-center gap-4">
+                                    <Label>Environment</Label>
+                                    <select
+                                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
+                                        value={previewSettings.environment || 'none'}
+                                        onChange={(e) => updatePreviewSettings({ environment: e.target.value })}
+                                    >
+                                        {hdriOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {previewSettings.environment && previewSettings.environment !== 'none' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Intensity</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                step={0.1}
+                                                min={0}
+                                                max={5}
+                                                value={previewSettings.environmentIntensity ?? 1}
+                                                onChange={(value) => updatePreviewSettings({ environmentIntensity: Number(value) })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Show Background</Label>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={previewSettings.showEnvironmentBackground ?? false}
+                                                onChange={(e) => updatePreviewSettings({ showEnvironmentBackground: e.target.checked })}
+                                            />
+                                        </div>
+                                    </>
+                                )}
 
                                 {/* Geometry Specific Controls */}
                                 {previewSettings.mesh === 'box' && (
@@ -619,6 +732,63 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                                     className="h-8 px-2"
                                                 />
                                             </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {previewSettings.mesh === 'cylinder' && (
+                                    <>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Radius (Top/Bot)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radiusTop ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radiusTop: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radiusBottom ?? 1}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radiusBottom: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Height</Label>
+                                            <DebouncedInput
+                                                type="number"
+                                                value={previewSettings.config?.heightCylinder ?? 1}
+                                                onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightCylinder: Number(value) } })}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Segments (R/H)</Label>
+                                            <div className="flex gap-1">
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.radialSegmentsCylinder ?? 20}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, radialSegmentsCylinder: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                                <DebouncedInput
+                                                    type="number"
+                                                    value={previewSettings.config?.heightSegmentsCylinder ?? 20}
+                                                    onChange={(value) => updatePreviewSettings({ config: { ...previewSettings.config, heightSegmentsCylinder: Number(value) } })}
+                                                    className="h-8 px-2"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Open Ended</Label>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={previewSettings.config?.openEnded ?? true}
+                                                onChange={(e) => updatePreviewSettings({ config: { ...previewSettings.config, openEnded: e.target.checked } })}
+                                            />
                                         </div>
                                     </>
                                 )}

@@ -41,6 +41,14 @@ export const geometryNodes = [
         tsl: 'positionView',
         pure: true,
     },
+    {
+        type: 'geo/positionViewDirection',
+        label: 'Position View Direction',
+        category: 'Geometry',
+        outputs: vec3Outputs,
+        tsl: 'positionViewDirection',
+        pure: true,
+    },
     // Normal
     {
         type: 'geo/normalLocal',
@@ -132,6 +140,14 @@ export const geometryNodes = [
         outputs: { out: { label: 'Out', type: 'uint' as const } },
         tsl: 'instanceCount',
         pure: false,
+    },
+    {
+        type: 'geo/screenUV',
+        label: 'Screen UV',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'screenUV',
+        pure: true,
     },
 ] as const;
 

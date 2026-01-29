@@ -103,6 +103,17 @@ export const logicNodes = [
         outputs: { out: { label: 'Out', type: 'bool' } },
         tsl: 'not',
     },
+    // Fragment Control
+    {
+        type: 'logic/discard',
+        label: 'Discard',
+        category: 'Logic',
+        inputs: {
+            cond: { label: 'Condition', type: 'bool', default: false },
+        },
+        outputs: {},
+        tsl: 'Discard',
+    },
 ] as const;
 
 // Type check
