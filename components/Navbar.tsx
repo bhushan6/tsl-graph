@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen } from 'lucide-react';
+import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -20,18 +20,20 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useEditorStore } from '@/store/editor';
 import { useRouter } from 'next/navigation';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Logo } from '@/components/ui/logo';
 import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
+import { ShareDialog } from '@/components/ShareDialog';
 
 interface NavbarProps {
     projectName?: string;
     projectId?: Id<"projects">;
+    isReadOnly?: boolean;
 }
 
-export function Navbar({ projectName, projectId }: NavbarProps) {
+export function Navbar({ projectName, projectId, isReadOnly }: NavbarProps) {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const {
@@ -44,9 +46,11 @@ export function Navbar({ projectName, projectId }: NavbarProps) {
     } = useEditorStore();
 
     const updateProject = useMutation(api.projects.update);
+    const project = useQuery(api.projects.get, projectId ? { id: projectId } : "skip");
     const [isRenaming, setIsRenaming] = useState(false);
     const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
     const [tempName, setTempName] = useState(projectName || "");
+    const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
 
     const handleRenameStart = () => {
         if (projectId) {
@@ -226,6 +230,20 @@ export function Navbar({ projectName, projectId }: NavbarProps) {
                         Saved
                     </Badge>
                 )}
+
+                {/* Share Button - Only show for project owners, not in read-only mode */}
+                {!isReadOnly && projectId && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setIsShareDialogOpen(true)}
+                        title="Share Project"
+                    >
+                        <Share2 className="h-4 w-4" />
+                    </Button>
+                )}
+
                 <FeedbackDialog />
                 <ThemeToggle />
             </div>
@@ -258,6 +276,16 @@ export function Navbar({ projectName, projectId }: NavbarProps) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Share Dialog */}
+            {projectId && project && (
+                <ShareDialog
+                    open={isShareDialogOpen}
+                    onOpenChange={setIsShareDialogOpen}
+                    projectId={projectId}
+                    currentIsPublic={project.isPublic}
+                />
+            )}
         </div>
     );
 }

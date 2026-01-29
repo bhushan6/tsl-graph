@@ -53,9 +53,10 @@ interface NavbarProps {
 interface EditorProps extends NavbarProps {
     projectId?: Id<"projects">;
     hasThumbnail?: boolean;
+    isReadOnly?: boolean;
 }
 
-function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: NavbarProps; projectId?: Id<"projects">; hasThumbnail?: boolean }) {
+function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { navbarProps?: NavbarProps; projectId?: Id<"projects">; hasThumbnail?: boolean; isReadOnly?: boolean }) {
     const {
         nodes,
         edges,
@@ -269,66 +270,78 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail }: { navbarProps?: 
                     selectionKeyCode={"Shift"}
                     maxZoom={4}
                     minZoom={0.05}
+                    nodesDraggable={!isReadOnly}
+                    nodesConnectable={!isReadOnly}
+                    elementsSelectable={!isReadOnly}
+                    panOnScroll={isReadOnly}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>
-                <CanvasEdgeDropPicker />
+                {!isReadOnly && <CanvasEdgeDropPicker />}
             </div >
 
             {/* UI Layer */}
             < UILayer >
                 <UILayer.TopBar>
-                    <Navbar {...navbarProps} projectId={projectId} />
+                    <Navbar {...navbarProps} projectId={projectId} isReadOnly={isReadOnly} />
                 </UILayer.TopBar>
 
-                <UILayer.LeftPanel>
-                    {isNodePickerOpen ? (
-                        <NodePicker
-                            onClose={onNodePickerClose}
-                            onOpenCodeNodeDialog={onOpenCodeNodeDialog}
-                        />
-                    ) : (
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setIsNodePickerOpen(true)}
-                            className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-10 w-10 pointer-events-auto"
-                            title="Open Node Picker"
-                        >
-                            <PanelLeft className="h-4 w-4" />
-                        </Button>
-                    )}
-                </UILayer.LeftPanel>
+                {!isReadOnly && (
+                    <UILayer.LeftPanel>
+                        {isNodePickerOpen ? (
+                            <NodePicker
+                                onClose={onNodePickerClose}
+                                onOpenCodeNodeDialog={onOpenCodeNodeDialog}
+                            />
+                        ) : (
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setIsNodePickerOpen(true)}
+                                className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-10 w-10 pointer-events-auto"
+                                title="Open Node Picker"
+                            >
+                                <PanelLeft className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </UILayer.LeftPanel>
+                )}
 
                 <UILayer.RightPanel>
                     {editorMode === 'main' && <Preview projectId={projectId} hasThumbnail={hasThumbnail} />}
-                    <PropertiesPanel />
+                    {!isReadOnly && <PropertiesPanel />}
                 </UILayer.RightPanel>
 
-                <UILayer.BottomBar>
-                    <Toolbar
-                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                    />
-                </UILayer.BottomBar>
+                {!isReadOnly && (
+                    <UILayer.BottomBar>
+                        <Toolbar
+                            onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                        />
+                    </UILayer.BottomBar>
+                )}
             </UILayer >
 
-            {/* Code Panel Modal */}
-            <CodePanel
-                isOpen={isCodePanelOpen}
-                onClose={() => setIsCodePanelOpen(false)}
-            />
+            {!isReadOnly && (
+                <>
+                    {/* Code Panel Modal */}
+                    <CodePanel
+                        isOpen={isCodePanelOpen}
+                        onClose={() => setIsCodePanelOpen(false)}
+                    />
 
-            {/* Code Node Dialog */}
-            {isCodeNodeDialogOpen && (
-                <CodeNodeDialog
-                    open={true}
-                    onOpenChange={setIsCodeNodeDialogOpen}
-                    mode="create"
-                />
+                    {/* Code Node Dialog */}
+                    {isCodeNodeDialogOpen && (
+                        <CodeNodeDialog
+                            open={true}
+                            onOpenChange={setIsCodeNodeDialogOpen}
+                            mode="create"
+                        />
+                    )}
+
+                    {/* Stale Templates Notification */}
+                    <StaleTemplatesNotification />
+                </>
             )}
-
-            {/* Stale Templates Notification */}
-            <StaleTemplatesNotification />
         </>
     );
 }
@@ -337,7 +350,7 @@ export function Editor(props: EditorProps) {
     return (
         <div className="w-full h-full relative">
             <ReactFlowProvider>
-                <EditorCanvas navbarProps={props} projectId={props.projectId} hasThumbnail={props.hasThumbnail} />
+                <EditorCanvas navbarProps={props} projectId={props.projectId} hasThumbnail={props.hasThumbnail} isReadOnly={props.isReadOnly} />
             </ReactFlowProvider>
         </div>
     );
