@@ -63,6 +63,16 @@ export const textureNodes = [
         outputs: { out: { label: 'Out', type: 'vec4' } },
         tsl: 'texture',
     },
+    {
+        type: 'texture/viewportShared',
+        label: 'Backdrop',
+        category: 'Texture',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', connectionOnly: true },
+        },
+        outputs: { out: { label: 'RGB', type: 'vec3' } },
+        tsl: 'viewportSharedTexture',
+    },
 ] as const;
 
 // Type check

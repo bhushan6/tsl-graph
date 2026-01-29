@@ -141,6 +141,14 @@ export const geometryNodes = [
         tsl: 'instanceCount',
         pure: false,
     },
+    {
+        type: 'geo/screenUV',
+        label: 'Screen UV',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'screenUV',
+        pure: true,
+    },
 ] as const;
 
 // Type check
