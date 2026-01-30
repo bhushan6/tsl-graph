@@ -66,6 +66,7 @@ export interface PreviewSettings {
     environmentIntensity?: number;
     showEnvironmentBackground?: boolean;
     showBackdrop?: boolean;
+    showGrid?: boolean;
 }
 
 // Graph save format
@@ -253,6 +254,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         environment: 'studio',
         environmentIntensity: 1,
         showEnvironmentBackground: false,
+        showGrid: true,
         config: {
             // Defaults with low resolution as requested
             // Box
@@ -713,6 +715,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         mesh: 'sphere',
                         isInstanced: false,
                         instanceCount: 100,
+                        showGrid: true,
                         config: {
                             width: 1.5,
                             height: 1.5,

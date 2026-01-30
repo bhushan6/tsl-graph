@@ -31,6 +31,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const controlsRef = useRef<OrbitControls | null>(null);
     const meshRef = useRef<THREE.Mesh | null>(null);
     const backdropRef = useRef<THREE.Group | null>(null);
+    const gridRef = useRef<THREE.GridHelper | null>(null);
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
 
@@ -283,6 +284,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             // Grid helper
             const gridHelper = new THREE.GridHelper(10, 10, 0x333333, 0x333333);
             scene.add(gridHelper);
+            gridRef.current = gridHelper;
 
             // Orbit Controls
             const controls = new OrbitControls(camera, renderer.domElement);
@@ -520,6 +522,13 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         };
     }, [previewSettings.showBackdrop, isReady]);
 
+    // specific effect to toggle grid visibility
+    useEffect(() => {
+        if (gridRef.current) {
+            gridRef.current.visible = !!previewSettings.showGrid;
+        }
+    }, [previewSettings.showGrid, isReady]);
+
     return (
         <div
             className={cn(
@@ -620,6 +629,16 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                         </div>
                                     </>
                                 )}
+
+                                <div className="flex items-center justify-between">
+                                    <Label>Show Grid</Label>
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-primary"
+                                        checked={previewSettings.showGrid ?? true}
+                                        onChange={(e) => updatePreviewSettings({ showGrid: e.target.checked })}
+                                    />
+                                </div>
 
                                 {/* Geometry Specific Controls */}
                                 {previewSettings.mesh === 'box' && (
