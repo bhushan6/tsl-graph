@@ -73,6 +73,31 @@ export const textureNodes = [
         outputs: { out: { label: 'RGB', type: 'vec3' } },
         tsl: 'viewportSharedTexture',
     },
+    {
+        type: 'texture/triplanar',
+        label: 'Triplanar Texture',
+        category: 'Texture',
+        inputs: {
+            textureX: { label: 'Texture X', type: 'any', connectionOnly: true },
+            textureY: { label: 'Texture Y', type: 'any', connectionOnly: true },
+            textureZ: { label: 'Texture Z', type: 'any', connectionOnly: true },
+            scale: { label: 'Scale', type: 'float', default: 1 },
+            position: { label: 'Position', type: 'vec3', connectionOnly: true },
+            normal: { label: 'Normal', type: 'vec3', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'triplanarTexture',
+    },
+    {
+        type: 'texture/viewportDepth',
+        label: 'Viewport Depth',
+        category: 'Texture',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'viewportDepthTexture',
+    },
 ] as const;
 
 // Type check

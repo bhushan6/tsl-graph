@@ -699,8 +699,29 @@ export function compileGraph(
                 const uvVar = getInputValue(node, 'uv', edges, compiledNodes, uvInput);
                 uvCode = `, ${uvVar}`;
             }
-
             code = `texture(${texVarName}${uvCode})`;
+        } else if (def.type === 'texture/triplanar') {
+            // Special handling for triplanar arguments mapping
+            // Signature: (texX, texY, texZ, scale, position, normal)
+
+            const texEdge = edges.find(e => e.target === node.id && e.targetHandle === 'texture');
+            let texArg = 'color(1.0, 0.0, 1.0)'; // Fallback magenta
+
+            if (texEdge) {
+                texArg = getInputValue(node, 'texture', edges, compiledNodes, inputs['texture']);
+            }
+
+            const scaleArg = getInputValue(node, 'scale', edges, compiledNodes, inputs['scale']);
+
+            // For optional position/normal, pass undefined if not connected (let TSL handle defaults)
+            const posEdge = edges.find(e => e.target === node.id && e.targetHandle === 'position');
+            const posArg = posEdge ? getInputValue(node, 'position', edges, compiledNodes, inputs['position']) : 'undefined';
+
+            const normalEdge = edges.find(e => e.target === node.id && e.targetHandle === 'normal');
+            const normalArg = normalEdge ? getInputValue(node, 'normal', edges, compiledNodes, inputs['normal']) : 'undefined';
+
+            // Pass null for Y and Z to use X for all planes
+            code = `${def.tsl}(${texArg}, null, null, ${scaleArg}, ${posArg}, ${normalArg})`;
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {

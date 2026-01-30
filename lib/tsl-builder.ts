@@ -4,6 +4,7 @@ import * as TSL from 'three/tsl'; // For TSL functions
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
 import { compileGraph } from './compiler';
 import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
+import { hashBlur } from 'three/addons/tsl/display/hashBlur.js';
 
 /**
  * Build a Three.js material from the node graph by compiling to TSL and evaluating it.
@@ -34,6 +35,7 @@ export function buildTSLMaterial(
         uvTransform,
         fresnelFull,
         node_normalize: TSL.normalize,
+        hashBlur,
     };
 
     const scopeKeys = Object.keys(scope);
