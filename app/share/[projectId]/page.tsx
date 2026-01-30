@@ -8,10 +8,11 @@ import { Editor } from "@/components/Editor";
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "@/store/editor";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, Lock, Share2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Loader2, Lock } from "lucide-react";
 import Link from "next/link";
 import { PresetSelector } from "@/components/PresetSelector";
 import { useState } from "react";
+import { CloneBanner } from "@/components/CloneBanner";
 
 function PublicView({ projectId }: { projectId: Id<"projects"> }) {
     const project = useQuery(api.projects.get, { id: projectId });
@@ -89,33 +90,12 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
 
     return (
         <div className="w-screen h-screen flex flex-col">
-            {/* Public View Header */}
-            <div className="h-14 border-b bg-card flex items-center justify-between px-4 shrink-0">
-                <div className="flex items-center gap-4">
-                    <Link href="/">
-                        <Button variant="ghost" size="sm">
-                            <ArrowLeft className="h-4 w-4 mr-2" />
-                            Home
-                        </Button>
-                    </Link>
-                    <div className="h-6 w-px bg-border" />
-                    <div className="flex items-center gap-2">
-                        <h1 className="font-medium">{project.name}</h1>
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                            <Share2 className="h-3 w-3" />
-                            Public View
-                        </div>
-                    </div>
-                </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`/editor/${projectId}`, '_blank')}
-                >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in Editor
-                </Button>
-            </div>
+            {/* Clone Banner */}
+            <CloneBanner
+                sourceProjectId={projectId}
+                sourceProjectName={project.name}
+                sourceGraphData={project.graphData}
+            />
 
             <main className="flex-1 overflow-hidden relative">
                 <Editor
