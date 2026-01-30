@@ -215,7 +215,10 @@ export const get = query({
         id: v.id("projects"),
     },
     handler: async (ctx, args) => {
+        // Try to get user, but don't throw if unauthenticated
+        // This allows public projects to be accessed without auth
         const user = await authComponent.getAuthUser(ctx);
+
         const project = await ctx.db.get(args.id);
 
         if (!project) {

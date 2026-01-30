@@ -1,27 +1,51 @@
 "use client";
 
 import { use } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Editor } from "@/components/Editor";
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "@/store/editor";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Copy } from "lucide-react";
 import Link from "next/link";
 import { PresetSelector } from "@/components/PresetSelector";
 import { useState } from "react";
-import { CloneBanner } from "@/components/CloneBanner";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 function PublicView({ projectId }: { projectId: Id<"projects"> }) {
+    const router = useRouter();
     const project = useQuery(api.projects.get, { id: projectId });
+    const cloneProject = useMutation(api.projects.clone);
 
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
     const resetEditor = useEditorStore((s) => s.resetEditor);
 
     const hasLoadedRef = useRef(false);
     const [showPresetSelector, setShowPresetSelector] = useState(false);
+    const [isCloning, setIsCloning] = useState(false);
+
+    const handleClone = async () => {
+        if (!project) return;
+
+        try {
+            setIsCloning(true);
+            const newProjectId = await cloneProject({
+                sourceId: projectId,
+                name: `${project.name} (Clone)`,
+                graphData: project.graphData,
+            });
+            toast.success("Project cloned successfully!");
+            router.push(`/editor/${newProjectId}`);
+        } catch (error) {
+            console.error("Error cloning project:", error);
+            toast.error("Failed to clone project. Please try again.");
+            setIsCloning(false);
+        }
+    };
 
     // Reset editor on unmount
     useEffect(() => {
@@ -90,12 +114,19 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
 
     return (
         <div className="w-screen h-screen flex flex-col">
-            {/* Clone Banner */}
-            <CloneBanner
-                sourceProjectId={projectId}
-                sourceProjectName={project.name}
-                sourceGraphData={project.graphData}
-            />
+            <Button
+                size="lg"
+                className="absolute z-50 left-[50%] translate-x-[-50%] bottom-8 hover:scale-105 transition-all duration-200 cursor-pointer font-semibold px-6"
+                onClick={handleClone}
+                disabled={isCloning}
+            >
+                {isCloning ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                    <Copy className="h-5 w-5" />
+                )}
+                {isCloning ? "Cloning..." : "Clone Project"}
+            </Button>
 
             <main className="flex-1 overflow-hidden relative">
                 <Editor
@@ -123,6 +154,8 @@ export default function SharePage({
     const { projectId } = use(params);
 
     return (
-        <PublicView projectId={projectId as Id<"projects">} />
+        <ProtectedRoute>
+            <PublicView projectId={projectId as Id<"projects">} />
+        </ProtectedRoute>
     );
 }
