@@ -48,9 +48,10 @@ function GithubIcon({ className }: { className?: string }) {
 
 interface SignInCardProps {
     hideAnonymous?: boolean;
+    callbackUrl?: string;
 }
 
-export function SignInCard({ hideAnonymous }: SignInCardProps) {
+export function SignInCard({ hideAnonymous, callbackUrl = "/dashboard" }: SignInCardProps) {
     const [loadingProvider, setLoadingProvider] = useState<"google" | "github" | "anonymous" | null>(null);
 
     const handleSignIn = async (provider: "google" | "github") => {
@@ -58,7 +59,7 @@ export function SignInCard({ hideAnonymous }: SignInCardProps) {
         try {
             await authClient.signIn.social({
                 provider,
-                callbackURL: "/dashboard",
+                callbackURL: callbackUrl,
                 fetchOptions: {
                     onSuccess: () => {
                         posthog.capture('user_signed_in', { provider });
@@ -123,7 +124,7 @@ export function SignInCard({ hideAnonymous }: SignInCardProps) {
                                         fetchOptions: {
                                             onSuccess: () => {
                                                 posthog.capture('user_signed_in', { provider: 'anonymous' });
-                                                window.location.href = "/dashboard";
+                                                window.location.href = callbackUrl;
                                             }
                                         }
                                     });
