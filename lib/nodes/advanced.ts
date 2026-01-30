@@ -14,6 +14,18 @@ export const advancedNodes = [
         tsl: 'varying',
     },
     {
+        type: 'advanced/var',
+        label: 'Var',
+        category: 'Advanced',
+        inputs: {
+            node: { label: 'Node', type: 'any' },
+        },
+        outputs: {
+            out: { label: 'Out', type: 'any' },
+        },
+        tsl: 'Var',
+    },
+    {
         type: 'advanced/linearDepth',
         label: 'Linear Depth',
         category: 'Advanced',
