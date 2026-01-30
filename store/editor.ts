@@ -65,6 +65,7 @@ export interface PreviewSettings {
     environment?: string;
     environmentIntensity?: number;
     showEnvironmentBackground?: boolean;
+    showBackdrop?: boolean;
 }
 
 // Graph save format

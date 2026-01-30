@@ -5,6 +5,7 @@ import { useEditorStore, PreviewMeshType } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const controlsRef = useRef<OrbitControls | null>(null);
     const meshRef = useRef<THREE.Mesh | null>(null);
+    const backdropRef = useRef<THREE.Group | null>(null);
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
 
@@ -473,6 +475,51 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         };
     }, [previewSettings.environment, previewSettings.environmentIntensity, previewSettings.showEnvironmentBackground, isReady]);
 
+    // Load and display backdrop model
+    useEffect(() => {
+        if (!sceneRef.current || !isReady) return;
+
+        const scene = sceneRef.current;
+
+        // Remove existing backdrop if any
+        if (backdropRef.current) {
+            scene.remove(backdropRef.current);
+            backdropRef.current.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    child.geometry?.dispose();
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => m.dispose());
+                    } else {
+                        child.material?.dispose();
+                    }
+                }
+            });
+            backdropRef.current = null;
+        }
+
+        if (!previewSettings.showBackdrop) return;
+
+        const loader = new GLTFLoader();
+        loader.load(
+            '/clothe-backdrop.glb',
+            (gltf) => {
+                const model = gltf.scene;
+                model.position.set(0, 0, -2);
+                model.scale.setScalar(40);
+                scene.add(model);
+                backdropRef.current = model;
+            },
+            undefined,
+            (err) => {
+                console.error('Failed to load backdrop model:', err);
+            }
+        );
+
+        return () => {
+            // Cleanup handled above when showBackdrop changes
+        };
+    }, [previewSettings.showBackdrop, isReady]);
+
     return (
         <div
             className={cn(
@@ -794,6 +841,16 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                 )}
 
                                 <div className="h-[1px] bg-border my-1" />
+
+                                <div className="flex items-center justify-between">
+                                    <Label>Show Backdrop</Label>
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-primary"
+                                        checked={previewSettings.showBackdrop ?? false}
+                                        onChange={(e) => updatePreviewSettings({ showBackdrop: e.target.checked })}
+                                    />
+                                </div>
 
                                 <div className="flex items-center justify-between">
                                     <Label>Instancing</Label>
