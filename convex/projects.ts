@@ -215,7 +215,10 @@ export const get = query({
         id: v.id("projects"),
     },
     handler: async (ctx, args) => {
+        // Try to get user, but don't throw if unauthenticated
+        // This allows public projects to be accessed without auth
         const user = await authComponent.getAuthUser(ctx);
+
         const project = await ctx.db.get(args.id);
 
         if (!project) {
@@ -242,5 +245,38 @@ export const listPublic = query({
             .take(50);
 
         return projects;
+    },
+});
+
+// Clone a public project (creates a new project with copied data)
+export const clone = mutation({
+    args: {
+        sourceId: v.id("projects"),
+        name: v.string(),
+        graphData: v.any(),
+    },
+    handler: async (ctx, args) => {
+        const user = await authComponent.getAuthUser(ctx);
+        if (!user) {
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
+        }
+
+        const sourceProject = await ctx.db.get(args.sourceId);
+        if (!sourceProject || !sourceProject.isPublic) {
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND));
+        }
+
+        const now = Date.now();
+        const projectId = await ctx.db.insert("projects", {
+            userId: user._id,
+            name: args.name,
+            description: sourceProject.description,
+            isPublic: false,
+            graphData: args.graphData,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        return projectId;
     },
 });
