@@ -89,7 +89,7 @@ export const advancedNodes = [
         inputs: {
             texture: { label: 'Texture', type: 'any' },
             radius: { label: 'Radius', type: 'float', default: 0.01 },
-            count: { label: 'Count', type: 'float', default: 8 },
+            // count: { label: 'Count', type: 'float', default: 8 },
         },
         outputs: {
             out: { label: 'Out', type: 'vec4' },

@@ -700,6 +700,17 @@ export function compileGraph(
                 uvCode = `, ${uvVar}`;
             }
             code = `texture(${texVarName}${uvCode})`;
+        } else if (def.type === 'texture/viewportShared') {
+            // Special handling for viewportSharedTexture - only pass UV if connected
+            const uvEdge = edges.find(e => e.target === node.id && e.targetHandle === 'uv');
+
+            if (uvEdge) {
+                const uvArg = getInputValue(node, 'uv', edges, compiledNodes, inputs['uv']);
+                code = `${def.tsl}(${uvArg})`;
+            } else {
+                // No UV connected - call without arguments to use default screen UV
+                code = `${def.tsl}()`;
+            }
         } else if (def.type === 'texture/triplanar') {
             // Special handling for triplanar arguments mapping
             // Signature: (texX, texY, texZ, scale, position, normal)
