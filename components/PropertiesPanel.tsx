@@ -212,7 +212,24 @@ function SubgraphInstancePanel({ subgraph, onEnterEditor }: SubgraphInstancePane
 
 
 
-function CodeNodeInstancePanel({ codeNode, onEdit }: { codeNode: CodeNodeDefinition, onEdit: () => void }) {
+function CodeNodeInstancePanel({
+    codeNode,
+    nodeId,
+    connectedInputs,
+    onEdit
+}: {
+    codeNode: CodeNodeDefinition;
+    nodeId: string;
+    connectedInputs: Set<string | null | undefined>;
+    onEdit: () => void;
+}) {
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+
+    // Get unconnected inputs from the code node
+    const editableInputs = codeNode.inputs.filter(
+        input => !connectedInputs.has(input.id)
+    );
+
     return (
         <div className="flex flex-col h-full">
             <div className="px-4 py-3 border-b border-sidebar-border">
@@ -228,34 +245,62 @@ function CodeNodeInstancePanel({ codeNode, onEdit }: { codeNode: CodeNodeDefinit
                 </p>
             </div>
 
-            <div className="flex-1 p-4 space-y-6">
-                <div className="space-y-3">
-                    <div>
-                        <div className="text-xs font-medium text-muted-foreground mb-1.5">Inputs</div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {codeNode.inputs && codeNode.inputs.length > 0 ? (
-                                codeNode.inputs.map((input: SubgraphPort) => (
-                                    <span key={input.id} className="text-[10px] font-mono px-1.5 py-0.5 h-5 rounded-sm bg-sidebar-accent text-sidebar-foreground/70 border border-sidebar-border inline-flex items-center">
-                                        {input.label}
-                                    </span>
-                                ))
-                            ) : (
-                                <span className="text-xs text-muted-foreground italic">No inputs</span>
-                            )}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                {/* Editable Inputs Section */}
+                {editableInputs.length > 0 && (
+                    <div className="space-y-4">
+                        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Input Values
+                        </h4>
+                        <div className="flex flex-col gap-4">
+                            {editableInputs.map((input) => (
+                                <PropertyInputWrapper
+                                    key={input.id}
+                                    nodeId={nodeId}
+                                    inputKey={input.id}
+                                    inputType={input.type}
+                                    inputLabel={input.label}
+                                    inputDefault={getDefaultForType(input.type)}
+                                    onChange={(v) => updateNodeValue(nodeId, input.id, v)}
+                                />
+                            ))}
                         </div>
                     </div>
-                </div>
+                )}
 
+                {/* Show message if all inputs are connected */}
+                {codeNode.inputs.length > 0 && editableInputs.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                        All inputs are connected
+                    </p>
+                )}
+
+                {/* Code Preview Section */}
                 <div className="space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</h4>
                     <div className="font-mono text-[10px] bg-muted/50 p-2 rounded-md overflow-x-auto whitespace-pre text-muted-foreground/80 border border-border/50">
-                        {codeNode.code.split('\n').slice(0, 8).join('\n')}
-                        {codeNode.code.split('\n').length > 8 && '\n...'}
+                        {codeNode.code}
+                        {/* {codeNode.code.split('\n').length > 8 && '\n...'} */}
                     </div>
                 </div>
             </div>
         </div>
     );
+}
+
+// Helper function to get default value for a type
+function getDefaultForType(type: string): TSLValueType {
+    switch (type) {
+        case 'color': return '#ffffff';
+        case 'bool': return false;
+        case 'vec2': return [0, 0];
+        case 'vec3': return [0, 0, 0];
+        case 'vec4': return [0, 0, 0, 0];
+        case 'int':
+        case 'uint':
+        case 'float':
+        default: return 0;
+    }
 }
 
 function PropertiesPanelContent() {
@@ -304,6 +349,11 @@ function PropertiesPanelContent() {
         );
     }
 
+    // Compute connected inputs before code node check (needed for both cases)
+    const connectedInputs = new Set(
+        edges.filter((e) => e.target === selectedNodeId).map((e) => e.targetHandle)
+    );
+
     // Check if this is a code node instance
     const isCodeNodeInstance = node.data.type.startsWith('code/') || !!codeNodes[node.data.type];
     const codeNode = isCodeNodeInstance ? (getCodeNode(node.data.type) || codeNodes[node.data.type]) : null;
@@ -313,6 +363,8 @@ function PropertiesPanelContent() {
             <>
                 <CodeNodeInstancePanel
                     codeNode={codeNode}
+                    nodeId={node.id}
+                    connectedInputs={connectedInputs}
                     onEdit={() => setEditingCodeNodeId(codeNode.id)}
                 />
                 {editingCodeNodeId && (
@@ -352,10 +404,6 @@ function PropertiesPanelContent() {
             />
         );
     }
-
-    const connectedInputs = new Set(
-        edges.filter((e) => e.target === selectedNodeId).map((e) => e.targetHandle)
-    );
 
     const inputs = def.inputs ?? {};
     const inputKeys = Object.keys(inputs);

@@ -23,6 +23,47 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
 };
 
 /**
+ * Get TSL default expression for a given type.
+ * Used when code node inputs are not connected and have no explicit value.
+ */
+function getTSLDefaultForType(type: string, value?: unknown): string {
+    // If a value is provided, use it
+    if (value !== undefined && value !== null) {
+        if (type === 'color') {
+            return `color("${String(value)}")`;
+        }
+        if (type === 'bool') {
+            return value ? 'true' : 'false';
+        }
+        if (Array.isArray(value)) {
+            const components = value.map(v => String(Number(v ?? 0)));
+            if (components.length === 2) return `vec2(${components.join(', ')})`;
+            if (components.length === 3) return `vec3(${components.join(', ')})`;
+            if (components.length === 4) return `vec4(${components.join(', ')})`;
+            return `vec${components.length}(${components.join(', ')})`;
+        }
+        if (type === 'int' || type === 'uint') {
+            return `int(${Math.round(Number(value))})`;
+        }
+        return `float(${Number(value)})`;
+    }
+
+    // Return type-appropriate defaults
+    switch (type) {
+        case 'color': return 'color("#ffffff")';
+        case 'bool': return 'false';
+        case 'vec2': return 'vec2(0, 0)';
+        case 'vec3': return 'vec3(0, 0, 0)';
+        case 'vec4': return 'vec4(0, 0, 0, 0)';
+        case 'int':
+        case 'uint': return 'int(0)';
+        case 'float':
+        case 'any':
+        default: return 'float(0)';
+    }
+}
+
+/**
  * Get swizzle suffix for a source handle.
  * @param sourceHandle The handle ID on the source node
  * @param isSingleOutput Whether the source node returns a single value directly (true) or an object (false)
@@ -265,18 +306,20 @@ function compileSubgraphDefinition(
                     const edge = internalEdges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
                     if (edge) {
                         if (edge.source === 'subgraph-input' && argsMap && edge.sourceHandle) {
-                            args.push(argsMap[edge.sourceHandle] || 'float(0)');
+                            args.push(argsMap[edge.sourceHandle] || getTSLDefaultForType(inputPort.type));
                         } else {
                             const upstream = compiledNodes.get(edge.source);
                             if (upstream) {
                                 const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
                                 args.push(`${upstream.varName}${swizzle}`);
                             } else {
-                                args.push('float(0)');
+                                args.push(getTSLDefaultForType(inputPort.type));
                             }
                         }
                     } else {
-                        args.push('float(0)');
+                        // Not connected - use node value if available, otherwise type default
+                        const nodeValue = node.data.values?.[inputPort.id];
+                        args.push(getTSLDefaultForType(inputPort.type, nodeValue));
                     }
                 }
 
@@ -613,10 +656,13 @@ export function compileGraph(
                             const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
                             args.push(`${upstream.varName}${swizzle}`);
                         } else {
-                            args.push('float(0)');
+                            // Fallback if upstream not found
+                            args.push(getTSLDefaultForType(inputPort.type));
                         }
                     } else {
-                        args.push('float(0)');
+                        // Not connected - use node value if available, otherwise type default
+                        const nodeValue = node.data.values?.[inputPort.id];
+                        args.push(getTSLDefaultForType(inputPort.type, nodeValue));
                     }
                 }
 

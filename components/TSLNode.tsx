@@ -116,7 +116,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         // Code node instance: dynamicPorts contains inputs (in_*) and output (out)
         for (const port of data.dynamicPorts) {
             if (port.id.startsWith('in_')) {
-                inputs[port.id] = { label: port.label, type: port.type as TSLType, connectionOnly: true };
+                // Code node inputs are editable (no connectionOnly) to allow fallback values
+                inputs[port.id] = { label: port.label, type: port.type as TSLType };
             } else if (port.id === 'out') {
                 outputs[port.id] = { label: port.label, type: port.type as TSLType };
             }

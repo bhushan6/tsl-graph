@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Code, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import {
     Dialog,
@@ -15,8 +15,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useEditorStore } from '@/store/editor';
 import { parseCodeNodeCode } from '@/lib/code-parser';
-import { SubgraphPort } from '@/lib/types';
+import { SubgraphPort, TSLType } from '@/lib/types';
 import { toast } from 'sonner';
+
+const PORT_TYPES: { value: TSLType; label: string }[] = [
+    { value: 'any', label: 'Any' },
+    { value: 'float', label: 'Float' },
+    { value: 'vec2', label: 'Vec2' },
+    { value: 'vec3', label: 'Vec3' },
+    { value: 'vec4', label: 'Vec4' },
+    { value: 'color', label: 'Color' },
+    { value: 'int', label: 'Int' },
+    { value: 'bool', label: 'Bool' },
+];
 
 interface CodeNodeDialogProps {
     open: boolean;
@@ -44,8 +55,11 @@ export function CodeNodeDialog({
     const [name, setName] = useState(initialName);
     const [code, setCode] = useState(initialCode);
     const [isSaving, setIsSaving] = useState(false);
-    const { createCodeNode, updateCodeNode, subgraphs } = useEditorStore();
+    const [inputTypes, setInputTypes] = useState<Record<string, TSLType>>({});
+    const { createCodeNode, updateCodeNode, subgraphs, getCodeNode } = useEditorStore();
 
+    // When editing, load existing input types from the code node
+    const existingCodeNode = mode === 'edit' && nodeId ? getCodeNode(nodeId) : null;
 
     // Parse code to extract arguments and validate
     const parseResult = useMemo(() => {
@@ -54,6 +68,23 @@ export function CodeNodeDialog({
         }
         return parseCodeNodeCode(code);
     }, [code]);
+
+    // Sync input types when arguments change
+    React.useEffect(() => {
+        const newTypes: Record<string, TSLType> = {};
+        for (const arg of parseResult.arguments) {
+            // Try to get existing type from code node (if editing)
+            const existingInput = existingCodeNode?.inputs.find(inp => inp.label === arg);
+            newTypes[arg] = inputTypes[arg] || existingInput?.type as TSLType || 'any';
+        }
+        // Only update if different to avoid infinite loops
+        const isDifferent = parseResult.arguments.some(arg => newTypes[arg] !== inputTypes[arg]) ||
+            Object.keys(inputTypes).length !== parseResult.arguments.length;
+        if (isDifferent) {
+            setInputTypes(newTypes);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [parseResult.arguments, existingCodeNode]);
 
     // Check for name conflicts
     const nameConflict = useMemo(() => {
@@ -91,11 +122,11 @@ export function CodeNodeDialog({
         setIsSaving(true);
         try {
 
-            // Create input ports from parsed arguments
+            // Create input ports from parsed arguments with user-configured types
             const inputs: SubgraphPort[] = parseResult.arguments.map((arg, i) => ({
                 id: `in_${i}`,
                 label: arg,
-                type: 'any',
+                type: inputTypes[arg] || 'any',
             }));
 
             // Single output port
@@ -129,7 +160,7 @@ export function CodeNodeDialog({
         } finally {
             setIsSaving(false);
         }
-    }, [canCreate, isSaving, name, code, parseResult.arguments, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId]);
+    }, [canCreate, isSaving, name, code, parseResult.arguments, inputTypes, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId]);
 
     const handleClose = useCallback(() => {
         // Reset to initial values on close without saving
@@ -140,7 +171,7 @@ export function CodeNodeDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-xl">
+            <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Code className="w-5 h-5" />
@@ -206,6 +237,36 @@ export function CodeNodeDialog({
                             )}
                         </div>
                     </div>
+
+                    {/* Input Types Configuration - only show if there are arguments */}
+                    {parseResult.isValid && parseResult.arguments.length > 0 && (
+                        <div className="space-y-2">
+                            <Label>Input Types</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Configure the type for each input. Use &apos;Any&apos; to accept any value.
+                            </p>
+                            <div className="flex gap-4 flex-wrap">
+                                {parseResult.arguments.map((arg) => (
+                                    <div key={arg} className="flex items-center gap-2">
+                                        <span className="text-sm font-mono min-w-[80px] text-muted-foreground">
+                                            {arg}
+                                        </span>
+                                        <select
+                                            value={inputTypes[arg] || 'any'}
+                                            onChange={(e) => setInputTypes(prev => ({ ...prev, [arg]: e.target.value as TSLType }))}
+                                            className="flex-1 h-8 px-2 text-sm bg-muted border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                                        >
+                                            {PORT_TYPES.map((type) => (
+                                                <option key={type.value} value={type.value}>
+                                                    {type.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <DialogFooter>
