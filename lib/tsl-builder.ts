@@ -44,6 +44,13 @@ export function buildTSLMaterial(
     // 3. Wrap code in a function that returns the material
     // The generated code ends with 'const material = ...;'
     // We append 'return material;' to get the result.
+
+    // Check if material definition exists in code
+    if (!code.includes('const material =')) {
+        // Return a default material if no material node is present
+        return new THREE.MeshBasicNodeMaterial({ color: 0x333333 });
+    }
+
     const functionBody = `
         ${code}
         return material;

@@ -23,29 +23,58 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
 };
 
 /**
+ * Format a value into a TSL string expression based on type.
+ */
+function formatValueToTSL(value: unknown, type: string): string {
+    // Handle Vectors (Arrays)
+    if (Array.isArray(value)) {
+        // Truncate to max 4 components to prevent invalid vecN
+        const components = value.slice(0, 4).map(v => String(Number(v ?? 0)));
+        const len = components.length;
+
+        // Determine prefix based on type
+        let prefix = 'vec';
+        if (type.startsWith('ivec')) prefix = 'ivec';
+        else if (type.startsWith('uvec')) prefix = 'uvec';
+        else if (type.startsWith('bvec')) prefix = 'bvec';
+
+        if (len >= 2 && len <= 4) {
+            return `${prefix}${len}(${components.join(', ')})`;
+        }
+
+        // Fallback for weird lengths (shouldn't usually happen with valid data)
+        if (len === 1) {
+            if (type === 'int' || type === 'uint') return `int(${components[0]})`;
+            return `float(${components[0]})`;
+        }
+        // Default fallback if array is empty or weird
+        return `${prefix}2(0, 0)`;
+    }
+
+    if (type === 'color') {
+        return `color("${String(value)}")`;
+    }
+
+    if (type === 'bool') {
+        return value ? 'true' : 'false';
+    }
+
+    if (type === 'int' || type === 'uint') {
+        return `int(${Math.round(Number(value ?? 0))})`;
+    }
+
+    // Default to float
+    return `float(${Number(value ?? 0)})`;
+}
+
+/**
  * Get TSL default expression for a given type.
  * Used when code node inputs are not connected and have no explicit value.
  */
 function getTSLDefaultForType(type: string, value?: unknown): string {
     // If a value is provided, use it
     if (value !== undefined && value !== null) {
-        if (type === 'color') {
-            return `color("${String(value)}")`;
-        }
-        if (type === 'bool') {
-            return value ? 'true' : 'false';
-        }
-        if (Array.isArray(value)) {
-            const components = value.map(v => String(Number(v ?? 0)));
-            if (components.length === 2) return `vec2(${components.join(', ')})`;
-            if (components.length === 3) return `vec3(${components.join(', ')})`;
-            if (components.length === 4) return `vec4(${components.join(', ')})`;
-            return `vec${components.length}(${components.join(', ')})`;
-        }
-        if (type === 'int' || type === 'uint') {
-            return `int(${Math.round(Number(value))})`;
-        }
-        return `float(${Number(value)})`;
+        return formatValueToTSL(value, type);
     }
 
     // Return type-appropriate defaults
@@ -55,6 +84,12 @@ function getTSLDefaultForType(type: string, value?: unknown): string {
         case 'vec2': return 'vec2(0, 0)';
         case 'vec3': return 'vec3(0, 0, 0)';
         case 'vec4': return 'vec4(0, 0, 0, 0)';
+        case 'ivec2': return 'ivec2(0, 0)';
+        case 'ivec3': return 'ivec3(0, 0, 0)';
+        case 'ivec4': return 'ivec4(0, 0, 0, 0)';
+        case 'uvec2': return 'uvec2(0, 0)';
+        case 'uvec3': return 'uvec3(0, 0, 0)';
+        case 'uvec4': return 'uvec4(0, 0, 0, 0)';
         case 'int':
         case 'uint': return 'int(0)';
         case 'float':
@@ -118,31 +153,12 @@ function getInputValue(
 
     const value = node.data.values?.[inputKey] ?? inputDef.default;
 
-    if (inputDef.type === 'color') {
-        const hex = String(value ?? '#ffffff');
-        return `color("${hex}")`;
+    if (value !== undefined && value !== null) {
+        return formatValueToTSL(value, inputDef.type);
     }
 
-    if (inputDef.type === 'bool') {
-        return value ? 'true' : 'false';
-    }
-
-    // Handle array values (vectors)
-    if (Array.isArray(value)) {
-        const components = value.map(v => String(Number(v ?? 0)));
-        if (components.length === 2) return `vec2(${components.join(', ')})`;
-        if (components.length === 3) return `vec3(${components.join(', ')})`;
-        if (components.length === 4) return `vec4(${components.join(', ')})`;
-        // Fallback for unknown sizes
-        return `vec${components.length}(${components.join(', ')})`;
-    }
-
-    const num = Number(value ?? 0);
-    if (inputDef.type === 'int' || inputDef.type === 'uint') {
-        return String(Math.round(num));
-    }
-
-    return String(num);
+    // Should not happen if default is handled above, but as fallback:
+    return getTSLDefaultForType(inputDef.type);
 }
 
 /**

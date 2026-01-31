@@ -196,7 +196,7 @@ describe('compileGraph', () => {
                 createNode('add1', 'math/add', { values: { a: 1, b: 2, localName: 'mySum' } })
             ];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('const mySum = add(1, 2);');
+            expect(code).toContain('const mySum = add(float(1), float(2));');
         });
 
         it('should sanitize invalid variable names', () => {
@@ -204,7 +204,7 @@ describe('compileGraph', () => {
                 createNode('add1', 'math/add', { values: { a: 1, b: 2, localName: '123-invalid-name!' } })
             ];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('const _123_invalid_name_ = add(1, 2);');
+            expect(code).toContain('const _123_invalid_name_ = add(float(1), float(2));');
         });
     });
 
@@ -212,25 +212,25 @@ describe('compileGraph', () => {
         it('should compile integer values', () => {
             const nodes = [createNode('add1', 'math/add', { values: { a: 10, b: 5 } })];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('add(10, 5)');
+            expect(code).toContain('add(float(10), float(5))');
         });
 
         it('should compile float values', () => {
             const nodes = [createNode('add1', 'math/add', { values: { a: 10.5, b: -5.25 } })];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('add(10.5, -5.25)');
+            expect(code).toContain('add(float(10.5), float(-5.25))');
         });
 
         it('should compile zero values', () => {
             const nodes = [createNode('add1', 'math/add', { values: { a: 0, b: 0 } })];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('add(0, 0)');
+            expect(code).toContain('add(float(0), float(0))');
         });
 
         it('should use default values when not specified', () => {
             const nodes = [createNode('add1', 'math/add')]; // Uses defaults from def
             const code = compileGraph(nodes, []);
-            expect(code).toContain('add(0, 0)');
+            expect(code).toContain('add(float(0), float(0))');
         });
     });
 
@@ -256,7 +256,7 @@ describe('compileGraph', () => {
         it('should handle mixed scalar and vector inputs', () => {
             const nodes = [createNode('add1', 'math/add', { values: { a: [1, 2, 3], b: 5 } })];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('add(vec3(1, 2, 3), 5)');
+            expect(code).toContain('add(vec3(1, 2, 3), float(5))');
         });
 
         it('should use default vector values from definition', () => {
@@ -317,8 +317,8 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('const _node0 = add(1, 2);');
-            expect(code).toContain('mul(_node0, 4)');
+            expect(code).toContain('const _node0 = add(float(1), float(2));');
+            expect(code).toContain('mul(_node0, float(4))');
         });
 
         it('should connect geometry node to math node', () => {
@@ -358,7 +358,7 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('add(_node0.x, 10)');
+            expect(code).toContain('add(_node0.x, float(10))');
         });
 
         it('should handle complex node chains', () => {
@@ -377,7 +377,7 @@ describe('compileGraph', () => {
 
             expect(code).toContain('const _node0 = time;');
             expect(code).toContain('sin(_node0)');
-            expect(code).toContain('add(_node1, 0.5)');
+            expect(code).toContain('add(_node1, float(0.5))');
             expect(code).toContain('material.roughnessNode = _node2;');
         });
     });
@@ -386,7 +386,7 @@ describe('compileGraph', () => {
         it('should compile mix node with three inputs', () => {
             const nodes = [createNode('mix1', 'math/mix', { values: { a: 0, b: 1, t: 0.5 } })];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('mix(0, 1, 0.5)');
+            expect(code).toContain('mix(float(0), float(1), float(0.5))');
         });
 
         it('should compile mix with vector inputs', () => {
@@ -394,7 +394,7 @@ describe('compileGraph', () => {
                 values: { a: [1, 0, 0], b: [0, 1, 0], t: 0.5 }
             })];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), 0.5)');
+            expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), float(0.5))');
         });
     });
 });
@@ -403,13 +403,13 @@ describe('Logic Nodes', () => {
     it('should compile select node (ternary)', () => {
         const nodes = [createNode('sel1', 'logic/select', { values: { cond: true, trueVal: 1.0, falseVal: 0.0 } })];
         const code = compileGraph(nodes, []);
-        expect(code).toContain('select(true, 1, 0)');
+        expect(code).toContain('select(true, float(1), float(0))');
     });
 
     it('should compile comparison node', () => {
         const nodes = [createNode('lt1', 'logic/lessThan', { values: { a: 1, b: 2 } })];
         const code = compileGraph(nodes, []);
-        expect(code).toContain('lessThan(1, 2)');
+        expect(code).toContain('lessThan(float(1), float(2))');
     });
 
     it('should compile boolean logic node', () => {
@@ -439,7 +439,7 @@ describe('Logic Nodes', () => {
 
         // Check for existence of all parts
         expect(code).toContain('const _node0 = time;'); // t1
-        expect(code).toContain('lessThan(_node0, 0.5)'); // lt1
+        expect(code).toContain('lessThan(_node0, float(0.5))'); // lt1
         expect(code).toContain('color("#ff0000")'); // red
         expect(code).toContain('color("#0000ff")'); // blue
         expect(code).toContain('select(');
