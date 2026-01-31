@@ -1,4 +1,13 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TSL Editor
+
+A visual node-based editor for Three.js Shading Language (TSL). Create shader materials visually by connecting nodes, similar to Blender's Shader Editor or Unreal Engine's Material Editor.
+
+## Features
+
+- **Visual Graph Editor**: Intuitive node-based interface using React Flow.
+- **Real-time Preview**: See your material update instantly on a 3D model using `three/webgpu`.
+- **Code Generation**: Generates valid JavaScript/TSL code.
+- **Live Compilation**: Runs directly in the browser.
 
 ## Getting Started
 
@@ -16,18 +25,17 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Documentation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See [doc.md](doc.md) for detailed architectural documentation.
 
-## Learn More
+## Community & Contributing
 
-To learn more about Next.js, take a look at the following resources:
+We welcome contributions! Please see the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [License](LICENSE)
 
 ## Deploy on Vercel
 
