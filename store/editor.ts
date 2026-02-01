@@ -233,6 +233,7 @@ interface EditorState {
     // Reset entire store
     resetEditor: () => void;
     // Track event helper
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     trackEvent: (event: string, properties?: Record<string, any>) => void;
 }
 
