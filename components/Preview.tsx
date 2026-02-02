@@ -183,9 +183,11 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const geometry = useMemo(() => {
         const config = previewSettings.config || {};
+        let geo: THREE.BufferGeometry;
+
         switch (previewSettings.mesh) {
             case 'box':
-                return new THREE.BoxGeometry(
+                geo = new THREE.BoxGeometry(
                     config.width ?? 1.5,
                     config.height ?? 1.5,
                     config.depth ?? 1.5,
@@ -193,29 +195,33 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     config.heightSegments ?? 1,
                     config.depthSegments ?? 1
                 );
+                break;
             case 'torus':
-                return new THREE.TorusKnotGeometry(
+                geo = new THREE.TorusKnotGeometry(
                     config.radiusTorus ?? 0.8,
                     config.tube ?? 0.3,
                     config.tubularSegments ?? 32, // Lower default
                     config.radialSegments ?? 16
                 );
+                break;
             case 'plane':
-                return new THREE.PlaneGeometry(
+                geo = new THREE.PlaneGeometry(
                     config.widthPlane ?? 1,
                     config.heightPlane ?? 1,
                     config.widthSegmentsPlane ?? 1,
                     config.heightSegmentsPlane ?? 1
                 );
+                break;
             case 'sphere':
             default:
-                return new THREE.SphereGeometry(
+                geo = new THREE.SphereGeometry(
                     config.radius ?? 1,
                     config.widthSegmentsSphere ?? 32,
                     config.heightSegmentsSphere ?? 16
                 );
+                break;
             case 'cylinder':
-                return new THREE.CylinderGeometry(
+                geo = new THREE.CylinderGeometry(
                     config.radiusTop ?? 1,
                     config.radiusBottom ?? 1,
                     config.heightCylinder ?? 1,
@@ -223,7 +229,11 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     config.heightSegmentsCylinder ?? 20,
                     config.openEnded ?? true
                 );
+                break;
         }
+
+        geo.computeTangents();
+        return geo;
     }, [previewSettings.mesh, previewSettings.config]);
 
     // Dispose geometry when it changes
