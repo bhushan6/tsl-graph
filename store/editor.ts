@@ -233,7 +233,7 @@ interface EditorState {
     // Reset entire store
     resetEditor: () => void;
     // Track event helper
-    trackEvent: (event: string, properties?: Record<string, any>) => void;
+    trackEvent: (event: string, properties?: Record<string, unknown>) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -1266,7 +1266,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     deleteSubgraph: (subgraphId: string) => {
-        const { [subgraphId]: _, ...rest } = get().subgraphs;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [subgraphId]: _unused, ...rest } = get().subgraphs;
         set({ subgraphs: rest });
         get().markDirty();
     },
@@ -1378,7 +1379,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             } catch (error) {
                 // Rollback: remove the code node from local state
                 const currentCodeNodes = useEditorStore.getState().codeNodes;
-                const { [id]: _, ...rest } = currentCodeNodes;
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { [id]: _unused, ...rest } = currentCodeNodes;
                 useEditorStore.setState({ codeNodes: rest });
 
                 console.error('Failed to save code node template to DB:', error);
@@ -1487,7 +1489,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     deleteCodeNode: (id: string) => {
         get().takeSnapshot();
-        const { [id]: _, ...rest } = get().codeNodes;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [id]: _unused, ...rest } = get().codeNodes;
         set({ codeNodes: rest });
         get().markDirty();
     },

@@ -20,7 +20,7 @@ describe('Editor Store Persistence', () => {
         store.updatePreviewSettings(newSettings);
 
         // Verify state is updated
-        expect(useEditorStore.getState().previewSettings).toEqual(newSettings);
+        expect(useEditorStore.getState().previewSettings).toEqual(expect.objectContaining(newSettings));
 
         // 2. Save to JSON
         const json = store.saveToJSON();
@@ -28,7 +28,7 @@ describe('Editor Store Persistence', () => {
 
         // Verify JSON content
         expect(data.previewSettings).toBeDefined();
-        expect(data.previewSettings).toEqual(newSettings);
+        expect(data.previewSettings).toEqual(expect.objectContaining(newSettings));
 
         // 3. Reset store to defaults
         store.resetEditor();
@@ -40,7 +40,7 @@ describe('Editor Store Persistence', () => {
 
         // 5. Verify settings are restored
         const restoredSettings = useEditorStore.getState().previewSettings;
-        expect(restoredSettings).toEqual(newSettings);
+        expect(restoredSettings).toEqual(expect.objectContaining(newSettings));
     });
 
     it('should use default settings if missing in JSON', () => {

@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TSL Editor
+
+A visual node-based editor for Three.js Shading Language (TSL). Create shader materials visually by connecting nodes, similar to Blender's Shader Editor or Unreal Engine's Material Editor.
+
+## Features
+
+- **Visual Node Graph**: Edit shaders using a flow-based interface.
+- **Real-time Preview**: See your material changes instantly in a 3D preview using Three.js WebGPU.
+- **Code Generation**: Generates valid JavaScript/TSL code.
+- **Subgraph Support**: Create reusable custom nodes.
+- **Asset Management**: Upload and use textures and other assets.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **UI**: React 19, Tailwind CSS, Radix UI
+- **State Management**: Zustand
+- **Graph Engine**: React Flow
+- **3D Engine**: Three.js (WebGPU)
+- **Backend**: Convex (Auth, Database, Storage)
+- **Analytics**: PostHog
 
 ## Getting Started
 
-First, run the development server:
+1.  **Clone the repository**
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+    ```bash
+    git clone https://github.com/yourusername/tsl-editor.git
+    cd tsl-editor
+    ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2.  **Install dependencies**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+    ```bash
+    npm install
+    ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3.  **Setup Environment Variables**
 
-## Learn More
+    Copy `.env.example` to `.env.local` and fill in the required values.
 
-To learn more about Next.js, take a look at the following resources:
+    ```bash
+    cp .env.example .env.local
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4.  **Run the development server**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+    ```bash
+    npm run dev
+    ```
 
-## Deploy on Vercel
+    Open [http://localhost:3000](http://localhost:3000) with your browser.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment Variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `.env.example` for the list of required environment variables.
+
+- `CONVEX_DEPLOYMENT`: Convex deployment URL.
+- `NEXT_PUBLIC_CONVEX_URL`: Public Convex URL.
+- `NEXT_PUBLIC_CONVEX_SITE_URL`: Convex Site URL (usually same as deployment URL or specific for auth).
+- `NEXT_PUBLIC_POSTHOG_KEY`: PostHog API Key.
+- `NEXT_PUBLIC_POSTHOG_HOST`: PostHog Host (default: https://us.posthog.com).
+- `GOOGLE_CLIENT_ID`: Google OAuth Client ID.
+- `GOOGLE_CLIENT_SECRET`: Google OAuth Client Secret.
+- `GITHUB_CLIENT_ID`: GitHub OAuth Client ID.
+- `GITHUB_CLIENT_SECRET`: GitHub OAuth Client Secret.
+- `SITE_URL`: The URL of the deployed site (e.g., http://localhost:3000 for dev).
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

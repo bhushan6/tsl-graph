@@ -1,4 +1,5 @@
 // @ts-nocheck
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use client';
 
 import { useEffect, useState } from 'react';
