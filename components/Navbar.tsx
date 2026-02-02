@@ -26,6 +26,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Logo } from '@/components/ui/logo';
 import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
+import { HelpDialog } from '@/components/HelpDialog';
 
 interface NavbarProps {
     projectName?: string;
@@ -245,6 +246,7 @@ export function Navbar({ projectName, projectId, isReadOnly }: NavbarProps) {
                 )}
 
                 <FeedbackDialog />
+                <HelpDialog />
                 <ThemeToggle />
             </div>
 
