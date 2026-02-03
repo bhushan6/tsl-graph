@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Visual Node-Based TSL Editor
+
+A powerful visual editor for Three.js Shading Language (TSL), built with Next.js, React, and Convex.
+
+## Features
+
+- **Visual Node Graph**: Create and edit shaders using a node-based interface.
+- **Real-time Preview**: See your changes instantly with a live 3D preview.
+- **Authentication**: Secure user accounts using Better Auth and Convex.
+- **Cloud Storage**: Save and share your graphs.
+- **Modern Stack**: Built with Next.js 16, React 19, Tailwind CSS, and TypeScript.
+
+## Tech Stack
+
+- **Framework**: [Next.js 16](https://nextjs.org/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **UI Library**: [React 19](https://react.dev/), [Tailwind CSS](https://tailwindcss.com/), [Radix UI](https://www.radix-ui.com/)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
+- **Node Engine**: [React Flow](https://reactflow.dev/)
+- **3D Engine**: [Three.js](https://threejs.org/)
+- **Backend**: [Convex](https://convex.dev/)
+- **Authentication**: [Better Auth](https://better-auth.com/)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js (v18+)
+- npm (or yarn/pnpm/bun)
+- A Convex account
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd tsl-editor
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Edit `.env.local` and add your configuration.
 
-To learn more about Next.js, take a look at the following resources:
+4. Initialize Convex:
+   ```bash
+   npx convex dev
+   ```
+   Follow the prompts to log in and configure your project.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+5. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Deploy on Vercel
+## Contributing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
