@@ -270,7 +270,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             sceneRef.current = scene;
 
             // Camera
-            const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+            const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 2000);
             camera.position.set(3.6, 2, 2);
             camera.lookAt(0, 0, 0);
             cameraRef.current = camera;

@@ -51,8 +51,6 @@ const FakeNodeWrapper = ({ id, data }: NodeProps<Node<FakeNodeData>>) => {
                         </div>
                         <a
                             href="https://www.tsl-graph.xyz/share/jn77yctrgpz23thmvan45zwa0n80e6jc"
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className="text-xs text-muted-foreground hover:text-primary text-center underline transition-colors"
                         >
                             Open in Editor ↗
@@ -94,12 +92,12 @@ const initialNodes: Node[] = [{
 {
     id: '2',
     type: 'fakeNode',
-    position: { x: 800, y: 0 },
+    position: { x: 900, y: 0 },
     data: {
         title: 'Float',
         category: 'Utils',
         inputs: [
-            { label: 'Freq', value: defaultFreq * 10, min: 1, max: 20 },
+            { label: 'Frequency', value: defaultFreq * 10, min: 1, max: 20 },
         ]
     },
 },
@@ -118,7 +116,7 @@ const initialNodes: Node[] = [{
 {
     id: '3',
     type: 'fakeNode',
-    position: { x: 1200, y: 0 },
+    position: { x: 1200, y: -200 },
     data: {
         title: 'Output',
         category: 'Default',
@@ -150,7 +148,7 @@ export function FlowPreview() {
                         if (input.label === "Speed") {
                             uniforms.uSpeed.value = input.value;
                         }
-                        if (input.label === "Freq") {
+                        if (input.label === "Frequency") {
                             uniforms.uFreq.value = input.value / 10;
                         }
                         if (input.label === "Strength") {
