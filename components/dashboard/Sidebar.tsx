@@ -66,7 +66,7 @@ export function Sidebar({ className, user }: SidebarProps) {
 
     const handleSignOut = async () => {
         await authClient.signOut();
-        window.location.href = "/sign-in";
+        window.location.href = "/";
     };
 
     const handleDeleteAccount = async () => {
