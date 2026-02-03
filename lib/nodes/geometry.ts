@@ -149,6 +149,14 @@ export const geometryNodes = [
         tsl: 'screenUV',
         pure: true,
     },
+    {
+        type: 'geo/resolution',
+        label: 'Resolution',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'screenSize',
+        pure: true,
+    },
 ] as const;
 
 // Type check
