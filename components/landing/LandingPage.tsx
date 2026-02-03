@@ -10,6 +10,8 @@ import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Logo } from '@/components/ui/logo';
 
+import { ThemeToggle } from '@/components/ThemeToggle';
+
 export default function LandingPage() {
     return (
         <div className="relative w-full h-screen overflow-hidden bg-[#1a1a1a] text-white font-sans">
@@ -23,8 +25,9 @@ export default function LandingPage() {
                     <div className="flex items-center gap-2">
                         <Logo size="lg" className="text-white [&_span]:text-white [&_span.text-muted-foreground]:text-white/60" />
                     </div>
-                    <div className="flex gap-4">
-                        <Button variant="ghost" size="sm" asChild className="pointer-events-auto">
+                    <div className="flex gap-4 items-center">
+                        <ThemeToggle className="pointer-events-auto dark:text-white text-black hover:bg-white hover:text-black" />
+                        <Button size="sm" asChild className="pointer-events-auto bg-transparent dark:text-white text-black hover:bg-white hover:text-black">
                             <Link href="/sign-in">Sign In</Link>
                         </Button>
                         <Button size="sm" asChild className="shadow-md pointer-events-auto">
@@ -38,7 +41,7 @@ export default function LandingPage() {
                         <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter leading-none bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
                             Create Shaders <br />Visually
                         </h1>
-                        <p className="text-lg md:text-xl text-muted-foreground/90 max-w-lg leading-relaxed font-light">
+                        <p className="text-lg md:text-xl text-gray-300 max-w-lg leading-relaxed font-light">
                             Build powerful Three js shaders with a node-based interface.
                             Export standard TSL code instantly.
                         </p>

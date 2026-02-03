@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Moon, Sun } from 'lucide-react';
 
-export function ThemeToggle() {
+import { cn } from '@/lib/utils';
+
+export function ThemeToggle({ className }: { className?: string }) {
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
 
@@ -16,7 +18,7 @@ export function ThemeToggle() {
 
     if (!mounted) {
         return (
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className={cn("h-8 w-8", className)}>
                 <Sun className="h-4 w-4" />
             </Button>
         );
@@ -26,7 +28,7 @@ export function ThemeToggle() {
         <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className={cn("h-8 w-8", className)}
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         >
             {theme === 'dark' ? (
