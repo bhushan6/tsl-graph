@@ -711,7 +711,7 @@ export function compileGraph(
             code = `uv(${index})`;
         } else if (def.type === 'geo/instanceCount') {
             const count = Number(node.data.values?.['value'] ?? 0); // Default to 0 if not set
-            code = `uint(${count})`;
+            code = `int(${count})`;
         } else if (def.type === 'math/split') {
             // Special handling for Split node - pass through the input value
             // The compiler's swizzling logic will handle the output access (e.g. .x, .y)

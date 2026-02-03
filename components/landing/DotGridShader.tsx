@@ -4,9 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three/webgpu';
 import {
-    Fn, add, div, float, floor, instanceIndex, length, mod, mul, positionLocal, sin, sub, time, uv, vec2, vec3, smoothstep, dot, uniform,
-    color,
-    mix,
+    Fn, add, div, float, floor, instanceIndex, length, mod, mul, positionLocal, sin, sub, time, uv, vec2, vec3, smoothstep, dot
 } from 'three/tsl';
 import { uniforms } from './FlowPreview';
 

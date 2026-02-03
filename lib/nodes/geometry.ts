@@ -137,7 +137,7 @@ export const geometryNodes = [
         type: 'geo/instanceCount',
         label: 'Instance Count',
         category: 'Geometry',
-        outputs: { out: { label: 'Out', type: 'uint' as const } },
+        outputs: { out: { label: 'Out', type: 'int' as const } },
         tsl: 'instanceCount',
         pure: false,
     },
