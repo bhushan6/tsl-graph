@@ -27,7 +27,7 @@ export default function LandingPage() {
                     </div>
                     <div className="flex gap-4 items-center">
                         <ThemeToggle className="pointer-events-auto dark:text-white text-black hover:bg-white hover:text-black" />
-                        <Button size="sm" asChild className="pointer-events-auto bg-transparent dark:text-white text-black hover:bg-white hover:text-black">
+                        <Button size="sm" asChild className="pointer-events-auto bg-transparent dark:text-white text-black hover:bg-white dark:hover:text-black">
                             <Link href="/sign-in">Sign In</Link>
                         </Button>
                         <Button size="sm" asChild className="shadow-md pointer-events-auto">
