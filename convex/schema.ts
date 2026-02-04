@@ -11,12 +11,22 @@ export default defineSchema({
         graphData: v.any(),
         thumbnail: v.optional(v.string()), // URL from Convex storage
         thumbnailStorageId: v.optional(v.id("_storage")), // Storage ID for cleanup
+        likeCount: v.optional(v.number()),
         createdAt: v.number(),
         updatedAt: v.number(),
     })
         .index("by_user", ["userId"])
         .index("by_user_updated", ["userId", "updatedAt"])
         .index("by_public", ["isPublic"]),
+
+    projectLikes: defineTable({
+        userId: v.string(),
+        projectId: v.id("projects"),
+        createdAt: v.number(),
+    })
+        .index("by_user", ["userId"])
+        .index("by_project", ["projectId"])
+        .index("by_user_project", ["userId", "projectId"]),
 
     // Future: Shareable subgraph templates
     subgraphTemplates: defineTable({

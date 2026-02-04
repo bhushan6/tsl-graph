@@ -7,6 +7,8 @@ import {
     LayoutGrid,
     Settings,
     LogOut,
+    Globe,
+    Heart,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
@@ -57,10 +59,22 @@ export function Sidebar({ className, user }: SidebarProps) {
 
     const navItems = [
         {
-            label: "Gallery",
+            label: "Projects",
             icon: LayoutGrid,
             href: "/dashboard",
             isActive: pathname === "/dashboard",
+        },
+        {
+            label: "Gallery",
+            icon: Globe,
+            href: "/dashboard/gallery",
+            isActive: pathname === "/dashboard/gallery",
+        },
+        {
+            label: "Favorites",
+            icon: Heart,
+            href: "/dashboard/favorites",
+            isActive: pathname === "/dashboard/favorites",
         },
     ];
 

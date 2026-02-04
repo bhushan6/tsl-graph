@@ -8,7 +8,7 @@ import { Editor } from "@/components/Editor";
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "@/store/editor";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, Lock, Copy } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Copy, Heart } from "lucide-react";
 import Link from "next/link";
 import { PresetSelector } from "@/components/PresetSelector";
 import { useState } from "react";
@@ -18,8 +18,21 @@ import { toast } from "sonner";
 
 function PublicView({ projectId }: { projectId: Id<"projects"> }) {
     const router = useRouter();
-    const project = useQuery(api.projects.get, { id: projectId });
+    type ProjectWithLikes = {
+        _id: Id<"projects">;
+        name: string;
+        graphData: any;
+        thumbnail?: string;
+        likedByMe?: boolean;
+        likeCount?: number;
+    };
+
+    const project = useQuery(api.projects.get, { id: projectId }) as
+        | ProjectWithLikes
+        | null
+        | undefined;
     const cloneProject = useMutation(api.projects.clone);
+    const setLike = useMutation(api.projects.setLike);
 
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
     const resetEditor = useEditorStore((s) => s.resetEditor);
@@ -27,6 +40,7 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
     const hasLoadedRef = useRef(false);
     const [showPresetSelector, setShowPresetSelector] = useState(false);
     const [isCloning, setIsCloning] = useState(false);
+    const [isUpdatingLike, setIsUpdatingLike] = useState(false);
 
     const handleClone = async () => {
         if (!project) return;
@@ -44,6 +58,20 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
             console.error("Error cloning project:", error);
             toast.error("Failed to clone project. Please try again.");
             setIsCloning(false);
+        }
+    };
+
+    const handleToggleLike = async () => {
+        if (!project) return;
+        try {
+            setIsUpdatingLike(true);
+            const nextLike = !project.likedByMe;
+            await setLike({ projectId, like: nextLike });
+        } catch (error) {
+            console.error("Failed to update like:", error);
+            toast.error("Failed to update like. Please try again.");
+        } finally {
+            setIsUpdatingLike(false);
         }
     };
 
@@ -114,19 +142,41 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
 
     return (
         <div className="w-screen h-screen flex flex-col">
-            <Button
-                size="lg"
-                className="absolute z-50 left-[50%] translate-x-[-50%] bottom-8 hover:scale-105 transition-all duration-200 cursor-pointer font-semibold px-6"
-                onClick={handleClone}
-                disabled={isCloning}
-            >
-                {isCloning ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                    <Copy className="h-5 w-5" />
-                )}
-                {isCloning ? "Cloning..." : "Clone Project"}
-            </Button>
+            <div className="absolute z-50 left-1/2 -translate-x-1/2 bottom-8 flex items-center gap-4">
+                <Button
+                    size="lg"
+                    className="hover:scale-105 transition-all duration-200 cursor-pointer font-semibold px-6"
+                    onClick={handleClone}
+                    disabled={isCloning}
+                >
+                    {isCloning ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                        <Copy className="h-5 w-5" />
+                    )}
+                    {isCloning ? "Cloning..." : "Clone Project"}
+                </Button>
+                <div className="flex items-center gap-2 rounded-full bg-black/40 pl-2 pr-3 py-2 backdrop-blur-sm">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleToggleLike}
+                        disabled={isUpdatingLike}
+                        className="h-9 w-9 rounded-full hover:bg-white/15 text-white cursor-pointer"
+                    >
+                        {isUpdatingLike ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                            <Heart
+                                className={
+                                    project.likedByMe ? "h-5 w-5 text-rose-400 fill-rose-400" : "h-5 w-5"
+                                }
+                            />
+                        )}
+                    </Button>
+                    <span className="text-sm text-white/80 tabular-nums">{project.likeCount ?? 0}</span>
+                </div>
+            </div>
 
             <main className="flex-1 overflow-hidden relative">
                 <Editor

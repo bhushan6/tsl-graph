@@ -7,7 +7,7 @@ import {
     DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Trash2, FolderOpen, Clock, Loader2, Share2, Pen } from "lucide-react";
+import { MoreHorizontal, Trash2, FolderOpen, Clock, Loader2, Share2, Pen, Heart } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
@@ -21,6 +21,8 @@ interface ProjectCardProps {
         thumbnail?: string;
         updatedAt: number;
         isPublic: boolean;
+        likeCount?: number;
+        likedByMe?: boolean;
     };
     onDelete: (id: Id<"projects">) => void;
 }
@@ -37,11 +39,13 @@ const calculateTimeAgo = (updatedAt: number) => {
 export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const router = useRouter();
     const updateProject = useMutation(api.projects.update);
+    const setLike = useMutation(api.projects.setLike);
     const timeAgo = calculateTimeAgo(project.updatedAt);
     const [isRenaming, setIsRenaming] = useState(false);
     const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
     const [tempName, setTempName] = useState(project.name);
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+    const [isUpdatingLike, setIsUpdatingLike] = useState(false);
 
     const handleOpen = () => {
         router.push(`/editor/${project._id}`);
@@ -91,6 +95,19 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             handleRenameCancel(e);
         }
         e.stopPropagation();
+    };
+
+    const handleToggleLike = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            setIsUpdatingLike(true);
+            const nextLike = !project.likedByMe;
+            await setLike({ projectId: project._id, like: nextLike });
+        } catch (error) {
+            console.error("Failed to update like:", error);
+        } finally {
+            setIsUpdatingLike(false);
+        }
     };
 
     return (
@@ -148,6 +165,35 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                </div>
+
+                {/* Like Button */}
+                <div
+                    className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center gap-2 rounded-full bg-black/30 pl-1 pr-2 py-1 backdrop-blur-sm">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-white hover:bg-white/20 rounded-full cursor-pointer"
+                            onClick={handleToggleLike}
+                            disabled={isUpdatingLike}
+                        >
+                            {isUpdatingLike ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Heart
+                                    className={
+                                        project.likedByMe
+                                            ? "h-4 w-4 text-rose-400 fill-rose-400"
+                                            : "h-4 w-4 text-white/70"
+                                    }
+                                />
+                            )}
+                        </Button>
+                        <div className="text-[11px] text-white/80 tabular-nums">{project.likeCount ?? 0}</div>
+                    </div>
                 </div>
 
                 {/* Content (Bottom) */}

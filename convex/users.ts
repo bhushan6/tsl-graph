@@ -21,6 +21,15 @@ export const deleteSelf = mutation({
             .collect();
 
         for (const project of projects) {
+            const likes = await ctx.db
+                .query("projectLikes")
+                .withIndex("by_project", (q) => q.eq("projectId", project._id))
+                .collect();
+
+            for (const like of likes) {
+                await ctx.db.delete(like._id);
+            }
+
             // Check for project assets/thumbnails if needed, but schema seems to handle storage cleanups via cron or manual triggers usually
             // However, we should try to clean up storage if we have the reference
             if (project.thumbnailStorageId) {
@@ -31,6 +40,16 @@ export const deleteSelf = mutation({
                 }
             }
             await ctx.db.delete(project._id);
+        }
+
+        // Delete likes made by this user
+        const userLikes = await ctx.db
+            .query("projectLikes")
+            .withIndex("by_user", (q) => q.eq("userId", userId))
+            .collect();
+
+        for (const like of userLikes) {
+            await ctx.db.delete(like._id);
         }
 
         // 2. Delete Assets
