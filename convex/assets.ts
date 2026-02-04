@@ -59,8 +59,6 @@ export const linkAssetToNode = mutation({
         propertyName: v.string(),
     },
     handler: async (ctx, args) => {
-        console.log("[linkAssetToNode] Called with:", args);
-
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
             throw new Error("Not authenticated");
@@ -92,7 +90,6 @@ export const linkAssetToNode = mutation({
                 )
             )
             .collect();
-        console.log("[linkAssetToNode] Found deletedRefs for SAME asset to clean:", deletedRefs.length);
 
         // Remove deleted references only for the same asset (undo/restore scenario)
         for (const ref of deletedRefs) {
@@ -107,11 +104,9 @@ export const linkAssetToNode = mutation({
             )
             .filter((q) => q.eq(q.field("propertyName"), args.propertyName))
             .collect();
-        console.log("[linkAssetToNode] Found existingRefs:", existingRefs.length);
 
         if (existingRefs.length > 0) {
             // Reference already exists, just update last accessed time on asset
-            console.log("[linkAssetToNode] Reference exists, updating access time");
             await ctx.db.patch(args.assetId, {
                 lastAccessedAt: Date.now(),
             });
@@ -119,7 +114,6 @@ export const linkAssetToNode = mutation({
         }
 
         // Create new reference
-        console.log("[linkAssetToNode] Creating new reference");
         const referenceId = await ctx.db.insert("assetReferences", {
             assetId: args.assetId,
             nodeId: args.nodeId,
@@ -127,7 +121,6 @@ export const linkAssetToNode = mutation({
             propertyName: args.propertyName,
             createdAt: Date.now(),
         });
-        console.log("[linkAssetToNode] Created reference:", referenceId);
 
         // Update asset last accessed time
         await ctx.db.patch(args.assetId, {
@@ -146,8 +139,6 @@ export const unlinkAssetFromNode = mutation({
         propertyName: v.string(),
     },
     handler: async (ctx, args) => {
-        console.log("[unlinkAssetFromNode] Called with:", args);
-
         const user = await authComponent.getAuthUser(ctx);
         if (!user) {
             throw new Error("Not authenticated");
@@ -167,11 +158,9 @@ export const unlinkAssetFromNode = mutation({
             )
             .filter((q) => q.eq(q.field("propertyName"), args.propertyName))
             .collect();
-        console.log("[unlinkAssetFromNode] Found refs to delete:", refs.length, refs);
 
         // Move to deleted references
         for (const ref of refs) {
-            console.log("[unlinkAssetFromNode] Moving ref to deleted:", ref._id);
             await ctx.db.insert("deletedAssetReferences", {
                 assetId: ref.assetId,
                 nodeId: ref.nodeId,
@@ -182,7 +171,6 @@ export const unlinkAssetFromNode = mutation({
             await ctx.db.delete(ref._id);
         }
 
-        console.log("[unlinkAssetFromNode] Deleted count:", refs.length);
         return { deleted: refs.length };
     },
 });

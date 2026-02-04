@@ -146,7 +146,6 @@ export const updateThumbnail = mutation({
         if (oldStorageId) {
             try {
                 await ctx.storage.delete(oldStorageId);
-                console.log("[updateThumbnail] Deleted old thumbnail:", oldStorageId);
             } catch (err) {
                 console.error("[updateThumbnail] Failed to delete old thumbnail:", err);
             }

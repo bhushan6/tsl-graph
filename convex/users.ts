@@ -127,7 +127,6 @@ export const transferGuestDataToUser = mutation({
             const targetUser = await authComponent.getAnyUserById(ctx, targetUserId);
 
             if (!guestUser || !targetUser) {
-                console.log("Could not find users:", { guestUser: !!guestUser, targetUser: !!targetUser });
                 return { success: false, error: "User not found" };
             }
 
@@ -135,22 +134,17 @@ export const transferGuestDataToUser = mutation({
             const guestConvexId = guestUser._id;
             const targetConvexId = targetUser._id;
 
-            console.log("Transferring data from", guestConvexId, "to", targetConvexId);
-
             // 1. Update the Project (guest user has only one)
             const project = await ctx.db
                 .query("projects")
                 .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
                 .unique();
 
-            console.log("Found guest project:", project?._id);
-
             if (project) {
                 // Simply update the userId - don't delete and recreate
                 await ctx.db.patch(project._id, {
                     userId: targetConvexId,
                 });
-                console.log("Transferred project to new user");
             }
 
             // 2. Update Assets (transfer ownership)
@@ -158,8 +152,6 @@ export const transferGuestDataToUser = mutation({
                 .query("assets")
                 .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
                 .collect();
-
-            console.log("Found", assets.length, "assets to transfer");
 
             for (const asset of assets) {
                 await ctx.db.patch(asset._id, {
@@ -172,8 +164,6 @@ export const transferGuestDataToUser = mutation({
                 .query("feedbacks")
                 .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
                 .collect();
-
-            console.log("Found", feedback.length, "feedbacks to transfer");
 
             for (const f of feedback) {
                 await ctx.db.patch(f._id, {

@@ -144,7 +144,6 @@ export function FlowPreview() {
                     const data = item.data;
                     const inputs = data.inputs as { label: string; value: number; min: number; max: number; }[];
                     inputs.forEach((input) => {
-                        // console.log(input.value);
                         if (input.label === "Speed") {
                             uniforms.uSpeed.value = input.value;
                         }

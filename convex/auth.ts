@@ -46,7 +46,6 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
             convex({ authConfig }),
             anonymous({
                 onLinkAccount: async ({ anonymousUser, newUser }) => {
-                    console.log("ON LINK=============")
                     const guestUserId = anonymousUser.user.id
                     const targetUserId = newUser.user.id
 

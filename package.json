@@ -1,7 +1,14 @@
 {
   "name": "tsl-editor",
   "version": "0.1.0",
-  "private": true,
+  "description": "A visual node-based editor for Three.js Shading Language (TSL)",
+  "private": false,
+  "license": "MIT",
+  "author": "Your Name <you@example.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/tsl-editor.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

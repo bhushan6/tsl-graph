@@ -1,5 +1,4 @@
 import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
-console.log({ NEXT_PUBLIC_CONVEX_SITE_URL: process.env.NEXT_PUBLIC_CONVEX_SITE_URL });
 
 export const {
     handler,

@@ -100,8 +100,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 id: props.projectId as Id<"projects">,
                 storageId,
             });
-
-            console.log('Thumbnail updated');
         } catch (err) {
             console.error('Failed to update thumbnail:', err);
         }
