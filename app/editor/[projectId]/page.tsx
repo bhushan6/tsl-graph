@@ -143,9 +143,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                 const json = JSON.stringify(graphData);
                 loadFromJSON(json);
                 // Set lastSavedVersion to current to prevent immediate re-save
-                useEditorStore.setState({
-                    isDirty: false
-                });
+                useEditorStore.getState().dispatch({ type: 'autosave/setState', isDirty: false });
             } else {
                 // Empty project - show selector
                 setShowPresetSelector(true);
@@ -169,7 +167,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                 graphData,
             });
 
-            useEditorStore.setState({ isDirty: false });
+            useEditorStore.getState().dispatch({ type: 'autosave/setState', isDirty: false });
             setShowPresetSelector(false);
         } catch (error) {
             console.error("Error loading preset:", error);

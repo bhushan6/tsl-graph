@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useCallback } from "react";
-import { addEdge, useReactFlow, Edge } from "@xyflow/react";
+import { Edge } from "@xyflow/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { EdgeDropNodePicker } from "./EdgeDropNodePicker";
@@ -12,8 +12,6 @@ import { useEditorStore } from "@/store/editor";
 import { NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
-
-    const { addNodes, setNodes, setEdges } = useReactFlow<AppNode>();
 
     const isOpen = useEdgeDropPickerStore(state => state.isOpen);
     const screenPosition = useEdgeDropPickerStore(state => state.screenPosition);
@@ -124,7 +122,8 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             }
 
             const newNodeId = `${nodeType}-${Date.now()}`;
-            useEditorStore.getState().takeSnapshot();
+            const { dispatch, takeSnapshot } = useEditorStore.getState();
+            takeSnapshot();
 
             // Validation: Only one material node allowed
             const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
@@ -167,11 +166,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     const existingId = existingMaterial.id;
 
                     // Remove node
-                    setNodes((nds) => nds.filter((n) => n.id !== existingId));
-                    // Remove connected edges
-                    setEdges((eds) => eds.filter(
-                        (e) => e.source !== existingId && e.target !== existingId
-                    ));
+                    dispatch({ type: 'nodes/delete', nodeId: existingId, skipSnapshot: true });
                 }
             }
 
@@ -196,7 +191,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 };
-                useEditorStore.getState().addCodeNodeDefinition(codeDefinition);
+                dispatch({ type: 'codeNode/addDefinition', codeNode: codeDefinition, skipSnapshot: true });
 
                 // Code node instance
                 newNode = {
@@ -229,7 +224,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 };
-                useEditorStore.getState().addSubgraphDefinition(subgraphDefinition);
+                dispatch({ type: 'subgraph/addDefinition', subgraph: subgraphDefinition, skipSnapshot: true });
 
                 // Subgraph node instance
                 newNode = {
@@ -259,7 +254,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 };
             }
 
-            addNodes(newNode);
+            dispatch({ type: 'nodes/add', node: newNode, skipSnapshot: true });
 
             // Determine target handle on the new node
             let targetHandleId = '';
@@ -331,12 +326,12 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     };
 
                 // Add edge
-                setEdges((eds) => addEdge(newEdge, eds));
+                dispatch({ type: 'edges/add', edge: newEdge, skipSnapshot: true });
             }
 
             close();
         },
-        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates]
+        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, close, userCodeNodeTemplates, userSubgraphTemplates]
     );
 
     if (!isOpen) return null;
