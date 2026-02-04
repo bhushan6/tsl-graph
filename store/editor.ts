@@ -56,6 +56,18 @@ export interface GeometryConfig {
     openEnded?: boolean;
 }
 
+// Preview scene object
+export interface SceneObject {
+    id: string;
+    name: string;
+    type: PreviewMeshType;
+    config: GeometryConfig;
+    position: [number, number, number];
+    rotation: [number, number, number];
+    scale: [number, number, number];
+    visible: boolean;
+}
+
 // Preview settings interface
 export interface PreviewSettings {
     mesh: PreviewMeshType;
@@ -67,6 +79,8 @@ export interface PreviewSettings {
     showEnvironmentBackground?: boolean;
     showBackdrop?: boolean;
     showGrid?: boolean;
+    sceneObjects: SceneObject[];
+    selectedObjectId: string | null;
 }
 
 // Graph save format
@@ -230,6 +244,12 @@ interface EditorState {
     deleteCodeNode: (id: string) => void;
     getCodeNode: (id: string) => CodeNodeDefinition | undefined;
 
+    // Preview actions
+    addSceneObject: (type: PreviewMeshType) => void;
+    removeSceneObject: (id: string) => void;
+    updateSceneObject: (id: string, updates: Partial<SceneObject>) => void;
+    setSelectedObject: (id: string | null) => void;
+
     // Reset entire store
     resetEditor: () => void;
     // Track event helper
@@ -255,6 +275,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         environmentIntensity: 1,
         showEnvironmentBackground: false,
         showGrid: true,
+        sceneObjects: [
+            {
+                id: 'default-mesh',
+                name: 'Main Mesh',
+                type: 'sphere',
+                config: {
+                    radius: 1,
+                    widthSegmentsSphere: 32,
+                    heightSegmentsSphere: 16,
+                },
+                position: [0, 0, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+                visible: true,
+            }
+        ],
+        selectedObjectId: 'default-mesh',
         config: {
             // Defaults with low resolution as requested
             // Box
@@ -294,6 +331,63 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     updatePreviewSettings: (updates) => {
         set({ previewSettings: { ...get().previewSettings, ...updates } });
         get().markDirty();
+    },
+
+    addSceneObject: (type) => {
+        const id = `mesh-${Date.now()}`;
+        const newObject: SceneObject = {
+            id,
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${get().previewSettings.sceneObjects.length + 1}`,
+            type,
+            config: { ...get().previewSettings.config },
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            visible: true,
+        };
+
+        set({
+            previewSettings: {
+                ...get().previewSettings,
+                sceneObjects: [...get().previewSettings.sceneObjects, newObject],
+                selectedObjectId: id,
+            }
+        });
+        get().markDirty();
+    },
+
+    removeSceneObject: (id) => {
+        const { sceneObjects, selectedObjectId } = get().previewSettings;
+        set({
+            previewSettings: {
+                ...get().previewSettings,
+                sceneObjects: sceneObjects.filter(obj => obj.id !== id),
+                selectedObjectId: selectedObjectId === id ? null : selectedObjectId,
+            }
+        });
+        get().markDirty();
+    },
+
+    updateSceneObject: (id, updates) => {
+        const { sceneObjects } = get().previewSettings;
+        set({
+            previewSettings: {
+                ...get().previewSettings,
+                sceneObjects: sceneObjects.map(obj =>
+                    obj.id === id ? { ...obj, ...updates } : obj
+                ),
+            }
+        });
+        get().markDirty();
+    },
+
+    setSelectedObject: (id) => {
+        set({
+            previewSettings: {
+                ...get().previewSettings,
+                selectedObjectId: id,
+            }
+        });
     },
 
     // Subgraph state initialization
@@ -716,6 +810,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         isInstanced: false,
                         instanceCount: 100,
                         showGrid: true,
+                        sceneObjects: [
+                            {
+                                id: 'default-mesh',
+                                name: 'Main Mesh',
+                                type: 'sphere',
+                                config: {
+                                    radius: 1,
+                                    widthSegmentsSphere: 32,
+                                    heightSegmentsSphere: 16,
+                                },
+                                position: [0, 0, 0],
+                                rotation: [0, 0, 0],
+                                scale: [1, 1, 1],
+                                visible: true,
+                            }
+                        ],
+                        selectedObjectId: 'default-mesh',
                         config: {
                             width: 1.5,
                             height: 1.5,
@@ -1763,6 +1874,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 mesh: 'sphere',
                 isInstanced: false,
                 instanceCount: 100,
+                sceneObjects: [
+                    {
+                        id: 'default-mesh',
+                        name: 'Main Mesh',
+                        type: 'sphere',
+                        config: {
+                            radius: 1,
+                            widthSegmentsSphere: 32,
+                            heightSegmentsSphere: 16,
+                        },
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                        visible: true,
+                    }
+                ],
+                selectedObjectId: 'default-mesh',
                 config: {
                     width: 1.5,
                     height: 1.5,
