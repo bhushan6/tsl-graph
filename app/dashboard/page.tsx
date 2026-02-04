@@ -41,7 +41,17 @@ function DashboardContent() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
 
-    const projects = useQuery(api.projects.list);
+    type ProjectListItem = {
+        _id: Id<"projects">;
+        name: string;
+        thumbnail?: string;
+        updatedAt: number;
+        isPublic: boolean;
+        likeCount?: number;
+        likedByMe?: boolean;
+    };
+
+    const projects = useQuery(api.projects.list) as ProjectListItem[] | undefined;
     const createProject = useMutation(api.projects.create);
     const deleteProject = useMutation(api.projects.remove);
 

@@ -59,6 +59,7 @@ export const create = mutation({
             description: args.description,
             isPublic: args.isPublic ?? false,
             graphData: args.graphData,
+            likeCount: 0,
             createdAt: now,
             updatedAt: now,
         });
@@ -185,6 +186,15 @@ export const remove = mutation({
             throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHORIZED));
         }
 
+        const likes = await ctx.db
+            .query("projectLikes")
+            .withIndex("by_project", (q) => q.eq("projectId", args.id))
+            .collect();
+
+        for (const like of likes) {
+            await ctx.db.delete(like._id);
+        }
+
         await ctx.db.delete(args.id);
         return { success: true };
     },
@@ -199,13 +209,25 @@ export const list = query({
             return [];
         }
 
+        const likes = await ctx.db
+            .query("projectLikes")
+            .withIndex("by_user", (q) => q.eq("userId", user._id))
+            .collect();
+
+        const likedProjectIds = new Set(likes.map((like) => like.projectId));
+
         const projects = await ctx.db
             .query("projects")
             .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
             .order("desc")
             .collect();
 
-        return projects;
+        return projects.map((project) => ({
+            ...project,
+            likeCount: project.likeCount ?? 0,
+            likedByMe: likedProjectIds.has(project._id),
+            isOwner: true,
+        }));
     },
 });
 
@@ -230,7 +252,22 @@ export const get = query({
             return null;
         }
 
-        return project;
+        let likedByMe = false;
+        if (user) {
+            const existingLike = await ctx.db
+                .query("projectLikes")
+                .withIndex("by_user_project", (q) =>
+                    q.eq("userId", user._id).eq("projectId", args.id)
+                )
+                .unique();
+            likedByMe = !!existingLike;
+        }
+
+        return {
+            ...project,
+            likeCount: project.likeCount ?? 0,
+            likedByMe,
+        };
     },
 });
 
@@ -238,13 +275,166 @@ export const get = query({
 export const listPublic = query({
     args: {},
     handler: async (ctx) => {
+        const user = await authComponent.getAuthUser(ctx);
+
+        const authorCache = new Map<string, string>();
+        const getAuthorName = async (userId: string) => {
+            const cached = authorCache.get(userId);
+            if (cached) return cached;
+            const author = await authComponent.getAnyUserById(ctx, userId);
+            const name =
+                author?.displayUsername ||
+                author?.name ||
+                author?.username ||
+                author?.email ||
+                "Unknown";
+            authorCache.set(userId, name);
+            return name;
+        };
+
+        const likes = user
+            ? await ctx.db
+                .query("projectLikes")
+                .withIndex("by_user", (q) => q.eq("userId", user._id))
+                .collect()
+            : [];
+
+        const likedProjectIds = new Set(likes.map((like) => like.projectId));
+
         const projects = await ctx.db
             .query("projects")
             .withIndex("by_public", (q) => q.eq("isPublic", true))
-            .order("desc")
-            .take(50);
+            .collect();
 
-        return projects;
+        const filteredProjects = user
+            ? projects.filter((project) => project.userId !== user._id)
+            : projects;
+
+        const ranked = await Promise.all(
+            filteredProjects.map(async (project) => ({
+                ...project,
+                likeCount: project.likeCount ?? 0,
+                likedByMe: likedProjectIds.has(project._id),
+                isOwner: user ? project.userId === user._id : false,
+                authorName: await getAuthorName(project.userId),
+            }))
+        );
+
+        ranked.sort((a, b) => {
+                if (b.likeCount !== a.likeCount) return b.likeCount - a.likeCount;
+                return b.createdAt - a.createdAt;
+            });
+
+        return ranked.slice(0, 100);
+    },
+});
+
+export const listFavorites = query({
+    args: {},
+    handler: async (ctx) => {
+        const user = await authComponent.getAuthUser(ctx);
+        if (!user) {
+            return [];
+        }
+
+        const authorCache = new Map<string, string>();
+        const getAuthorName = async (userId: string) => {
+            const cached = authorCache.get(userId);
+            if (cached) return cached;
+            const author = await authComponent.getAnyUserById(ctx, userId);
+            const name =
+                author?.displayUsername ||
+                author?.name ||
+                author?.username ||
+                author?.email ||
+                "Unknown";
+            authorCache.set(userId, name);
+            return name;
+        };
+
+        const likes = await ctx.db
+            .query("projectLikes")
+            .withIndex("by_user", (q) => q.eq("userId", user._id))
+            .collect();
+
+        const likedProjects = await Promise.all(
+            likes.map(async (like) => {
+                const project = await ctx.db.get(like.projectId);
+                if (!project) return null;
+                if (project.userId !== user._id && !project.isPublic) return null;
+
+                return {
+                    ...project,
+                    likeCount: project.likeCount ?? 0,
+                    likedByMe: true,
+                    isOwner: project.userId === user._id,
+                    likedAt: like.createdAt,
+                    authorName: await getAuthorName(project.userId),
+                };
+            })
+        );
+
+        return likedProjects
+            .filter((project): project is NonNullable<typeof project> => project !== null)
+            .sort((a, b) => b.likedAt - a.likedAt);
+    },
+});
+
+export const setLike = mutation({
+    args: {
+        projectId: v.id("projects"),
+        like: v.boolean(),
+    },
+    handler: async (ctx, args) => {
+        const user = await authComponent.getAuthUser(ctx);
+        if (!user) {
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
+        }
+
+        const project = await ctx.db.get(args.projectId);
+        if (!project) {
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND));
+        }
+
+        if (project.userId !== user._id && !project.isPublic) {
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHORIZED));
+        }
+
+        const existingLike = await ctx.db
+            .query("projectLikes")
+            .withIndex("by_user_project", (q) =>
+                q.eq("userId", user._id).eq("projectId", args.projectId)
+            )
+            .unique();
+
+        if (args.like) {
+            if (!existingLike) {
+                await ctx.db.insert("projectLikes", {
+                    userId: user._id,
+                    projectId: args.projectId,
+                    createdAt: Date.now(),
+                });
+
+                await ctx.db.patch(args.projectId, {
+                    likeCount: (project.likeCount ?? 0) + 1,
+                });
+            }
+
+            return { liked: true, likeCount: (project.likeCount ?? 0) + (existingLike ? 0 : 1) };
+        }
+
+        if (existingLike) {
+            await ctx.db.delete(existingLike._id);
+            const nextCount = Math.max((project.likeCount ?? 0) - 1, 0);
+
+            await ctx.db.patch(args.projectId, {
+                likeCount: nextCount,
+            });
+
+            return { liked: false, likeCount: nextCount };
+        }
+
+        return { liked: false, likeCount: project.likeCount ?? 0 };
     },
 });
 
@@ -273,6 +463,7 @@ export const clone = mutation({
             description: sourceProject.description,
             isPublic: false,
             graphData: args.graphData,
+            likeCount: 0,
             createdAt: now,
             updatedAt: now,
         });
