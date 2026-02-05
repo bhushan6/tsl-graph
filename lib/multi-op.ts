@@ -25,15 +25,35 @@ export interface MultiOpInputDef {
 
 const CHAIN_INPUT_PRIORITY = ['x', 'node', 'in', 'a', 'p', 'i', 'n'];
 
-const MULTI_OP_DEFS = mathNodes
-    .filter((def) => def.type !== 'math/multiOp')
-    .filter((def) => def.inputs && Object.keys(def.inputs).length > 0)
-    .filter((def) => def.outputs && Object.keys(def.outputs).length === 1)
-    .map((def) => ({
-        tsl: def.tsl,
-        label: def.label,
-        inputs: def.inputs as Record<string, Port>,
-    }));
+type MathNodeDef = (typeof mathNodes)[number];
+
+const getInputs = (def: MathNodeDef): Record<string, Port> | null => {
+    const inputs = (def as { inputs?: Record<string, Port> }).inputs;
+    if (!inputs || Object.keys(inputs).length === 0) return null;
+    return inputs;
+};
+
+const getOutputs = (def: MathNodeDef): Record<string, Port> | null => {
+    const outputs = (def as { outputs?: Record<string, Port> }).outputs;
+    if (!outputs || Object.keys(outputs).length !== 1) return null;
+    return outputs;
+};
+
+const MULTI_OP_DEFS: { tsl: string; label: string; inputs: Record<string, Port> }[] = mathNodes.flatMap(
+    (def) => {
+        if (def.type === 'math/multiOp') return [];
+        const inputs = getInputs(def);
+        const outputs = getOutputs(def);
+        if (!inputs || !outputs) return [];
+        return [
+            {
+                tsl: def.tsl,
+                label: def.label,
+                inputs,
+            },
+        ];
+    }
+);
 
 const MULTI_OP_DEF_MAP = new Map(
     MULTI_OP_DEFS.map((def) => {
