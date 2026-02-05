@@ -22,6 +22,7 @@ import { api } from "@/convex/_generated/api";
 
 import { Maximize2, Minimize2, Settings2, Camera } from 'lucide-react';
 import { Id } from '@/convex/_generated/dataModel';
+import { float } from 'three/tsl';
 
 export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -153,6 +154,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         if (!isReady) return { material: null, error: null };
         try {
             const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
+            // const node1 = float(0).add(1).mix(0, 1).saturate()
             // Pass instanceCount to the builder so it's available in the scope (if needed)
             // Even though we moved to baking it into the compiled code, 
             // the builder might still use it for other things or future proofing.

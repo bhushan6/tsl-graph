@@ -12,16 +12,19 @@ export function registerEditorEffects(store: UseBoundStore<StoreApi<EditorState>
     effectsRegistered = true;
     let lastProjectId: string | null = null;
     let lastAction: EditorAction | null = null;
-    const enableActionLogger = process.env.NODE_ENV === 'development';
+    const enableActionLogger = true;
 
     store.subscribe((state) => {
+
         const action = state.lastAction;
         if (!action || action === lastAction) return;
         lastAction = action;
 
-        if (enableActionLogger) {
-            console.debug('[editor action]', action);
-        }
+        // console.log("action", action);
+
+        // if (enableActionLogger) {
+        console.log('[editor action]', action);
+        // }
 
         switch (action.type) {
             case 'project/setId': {
