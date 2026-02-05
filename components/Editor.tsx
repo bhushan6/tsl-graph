@@ -12,6 +12,7 @@ import {
     type Connection,
     type Edge,
     type OnConnectEnd,
+    useUpdateNodeInternals,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -70,6 +71,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         redo,
         takeSnapshot,
         canvasMode,
+        graphStructureVersion,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -187,6 +189,15 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     }, [subgraphs, codeNodes]);
 
     const { getNodes, getEdges } = useReactFlow<AppNode>();
+    // const updateNodeInternals = useUpdateNodeInternals();
+
+    // useEffect(() => {
+    //     if (!nodes.length) return;
+    //     const frame = requestAnimationFrame(() => {
+    //         updateNodeInternals(nodes.map((node) => node.id));
+    //     });
+    //     return () => cancelAnimationFrame(frame);
+    // }, [graphStructureVersion, updateNodeInternals, nodes]);
 
     const isValidConnection = useCallback(
         (connection: Connection | Edge) => {

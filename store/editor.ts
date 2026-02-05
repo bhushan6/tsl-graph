@@ -17,6 +17,7 @@ import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { toast } from 'sonner';
+import { aiLog, aiError } from '@/lib/ai/logger';
 
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
@@ -238,6 +239,9 @@ interface EditorState {
     resetEditor: () => void;
     // Track event helper
     trackEvent: (event: string, properties?: Record<string, any>) => void;
+
+    // AI bulk operations
+    bulkOperation: (operations: import('@/lib/ai/types').BulkOperationOp[]) => { success: boolean; idMap: Record<string, string>; error?: string };
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -1858,6 +1862,379 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeIds: [], // Clear selection
             selectedNodeId: null,
         });
+    },
+
+    bulkOperation: (operations) => {
+        if (!operations.length) {
+            return { success: true, idMap: {} };
+        }
+
+        const normalizeOperation = (operation: any, index: number): import('@/lib/ai/types').BulkOperationOp | null => {
+            if (!operation || typeof operation !== 'object') {
+                aiError('bulkOperation invalid op (not object)', { index, operation });
+                return null;
+            }
+
+            const candidateInput =
+                operation.input && typeof operation.input === 'object' ? operation.input : undefined;
+            const payload =
+                operation.params ??
+                operation.parameters ??
+                operation.data ??
+                candidateInput ??
+                operation;
+            const rawOp = String(operation.op ?? operation.type ?? payload.op ?? payload.type ?? '');
+
+            const normalizeTempRef = (value: unknown) => {
+                if (typeof value !== 'string') {
+                    return value;
+                }
+                const match = value.match(/^\{temp:(\d+)\}$/);
+                if (match) {
+                    return `tempId${match[1]}`;
+                }
+                return value;
+            };
+
+            const normalizeValues = (values: unknown) => {
+                if (!values || typeof values !== 'object') {
+                    return values;
+                }
+                const record = values as Record<string, unknown>;
+                if (record.values && typeof record.values === 'object') {
+                    const nested = record.values as Record<string, unknown>;
+                    const { values: _discard, ...rest } = record;
+                    return { ...rest, ...nested };
+                }
+                return values;
+            };
+
+            const extractEndpoint = (endpoint: any) => {
+                if (!endpoint || typeof endpoint !== 'object') {
+                    return { nodeId: undefined, port: undefined };
+                }
+                const nodeId = endpoint.nodeId ?? endpoint.node ?? endpoint.id ?? endpoint.handleId;
+                const port = endpoint.port ?? endpoint.handle ?? endpoint.handleId;
+                return { nodeId, port };
+            };
+
+            const inferAddNode = () => {
+                if (payload && typeof payload === 'object' && typeof payload.type === 'string' && payload.position) {
+                    return {
+                        op: 'addNode' as const,
+                        tempId: String(payload.tempId ?? payload.id ?? operation.tempId ?? operation.id ?? `tempId${index}`),
+                        type: payload.type,
+                        position: payload.position,
+                        values: normalizeValues(payload.values ?? payload.value),
+                    };
+                }
+                return null;
+            };
+
+            switch (rawOp) {
+                case 'addNode':
+                case 'addNodes': {
+                    const tempId = payload.tempId ?? operation.tempId ?? payload.id ?? operation.id ?? `tempId${index}`;
+                    const position = payload.position ?? (typeof payload.x === 'number' && typeof payload.y === 'number'
+                        ? { x: payload.x, y: payload.y }
+                        : undefined);
+                    const nodeTypeCandidate = payload.type;
+                    const fallbackNodeType =
+                        payload.nodeType ??
+                        operation.nodeType ??
+                        (payload.values && typeof payload.values === 'object' && typeof payload.values.type === 'string'
+                            ? payload.values.type
+                            : undefined);
+                    const nodeType = (nodeTypeCandidate === 'addNode' || nodeTypeCandidate === 'addNodes')
+                        ? fallbackNodeType
+                        : nodeTypeCandidate;
+                    if (!nodeType || !position) {
+                        aiError('bulkOperation invalid addNode payload', { index, operation });
+                        return null;
+                    }
+                    let values = normalizeValues(payload.values ?? payload.value);
+                    if (nodeType === fallbackNodeType && values && typeof values === 'object' && 'type' in values) {
+                        const { type: _discard, ...rest } = values as Record<string, unknown>;
+                        values = rest;
+                    }
+                    return {
+                        op: 'addNode',
+                        tempId: String(tempId),
+                        type: nodeType,
+                        position,
+                        values,
+                    };
+                }
+                case 'connect':
+                case 'connectNodes': {
+                    const sourceEndpoint = extractEndpoint(payload.source ?? payload.from);
+                    const targetEndpoint = extractEndpoint(payload.target ?? payload.to);
+                    const rawSource = sourceEndpoint.nodeId ?? payload.source ?? payload.sourceNode ?? payload.sourceId;
+                    const rawTarget = targetEndpoint.nodeId ?? payload.target ?? payload.targetNode ?? payload.targetId;
+                    const source = normalizeTempRef(rawSource);
+                    const target = normalizeTempRef(rawTarget);
+                    const sourcePort =
+                        payload.sourcePort ??
+                        payload.sourceHandle ??
+                        sourceEndpoint.port ??
+                        payload.sourceSocket ??
+                        null;
+                    const targetPort =
+                        payload.targetPort ??
+                        payload.targetHandle ??
+                        targetEndpoint.port ??
+                        payload.targetSocket ??
+                        null;
+                    if (!source || !target) {
+                        aiError('bulkOperation invalid connect payload', { index, operation });
+                        return null;
+                    }
+                    return {
+                        op: 'connect',
+                        source: String(source),
+                        sourcePort: sourcePort ?? null,
+                        target: String(target),
+                        targetPort: targetPort ?? null,
+                    };
+                }
+                case 'disconnect':
+                case 'disconnectNodes': {
+                    const edgeId = payload.edgeId ?? payload.id;
+                    if (edgeId && (!payload.source || !payload.target)) {
+                        return { op: 'removeEdge', edgeId: String(edgeId) };
+                    }
+                    const sourceEndpoint = extractEndpoint(payload.source ?? payload.from);
+                    const targetEndpoint = extractEndpoint(payload.target ?? payload.to);
+                    const rawSource = sourceEndpoint.nodeId ?? payload.source ?? payload.sourceNode ?? payload.sourceId;
+                    const rawTarget = targetEndpoint.nodeId ?? payload.target ?? payload.targetNode ?? payload.targetId;
+                    const source = normalizeTempRef(rawSource);
+                    const target = normalizeTempRef(rawTarget);
+                    const sourcePort =
+                        payload.sourcePort ??
+                        payload.sourceHandle ??
+                        sourceEndpoint.port ??
+                        payload.sourceSocket ??
+                        null;
+                    const targetPort =
+                        payload.targetPort ??
+                        payload.targetHandle ??
+                        targetEndpoint.port ??
+                        payload.targetSocket ??
+                        null;
+                    if (!source || !target) {
+                        aiError('bulkOperation invalid disconnect payload', { index, operation });
+                        return null;
+                    }
+                    return {
+                        op: 'disconnect',
+                        source: String(source),
+                        sourcePort: sourcePort ?? null,
+                        target: String(target),
+                        targetPort: targetPort ?? null,
+                    };
+                }
+                case 'delete':
+                case 'deleteNode': {
+                    const nodeId = payload.nodeId ?? operation.nodeId ?? payload.id ?? operation.id;
+                    if (!nodeId) {
+                        aiError('bulkOperation invalid delete payload', { index, operation });
+                        return null;
+                    }
+                    return { op: 'deleteNode', nodeId: String(nodeId) };
+                }
+                case 'setValue':
+                case 'setNodeValue': {
+                    const nodeId = payload.nodeId ?? operation.nodeId ?? payload.id ?? operation.id;
+                    const input = payload.input ?? payload.key;
+                    if (!nodeId || !input) {
+                        aiError('bulkOperation invalid setValue payload', { index, operation });
+                        return null;
+                    }
+                    return { op: 'setValue', nodeId: String(nodeId), input: String(input), value: payload.value };
+                }
+                case 'move':
+                case 'moveNode': {
+                    const nodeId = payload.nodeId ?? operation.nodeId ?? payload.id ?? operation.id;
+                    const position = payload.position ?? (typeof payload.x === 'number' && typeof payload.y === 'number'
+                        ? { x: payload.x, y: payload.y }
+                        : undefined);
+                    if (!nodeId || !position) {
+                        aiError('bulkOperation invalid move payload', { index, operation });
+                        return null;
+                    }
+                    return { op: 'move', nodeId: String(nodeId), position };
+                }
+                default: {
+                    const inferredAdd = inferAddNode();
+                    if (inferredAdd) {
+                        return inferredAdd;
+                    }
+                    aiError('bulkOperation unknown op', { index, op: rawOp, operation });
+                    return null;
+                }
+            }
+        };
+
+        const normalizedOperations = operations
+            .map((operation, index) => normalizeOperation(operation, index))
+            .filter((op): op is import('@/lib/ai/types').BulkOperationOp => Boolean(op));
+
+        if (!normalizedOperations.length) {
+            aiError('bulkOperation aborted (no valid operations)', { count: operations.length });
+            return { success: false, idMap: {}, error: 'No valid operations in bulkOperation.' };
+        }
+
+        aiLog('bulkOperation start', { count: normalizedOperations.length });
+
+        const { subgraphs, codeNodes, previewSettings } = get();
+        get().takeSnapshot();
+
+        let nodes = [...get().nodes];
+        let edges = [...get().edges];
+        const idMap: Record<string, string> = {};
+        let opIndex = 0;
+
+        const resolveId = (id: string) => idMap[id] ?? id;
+        const nextId = (prefix: string) => `${prefix}-${Date.now()}-${opIndex++}`;
+        const nextEdgeId = () => `e-${Date.now()}-${opIndex++}`;
+
+        const removeEdgesForNode = (nodeId: string) => {
+            edges = edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId);
+        };
+
+        try {
+            for (const op of normalizedOperations) {
+                switch (op.op) {
+                    case 'addNode': {
+                        const id = nextId(op.type);
+                        idMap[op.tempId] = id;
+
+                        const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(op.type);
+                        if (isMaterialNode) {
+                            const existingMaterial = nodes.find(n =>
+                                (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
+                            );
+                            if (existingMaterial) {
+                                nodes = nodes.filter(n => n.id !== existingMaterial.id);
+                                removeEdgesForNode(existingMaterial.id);
+                            }
+                        }
+
+                        const values = { ...(op.values ?? {}) };
+                        if (op.type === 'geo/instanceCount') {
+                            const initialCount = previewSettings.isInstanced ? previewSettings.instanceCount : 1;
+                            values.value = values.value ?? initialCount;
+                        }
+
+                        const nodeData: TSLNodeData = {
+                            type: op.type,
+                            values,
+                            connected: {},
+                        };
+
+                        if (op.type.startsWith('custom/')) {
+                            const subgraph = subgraphs[op.type];
+                            if (subgraph) {
+                                nodeData.dynamicPorts = [...subgraph.inputs, ...subgraph.outputs];
+                            }
+                        } else if (op.type.startsWith('code/')) {
+                            const codeNode = codeNodes[op.type];
+                            if (codeNode) {
+                                nodeData.dynamicPorts = [...codeNode.inputs, codeNode.output];
+                            }
+                        }
+
+                        nodes.push({
+                            id,
+                            type: op.type,
+                            position: op.position,
+                            data: nodeData,
+                        });
+                        break;
+                    }
+                    case 'removeEdge': {
+                        const edgeId = resolveId(op.edgeId);
+                        edges = edges.filter(edge => edge.id !== edgeId);
+                        break;
+                    }
+                    case 'deleteNode': {
+                        const nodeId = resolveId(op.nodeId);
+                        nodes = nodes.filter(node => node.id !== nodeId);
+                        removeEdgesForNode(nodeId);
+                        break;
+                    }
+                    case 'connect': {
+                        const sourceId = resolveId(op.source);
+                        const targetId = resolveId(op.target);
+                        edges = edges.filter(edge =>
+                            !(edge.target === targetId && (edge.targetHandle ?? null) === (op.targetPort ?? null))
+                        );
+                        edges = addEdge(
+                            {
+                                id: nextEdgeId(),
+                                source: sourceId,
+                                target: targetId,
+                                sourceHandle: op.sourcePort ?? null,
+                                targetHandle: op.targetPort ?? null,
+                            },
+                            edges
+                        );
+                        break;
+                    }
+                    case 'disconnect': {
+                        const sourceId = resolveId(op.source);
+                        const targetId = resolveId(op.target);
+                        edges = edges.filter(edge =>
+                            !(
+                                edge.source === sourceId &&
+                                edge.target === targetId &&
+                                (edge.sourceHandle ?? null) === (op.sourcePort ?? null) &&
+                                (edge.targetHandle ?? null) === (op.targetPort ?? null)
+                            )
+                        );
+                        break;
+                    }
+                    case 'setValue': {
+                        const nodeId = resolveId(op.nodeId);
+                        nodes = nodes.map(node =>
+                            node.id === nodeId
+                                ? {
+                                    ...node,
+                                    data: {
+                                        ...node.data,
+                                        values: { ...node.data.values, [op.input]: op.value },
+                                    },
+                                }
+                                : node
+                        );
+                        break;
+                    }
+                    case 'move': {
+                        const nodeId = resolveId(op.nodeId);
+                        nodes = nodes.map(node =>
+                            node.id === nodeId ? { ...node, position: op.position } : node
+                        );
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            set({
+                nodes,
+                edges,
+                graphStructureVersion: get().graphStructureVersion + 1,
+            });
+
+            get().markDirty();
+            aiLog('bulkOperation complete', { success: true, idMap });
+            return { success: true, idMap };
+        } catch (error) {
+            console.error('Bulk operation failed:', error);
+            aiError('bulkOperation failed', error);
+            return { success: false, idMap, error: getErrorMessage(error) };
+        }
     },
 
     resetEditor: () => {

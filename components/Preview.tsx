@@ -9,6 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { usePreviewStore } from '@/store/preview';
 import {
     Popover,
     PopoverContent,
@@ -38,6 +39,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const [isFullScreen, setIsFullScreen] = useState(false);
+    const registerRenderer = usePreviewStore((state) => state.registerRenderer);
+    const setLastError = usePreviewStore((state) => state.setLastError);
 
 
     const [isReady, setIsReady] = useState(false);
@@ -173,6 +176,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
 
+    useEffect(() => {
+        setLastError(error ?? null);
+    }, [error, setLastError]);
+
     // Dispose material when it changes
     useEffect(() => {
         return () => {
@@ -282,6 +289,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
+            registerRenderer(renderer);
 
             // Lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -355,6 +363,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     container.removeChild(rendererRef.current.domElement);
                 }
             }
+            registerRenderer(null);
         };
     }, []);
 
