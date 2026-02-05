@@ -3,6 +3,7 @@ import { BaseEdge, EdgeProps, getBezierPath, useReactFlow } from "@xyflow/react"
 import { TYPE_COLORS, DEFAULT_HANDLE_COLOR } from "./TSLHandle";
 import { AppNode } from "@/lib/types";
 import { registry } from "@/lib/registry";
+import { getMultiOpInputs, type MultiOp } from "@/lib/multi-op";
 
 const TSLEdge = ({
     id,
@@ -38,7 +39,12 @@ const TSLEdge = ({
 
     const sourceDefination = type ? registry.get(type) : null;
 
-    const sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId ? sourceDefination.outputs[sourceHandleId]?.type : null
+    let sourceDataType = null;
+    if (sourceNode?.data.type === 'math/multiOp') {
+        sourceDataType = 'any';
+    } else {
+        sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId ? sourceDefination.outputs[sourceHandleId]?.type : null;
+    }
 
 
     // target data type 
@@ -49,7 +55,14 @@ const TSLEdge = ({
 
     const targetDefination = targetType ? registry.get(targetType) : null;
 
-    const targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId ? targetDefination.inputs[targetHandleId]?.type : null
+    let targetDataType = null;
+    if (targetNode?.data.type === 'math/multiOp' && targetHandleId) {
+        const ops = Array.isArray(targetNode.data.operations) ? (targetNode.data.operations as MultiOp[]) : [];
+        const input = getMultiOpInputs(ops).find((entry) => entry.handleId === targetHandleId);
+        targetDataType = input?.param.type ?? 'any';
+    } else {
+        targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId ? targetDefination.inputs[targetHandleId]?.type : null;
+    }
 
 
     const sourceColor = sourceDataType ? TYPE_COLORS[sourceDataType] : DEFAULT_HANDLE_COLOR

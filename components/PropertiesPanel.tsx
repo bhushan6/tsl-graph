@@ -11,7 +11,8 @@ import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType } from '@/lib/types';
+import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
+import { getMultiOpInputs, getMultiOpLabel, type MultiOp } from '@/lib/multi-op';
 import { Layers, Plus, Trash2, Upload, Code } from 'lucide-react';
 import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
@@ -288,6 +289,77 @@ function CodeNodeInstancePanel({
     );
 }
 
+function MultiOpNodePanel({
+    node,
+    connectedInputs,
+}: {
+    node: AppNode;
+    connectedInputs: Set<string | null | undefined>;
+}) {
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const debugMode = useEditorStore((s) => s.debugMode);
+    const operations = Array.isArray(node.data.operations) ? (node.data.operations as MultiOp[]) : [];
+    const inputs = getMultiOpInputs(operations);
+    const editableInputs = inputs.filter((input) => !connectedInputs.has(input.handleId));
+
+    const inputsByOp = operations.map((op, index) => ({
+        op,
+        index,
+        inputs: editableInputs.filter((input) => input.opId === op.id),
+    }));
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Multi-op</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {node.data.localName || node.id}
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                {debugMode && <NodePreview />}
+                {operations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        No operations yet. Add operations on the node.
+                    </p>
+                ) : editableInputs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">All inputs are connected</p>
+                ) : (
+                    <div className="flex flex-col gap-6">
+                        {inputsByOp.map((group) => (
+                            <div key={group.op.id} className="space-y-3">
+                                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                    Step {group.index + 1} · {getMultiOpLabel(group.op.op)}
+                                </div>
+                                <div className="rounded-md border border-sidebar-border/60 bg-sidebar-accent/30 p-3">
+                                    {group.inputs.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground">All inputs connected</p>
+                                    ) : (
+                                        <div className="flex flex-col gap-4">
+                                            {group.inputs.map((input) => (
+                                                <PropertyInputWrapper
+                                                    key={input.handleId}
+                                                    nodeId={node.id}
+                                                    inputKey={input.handleId}
+                                                    inputType={input.param.type}
+                                                    inputLabel={input.param.label}
+                                                    inputDefault={input.param.default}
+                                                    onChange={(v) => updateNodeValue(node.id, input.handleId, v)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // Helper function to get default value for a type
 function getDefaultForType(type: string): TSLValueType {
     switch (type) {
@@ -378,6 +450,15 @@ function PropertiesPanelContent() {
                     />
                 )}
             </>
+        );
+    }
+
+    if (node.data.type === 'math/multiOp') {
+        return (
+            <MultiOpNodePanel
+                node={node}
+                connectedInputs={connectedInputs}
+            />
         );
     }
 

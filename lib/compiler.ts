@@ -3,6 +3,7 @@ import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port } from '
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
+import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
 
 interface CompiledNode {
     id: string;
@@ -143,6 +144,46 @@ function getInputValue(
     }
 
     return String(num);
+}
+
+function getMultiOpOperations(node: Node<TSLNodeData>): MultiOp[] {
+    const ops = node.data.operations;
+    return Array.isArray(ops) ? (ops as MultiOp[]) : [];
+}
+
+function compileMultiOpChain(
+    node: Node<TSLNodeData>,
+    edges: Edge[],
+    compiledNodes: Map<string, CompiledNode>,
+    argsMap?: Record<string, string>
+): string {
+    const ops = getMultiOpOperations(node);
+    if (ops.length === 0) {
+        return 'float(0)';
+    }
+
+    let expression = '';
+
+    ops.forEach((op, index) => {
+        const params = getMultiOpParams(op.op, index === 0);
+        const args = params.map((param) => {
+            const handleId = getMultiOpHandleId(op.id, param.key);
+            return getInputValue(node, handleId, edges, compiledNodes, { type: param.type, default: param.default }, argsMap);
+        });
+
+        if (index === 0) {
+            expression = `${op.op}(${args.join(', ')})`;
+            return;
+        }
+
+        if (args.length === 0) {
+            expression = `${expression}.${op.op}()`;
+        } else {
+            expression = `${expression}.${op.op}(${args.join(', ')})`;
+        }
+    });
+
+    return expression;
 }
 
 /**
@@ -334,6 +375,32 @@ function compileSubgraphDefinition(
                 });
                 continue;
             }
+        }
+
+        if (node.data.type === 'math/multiOp') {
+            const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+            const baseName = localName
+                ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                : `_subgraph_node${nodeIndex}`;
+
+            let displayName = baseName;
+            let suffix = 1;
+            while (usedNames.has(displayName)) {
+                displayName = `${baseName}_${suffix++}`;
+            }
+            usedNames.add(displayName);
+            nodeIndex++;
+
+            const code = compileMultiOpChain(node, internalEdges, compiledNodes, argsMap);
+            lines.push(`    const ${displayName} = ${code};`);
+
+            compiledNodes.set(nodeId, {
+                id: nodeId,
+                varName: displayName,
+                code,
+                singleOutput: true,
+            });
+            continue;
         }
 
         const def = registry.get(node.data.type);
@@ -679,6 +746,32 @@ export function compileGraph(
             }
         }
 
+        if (node.data.type === 'math/multiOp') {
+            const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+            const baseName = localName
+                ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                : `_node${nodeIndex}`;
+
+            let displayName = baseName;
+            let suffix = 1;
+            while (usedNames.has(displayName)) {
+                displayName = `${baseName}_${suffix++}`;
+            }
+            usedNames.add(displayName);
+            nodeIndex++;
+
+            const code = compileMultiOpChain(node, edges, compiledNodes);
+            lines.push(`const ${displayName} = ${code};`);
+
+            compiledNodes.set(nodeId, {
+                id: nodeId,
+                varName: displayName,
+                code,
+                singleOutput: true,
+            });
+            continue;
+        }
+
         const def = registry.get(node.data.type);
         if (!def) {
             lines.push(`// Unknown node type: ${node.data.type}`);
@@ -882,6 +975,16 @@ export function getRequiredImports(
     // Actually we only need imports for node types used in the graph or used subgraphs.
     // If a subgraph is used, we need 'Fn'. And we need imports for its internal nodes.
 
+    const addMultiOpImports = (ops: MultiOp[]) => {
+        if (ops.length === 0) {
+            imports.add('float');
+            return;
+        }
+        for (const op of ops) {
+            imports.add(op.op);
+        }
+    };
+
     // We can define a helper to collect usage from a subgraph definition
     function collectSubgraphImports(subgraph: SubgraphDefinition, seenSubgraphs: Set<string>) {
         if (seenSubgraphs.has(subgraph.id)) return;
@@ -894,6 +997,9 @@ export function getRequiredImports(
             if (node.data.type.startsWith('custom/') && subgraphs) {
                 const nested = subgraphs[node.data.type];
                 if (nested) collectSubgraphImports(nested, seenSubgraphs);
+            } else if (node.data.type === 'math/multiOp') {
+                const ops = getMultiOpOperations(node);
+                addMultiOpImports(ops);
             } else {
                 const def = registry.get(node.data.type);
                 if (def) imports.add(def.tsl);
@@ -924,6 +1030,12 @@ export function getRequiredImports(
             if (subgraph) {
                 collectSubgraphImports(subgraph, seenSubgraphs);
             }
+            continue;
+        }
+
+        if (node.data.type === 'math/multiOp') {
+            const ops = getMultiOpOperations(node);
+            addMultiOpImports(ops);
             continue;
         }
 

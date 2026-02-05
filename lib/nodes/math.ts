@@ -1,6 +1,14 @@
 import { BaseNodeDef } from './definitions';
 
 export const mathNodes = [
+    {
+        type: 'math/multiOp',
+        label: 'Multi-op',
+        category: 'Math',
+        inputs: {},
+        outputs: { out: { label: 'Out', type: 'any' } },
+        tsl: 'multiOp',
+    },
     // Basic arithmetic
     {
         type: 'math/add',

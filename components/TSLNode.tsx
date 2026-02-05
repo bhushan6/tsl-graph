@@ -12,9 +12,19 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+    Combobox,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxList,
+} from '@/components/ui/combobox';
 
 import type { AppNode, Port, TSLType, TSLValueType } from '@/lib/types';
 import { NodeProps } from '@xyflow/react';
+import { MULTI_OP_OPTIONS, getMultiOpHandleId, getMultiOpLabel, getMultiOpParams, type MultiOp, type MultiOpType } from '@/lib/multi-op';
+import { Separator } from './ui/separator';
 
 type TSLNodeProps = NodeProps<AppNode>;
 
@@ -35,6 +45,9 @@ const categoryColors: Record<string, string> = {
 function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const def = registry.get(data.type);
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const addMultiOp = useEditorStore((s) => s.addMultiOp);
+    const updateMultiOp = useEditorStore((s) => s.updateMultiOp);
+    const removeMultiOp = useEditorStore((s) => s.removeMultiOp);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const edges = useEdges();
@@ -77,6 +90,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const isSubgraphInstance = data.type.startsWith('custom/');
     const isCodeNodeInstance = data.type.startsWith('code/');
     const isCustomInstance = isSubgraphInstance || isCodeNodeInstance;
+    const isMultiOpNode = data.type === 'math/multiOp';
+    const operations = Array.isArray(data.operations) ? (data.operations as MultiOp[]) : [];
 
     // For subgraph and code node instances, we don't need a registry definition
     // We'll use the dynamicPorts from node data
@@ -158,6 +173,197 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 
     const colorClass = categoryColors[category] || categoryColors['Default'];
 
+    const header = (
+        <div
+            className={cn(
+                'flex flex-col gap-0.5 px-3 pt-2 pb-1  rounded-t-xl',
+                'border-b transition-colors duration-150',
+                colorClass,
+                selected ? 'border-blue-500' : 'border-gray-200 dark:border-white/10'
+            )}
+        >
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90 truncate">
+                {nodeLabel}
+            </span>
+            {isEditingName ? (
+                <input
+                    type="text"
+                    className="bg-transparent border-0 border-b border-gray-300 dark:border-white/30 outline-none text-[9px] text-gray-500 dark:text-white/50 tracking-wider py-0 focus:border-blue-500 max-w-[50px]"
+                    value={localName}
+                    onChange={(e) => setLocalName(e.target.value)}
+                    onKeyDown={handleNameKeyDown}
+                    onBlur={handleNameSubmit}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                />
+            ) : (
+                <div className="w-0 min-w-full overflow-hidden">
+                    <Tooltip delayDuration={500}>
+                        <TooltipTrigger asChild>
+                            <span
+                                className="text-[9px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate block"
+                                onDoubleClick={() => {
+                                    setLocalName(storedName);
+                                    setIsEditingName(true);
+                                }}
+                            >
+                                {storedName || '(variable name)'}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-[10px]">
+                            Double click to set variable name
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            )}
+        </div>
+    );
+
+    if (isMultiOpNode) {
+        return (
+            <div
+                className={cn(
+                    'min-w-[50px] flex flex-col rounded-xl shadow-lg overflow-hidden',
+                    'bg-white/95 shadow-gray-300/50',
+                    'dark:bg-card/95 dark:shadow-black/30',
+                    'backdrop-blur-sm transition-shadow duration-150',
+                    selected && 'shadow-xl dark:shadow-black/50 shadow-gray-400/50'
+                )}
+            >
+                {header}
+                <div className="flex flex-col gap-1 pt-1 pb-1.5">
+                    {operations.length === 0 ? (
+                        <div className="px-3 py-2 text-[10px] text-muted-foreground">
+                            No operations yet
+                        </div>
+                    ) : (
+                        operations.map((op, index) => {
+                            const params = getMultiOpParams(op.op, index === 0);
+                            return (
+                                <div key={op.id} className="flex flex-col gap-1">
+                                    <div className="flex items-start justify-between min-h-[24px]">
+                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                            {params.length === 0 ? (
+                                                <></>
+                                                // <span className="text-[9px] text-muted-foreground ml-2">
+                                                //     No inputs
+                                                // </span>
+                                            ) : (
+                                                params.map((param) => {
+                                                    const handleId = getMultiOpHandleId(op.id, param.key);
+                                                    return (
+                                                        <div key={handleId} className="flex items-center gap-2">
+                                                            <TSLHandle
+                                                                id={handleId}
+                                                                type="target"
+                                                                position={Position.Left}
+                                                                dataType={param.type as TSLType}
+                                                                label={param.label}
+                                                                isConnected={connectedInputs.has(handleId)}
+                                                                isDark={isDark}
+                                                            />
+                                                            {!connectedInputs.has(handleId) && (
+                                                                <div className="flex-1 min-w-0">
+                                                                    <ValuePreview
+                                                                        type={param.type}
+                                                                        value={data.values?.[handleId] ?? param.default}
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1 pr-2">
+                                            {/* <span className="text-[9px] text-gray-400 font-mono tabular-nums">
+                                                {index + 1}
+                                            </span> */}
+                                            <div className="nodrag nopan ml-2 max-w-[100px]">
+                                                <Combobox
+                                                    items={MULTI_OP_OPTIONS.map((option) => option.value)}
+                                                    value={op.op}
+                                                    onValueChange={(value) => {
+                                                        if (!value) return;
+                                                        updateMultiOp(id, op.id, value as MultiOpType);
+                                                    }}
+                                                    itemToStringLabel={(value) => getMultiOpLabel(String(value))}
+                                                    itemToStringValue={(value) => String(value)}
+                                                >
+                                                    <ComboboxInput
+                                                        placeholder="Select op"
+                                                        className="h-6 min-w-[50px] max-w-[100px] bg-transparent border border-gray-200 dark:border-white/10 rounded-md text-gray-700 dark:text-white/80 [&_[data-slot=input-group-control]]:h-6 [&_[data-slot=input-group-control]]:text-[9px] [&_[data-slot=input-group-control]]:px-2 [&_[data-slot=input-group-control]]:py-0"
+                                                        showClear={false}
+                                                    />
+                                                    <ComboboxContent align="start" sideOffset={4}>
+                                                        <ComboboxEmpty>No items found.</ComboboxEmpty>
+                                                        <ComboboxList>
+                                                            {(item) => (
+                                                                <ComboboxItem
+                                                                    key={String(item)}
+                                                                    value={item}
+                                                                    className="text-[11px]"
+                                                                >
+                                                                    {getMultiOpLabel(String(item))}
+                                                                </ComboboxItem>
+                                                            )}
+                                                        </ComboboxList>
+                                                    </ComboboxContent>
+                                                </Combobox>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="h-6 w-6 text-[10px] rounded-md border border-transparent text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-colors"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    removeMultiOp(id, op.id);
+                                                }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                aria-label={`Remove ${getMultiOpLabel(op.op)}`}
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {index < operations.length - 1 && (
+                                        <Separator className='my-1 max-w-[90%] mx-auto' />
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+
+                    <div className="px-2 pt-1">
+                        <button
+                            type="button"
+                            className="w-full h-7 text-[10px] uppercase tracking-wider border border-dashed border-gray-300 dark:border-white/20 rounded-md text-gray-500 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/80 hover:border-gray-400 dark:hover:border-white/40 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                addMultiOp(id, 'add');
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                        >
+                            + Add Operation
+                        </button>
+                    </div>
+
+                    <div className="flex items-center justify-end pr-2">
+                        <TSLHandle
+                            id="out"
+                            type="source"
+                            position={Position.Right}
+                            dataType={'any'}
+                            label="Out"
+                            isConnected={connectedOutputs.has('out')}
+                            isDark={isDark}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
 
@@ -194,50 +400,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                 selected && 'shadow-xl dark:shadow-black/50 shadow-gray-400/50'
             )}
         >
-            <div
-                className={cn(
-                    'flex flex-col gap-0.5 px-3 pt-2 pb-1  rounded-t-xl', // Reduced py
-                    'border-b transition-colors duration-150',
-                    colorClass,
-                    selected ? 'border-blue-500' : 'border-gray-200 dark:border-white/10'
-                )}
-            >
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90 truncate">
-                    {nodeLabel}
-                </span>
-                {isEditingName ? (
-                    <input
-                        type="text"
-                        className="bg-transparent border-0 border-b border-gray-300 dark:border-white/30 outline-none text-[9px] text-gray-500 dark:text-white/50 tracking-wider py-0 focus:border-blue-500 max-w-[50px]"
-                        value={localName}
-                        onChange={(e) => setLocalName(e.target.value)}
-                        onKeyDown={handleNameKeyDown}
-                        onBlur={handleNameSubmit}
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                    />
-                ) : (
-                    <div className="w-0 min-w-full overflow-hidden">
-                        <Tooltip delayDuration={500}>
-                            <TooltipTrigger asChild>
-                                <span
-                                    className="text-[9px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate block"
-                                    onDoubleClick={() => {
-                                        setLocalName(storedName);
-                                        setIsEditingName(true);
-                                    }}
-                                >
-                                    {storedName || '(variable name)'}
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-[10px]">
-                                Double click to set variable name
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
-                )}
-            </div>
+            {header}
 
             {/* Content - Removed px-2 to allow handles to touch edges pattern. Added pb-3 for safe area near rounded corners */}
             <div className="flex flex-col gap-0 pt-1 pb-1.5 rounded-b-xl">
@@ -386,4 +549,3 @@ function StringPreview({ value }: { value: string }) {
 }
 
 export const TSLNode = memo(TSLNodeComponent);
-
