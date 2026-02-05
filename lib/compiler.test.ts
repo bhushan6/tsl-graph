@@ -206,6 +206,29 @@ describe('compileGraph', () => {
             const code = compileGraph(nodes, []);
             expect(code).toContain('const _123_invalid_name_ = add(1, 2);');
         });
+
+        it('should compile multi-op chains using method chaining', () => {
+            const nodes = [
+                createNode('chain1', 'math/multiOp', {
+                    operations: [
+                        { id: 'op1', op: 'add' },
+                        { id: 'op2', op: 'mul' },
+                        { id: 'op3', op: 'sub' },
+                        { id: 'op4', op: 'clamp' },
+                    ],
+                    values: {
+                        op_op1_a: 1,
+                        op_op1_b: 2,
+                        op_op2_b: 3,
+                        op_op3_b: 10,
+                        op_op4_min: 0,
+                        op_op4_max: 1,
+                    },
+                })
+            ];
+            const code = compileGraph(nodes, []);
+            expect(code).toContain('add(1, 2).mul(3).sub(10).clamp(0, 1)');
+        });
     });
 
     describe('Numeric inputs', () => {
@@ -532,5 +555,39 @@ describe('getRequiredImports', () => {
         const imports = getRequiredImports(nodes);
         expect(imports.filter(i => i === 'add').length).toBe(1);
     });
-});
 
+    it('should include first op import for multi-op', () => {
+        const nodes = [
+            createNode('chain1', 'math/multiOp', {
+                operations: [{ id: 'op1', op: 'sin' }],
+                values: { op_op1_x: 1 },
+            })
+        ];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toContain('sin');
+    });
+
+    it('should include float when multi-op has no operations', () => {
+        const nodes = [
+            createNode('chain1', 'math/multiOp', {
+                operations: [],
+            })
+        ];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toContain('float');
+    });
+
+    it('should include all ops used in multi-op', () => {
+        const nodes = [
+            createNode('chain1', 'math/multiOp', {
+                operations: [
+                    { id: 'op1', op: 'add' },
+                    { id: 'op2', op: 'mul' },
+                    { id: 'op3', op: 'sin' },
+                ],
+            })
+        ];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toEqual(expect.arrayContaining(['add', 'mul', 'sin']));
+    });
+});

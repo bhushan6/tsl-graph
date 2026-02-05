@@ -1,5 +1,6 @@
 import type { Node, Edge } from '@xyflow/react';
 import { BaseNodeDef, Port, TSLValueType, TSLType } from './nodes/definitions';
+import type { MultiOp } from './multi-op';
 import { NodeType, NodeCategory, TSLFunction } from './nodes/inferred-types';
 
 export * from './nodes/definitions';
@@ -28,6 +29,7 @@ export interface TSLNodeData extends Record<string, unknown> {
     values: Record<string, TSLValueType>;
     connected: Record<string, boolean>;
     localName?: string;
+    operations?: MultiOp[];
     // Dynamic ports for subgraph anchor nodes
     dynamicPorts?: SubgraphPort[];
 }
@@ -77,4 +79,3 @@ export interface CodeNodeDefinition {
     createdAt: number;
     updatedAt: number;
 }
-

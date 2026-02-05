@@ -15,6 +15,7 @@ import {
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
+import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { toast } from 'sonner';
 
 // Preview mesh type
@@ -182,6 +183,9 @@ interface EditorState {
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
+    addMultiOp: (nodeId: string, op?: MultiOpType) => void;
+    updateMultiOp: (nodeId: string, opId: string, op: MultiOpType) => void;
+    removeMultiOp: (nodeId: string, opId: string) => void;
     deleteNode: (nodeId: string) => void;
     setSelectedNode: (nodeId: string | null) => void;
     setSelectedNodes: (nodeIds: string[]) => void;
@@ -576,6 +580,120 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     }
                     : node
             ),
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    addMultiOp: (nodeId, op = 'add') => {
+        get().takeSnapshot();
+        const opId = `op_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        set({
+            nodes: get().nodes.map((node) =>
+                node.id === nodeId
+                    ? {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            operations: [...(node.data.operations ?? []), { id: opId, op }],
+                        },
+                    }
+                    : node
+            ),
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    updateMultiOp: (nodeId, opId, op) => {
+        get().takeSnapshot();
+        const { nodes, edges } = get();
+        let newEdges = edges;
+
+        const newNodes = nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            const operations = Array.isArray(node.data.operations) ? node.data.operations : [];
+            const updatedOperations = operations.map((entry) =>
+                entry.id === opId ? { ...entry, op } : entry
+            );
+
+            const validInputIds = new Set(getMultiOpInputHandleIds(updatedOperations));
+            newEdges = newEdges.filter((edge) => {
+                if (edge.target === node.id) {
+                    return validInputIds.has(edge.targetHandle ?? '');
+                }
+                if (edge.source === node.id) {
+                    return (edge.sourceHandle ?? 'out') === 'out';
+                }
+                return true;
+            });
+
+            const newValues = { ...node.data.values };
+            for (const key of Object.keys(newValues)) {
+                if (key.startsWith('op_') && !validInputIds.has(key)) {
+                    delete newValues[key];
+                }
+            }
+
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    operations: updatedOperations,
+                    values: newValues,
+                },
+            };
+        });
+
+        set({
+            nodes: newNodes,
+            edges: newEdges,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    removeMultiOp: (nodeId, opId) => {
+        get().takeSnapshot();
+        const { nodes, edges } = get();
+        let newEdges = edges;
+
+        const newNodes = nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            const operations = Array.isArray(node.data.operations) ? node.data.operations : [];
+            const updatedOperations = operations.filter((entry) => entry.id !== opId);
+
+            const validInputIds = new Set(getMultiOpInputHandleIds(updatedOperations));
+            newEdges = newEdges.filter((edge) => {
+                if (edge.target === node.id) {
+                    return validInputIds.has(edge.targetHandle ?? '');
+                }
+                if (edge.source === node.id) {
+                    return (edge.sourceHandle ?? 'out') === 'out';
+                }
+                return true;
+            });
+
+            const newValues = { ...node.data.values };
+            for (const key of Object.keys(newValues)) {
+                if (key.startsWith('op_') && !validInputIds.has(key)) {
+                    delete newValues[key];
+                }
+            }
+
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    operations: updatedOperations,
+                    values: newValues,
+                },
+            };
+        });
+
+        set({
+            nodes: newNodes,
+            edges: newEdges,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
