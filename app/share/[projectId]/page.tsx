@@ -21,6 +21,7 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
     type ProjectWithLikes = {
         _id: Id<"projects">;
         name: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         graphData: any;
         thumbnail?: string;
         likedByMe?: boolean;
