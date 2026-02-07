@@ -1,0 +1,15 @@
+export const ASSIGN_NODE_TYPES = new Set([
+    'math/assign',
+    'math/addAssign',
+    'math/subAssign',
+    'math/mulAssign',
+    'math/divAssign',
+    'math/modAssign',
+    'math/minAssign',
+    'math/maxAssign',
+    'math/bitAndAssign',
+    'math/bitOrAssign',
+    'math/bitXorAssign',
+    'math/shiftLeftAssign',
+    'math/shiftRightAssign',
+]);

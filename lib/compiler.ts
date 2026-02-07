@@ -4,6 +4,7 @@ import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
+import { ASSIGN_NODE_TYPES } from './assign-node-types';
 
 interface CompiledNode {
     id: string;
@@ -22,6 +23,7 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
     'g': 'y',
     'b': 'z',
 };
+
 
 function makeUniqueName(baseName: string, usedNames: Set<string>): string {
     let name = baseName;
@@ -905,32 +907,18 @@ export function compileGraph(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.type === 'math/assign') {
+        if (ASSIGN_NODE_TYPES.has(def.type)) {
             const hasTarget = scopeEdges.some(e => e.target === node.id && e.targetHandle === 'target');
             if (!hasTarget) {
                 return null;
             }
             const targetExpr = getInputValue(node, 'target', scopeEdges, localCompiled, inputs['target']);
             const valueExpr = getInputValue(node, 'value', scopeEdges, localCompiled, inputs['value']);
-            outLines.push(`${lineIndent}${targetExpr}.assign(${valueExpr});`);
+            outLines.push(`${lineIndent}${targetExpr}.${def.tsl}(${valueExpr});`);
             return {
                 id: node.id,
                 varName: targetExpr,
-                code: `${targetExpr}.assign(${valueExpr})`,
-                singleOutput: true,
-            };
-        } else if (def.type === 'math/addAssign') {
-            const hasTarget = scopeEdges.some(e => e.target === node.id && e.targetHandle === 'target');
-            if (!hasTarget) {
-                return null;
-            }
-            const targetExpr = getInputValue(node, 'target', scopeEdges, localCompiled, inputs['target']);
-            const valueExpr = getInputValue(node, 'value', scopeEdges, localCompiled, inputs['value']);
-            outLines.push(`${lineIndent}${targetExpr}.addAssign(${valueExpr});`);
-            return {
-                id: node.id,
-                varName: targetExpr,
-                code: `${targetExpr}.addAssign(${valueExpr})`,
+                code: `${targetExpr}.${def.tsl}(${valueExpr})`,
                 singleOutput: true,
             };
         } else if (def.pure && inputKeys.length === 0) {
@@ -1299,7 +1287,7 @@ export function getRequiredImports(
             continue;
         }
 
-        if (node.data.type === 'math/assign' || node.data.type === 'math/addAssign') {
+        if (ASSIGN_NODE_TYPES.has(node.data.type)) {
             continue;
         }
 
