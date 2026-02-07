@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Editor } from "@/components/Editor";
 import { useEffect, useRef } from "react";
-import { useEditorStore } from "@/store/editor";
+import { useEditorStore, type GraphData } from "@/store/editor";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, Lock, Copy, Heart } from "lucide-react";
 import Link from "next/link";
@@ -21,7 +21,7 @@ function PublicView({ projectId }: { projectId: Id<"projects"> }) {
     type ProjectWithLikes = {
         _id: Id<"projects">;
         name: string;
-        graphData: any;
+        graphData: GraphData;
         thumbnail?: string;
         likedByMe?: boolean;
         likeCount?: number;

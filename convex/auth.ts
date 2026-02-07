@@ -51,6 +51,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
                     const targetUserId = newUser.user.id
 
                     // Use ctx from the outer createAuth scope to run the mutation
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     await (ctx as any).runMutation(api.users.transferGuestDataToUser, {
                         guestUserId,
                         targetUserId
