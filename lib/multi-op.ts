@@ -1,5 +1,6 @@
 import type { TSLType, TSLValueType, Port } from './nodes/definitions';
 import { mathNodes } from './nodes/math';
+import { ASSIGN_NODE_TYPES } from './assign-node-types';
 
 export type MultiOpType = string;
 
@@ -42,6 +43,7 @@ const getOutputs = (def: MathNodeDef): Record<string, Port> | null => {
 const MULTI_OP_DEFS: { tsl: string; label: string; inputs: Record<string, Port> }[] = mathNodes.flatMap(
     (def) => {
         if (def.type === 'math/multiOp') return [];
+        if (ASSIGN_NODE_TYPES.has(def.type)) return [];
         const inputs = getInputs(def);
         const outputs = getOutputs(def);
         if (!inputs || !outputs) return [];

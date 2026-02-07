@@ -26,7 +26,7 @@ export const allNodes = [
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread
-export type NodeType = 'group' | (string & typeof allNodes[number]['type']);
+export type NodeType = 'group' | 'loop/input' | 'loop/output' | 'loop/index' | (string & typeof allNodes[number]['type']);
 
 export type MaterialNodeType = typeof materialNodes[number]['type'];
 
