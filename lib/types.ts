@@ -32,6 +32,24 @@ export interface TSLNodeData extends Record<string, unknown> {
     operations?: MultiOp[];
     // Dynamic ports for subgraph anchor nodes
     dynamicPorts?: SubgraphPort[];
+    // Loop group metadata (for loop group nodes)
+    loop?: {
+        kind: 'loop';
+        mode?: 'count';
+        countPortId?: string;
+        initPortId?: string;
+        outputPortId?: string;
+        accNodeId?: string;
+        indexNodeId?: string;
+    };
+    // Loop port metadata (for loop input/output port nodes)
+    loopPort?: {
+        kind: 'input' | 'output';
+        portId: string;
+        label?: string;
+        type?: TSLType;
+        role?: 'count' | 'init' | 'value';
+    };
 }
 
 export type AppNode = Node<TSLNodeData>;

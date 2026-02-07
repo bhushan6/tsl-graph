@@ -18,6 +18,86 @@ import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefini
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { toast } from 'sonner';
 
+const LOOP_LAYOUT = {
+    portHeight: 28,
+    portGap: 12,
+    portWidth: 110,
+    portStartY: 24,
+    leftX: 12,
+    innerOffsetX: 32,
+};
+
+const relayoutLoopChildren = (nodes: Node<TSLNodeData>[], loopGroupId: string) => {
+    const group = nodes.find(n => n.id === loopGroupId);
+    if (!group || group.type !== 'group' || group.data?.loop?.kind !== 'loop') return nodes;
+
+    const width = Number(group.width ?? group.style?.width ?? 0);
+    if (!Number.isFinite(width) || width <= 0) return nodes;
+
+    const childNodes = nodes.filter(n => n.parentId === loopGroupId);
+    if (childNodes.length === 0) return nodes;
+
+    const inputPorts = childNodes.filter(n => n.type === 'loop/input');
+    const outputPorts = childNodes.filter(n => n.type === 'loop/output');
+    const indexNode = childNodes.find(n => n.type === 'loop/index' || n.id === group.data?.loop?.indexNodeId);
+    const accNodeId = group.data?.loop?.accNodeId;
+    const accNode = accNodeId ? childNodes.find(n => n.id === accNodeId) : undefined;
+
+    const countPortId = group.data?.loop?.countPortId;
+    const initPortId = group.data?.loop?.initPortId;
+
+    const countPort = inputPorts.find(p => p.id === countPortId || p.data?.loopPort?.role === 'count');
+    const initPort = inputPorts.find(p => p.id === initPortId || p.data?.loopPort?.role === 'init');
+
+    const remainingPorts = inputPorts.filter(p => p !== countPort && p !== initPort);
+    remainingPorts.sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+
+    const orderedInputPorts = [countPort, initPort, ...remainingPorts].filter(Boolean) as Node<TSLNodeData>[];
+    const orderedOutputPorts = outputPorts.slice().sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+
+    const updates = new Map<string, { x: number; y: number }>();
+
+    orderedInputPorts.forEach((port, index) => {
+        updates.set(port.id, {
+            x: LOOP_LAYOUT.leftX,
+            y: LOOP_LAYOUT.portStartY + index * (LOOP_LAYOUT.portHeight + LOOP_LAYOUT.portGap),
+        });
+    });
+
+    const rightX = width - LOOP_LAYOUT.portWidth - LOOP_LAYOUT.leftX;
+    orderedOutputPorts.forEach((port, index) => {
+        updates.set(port.id, {
+            x: rightX,
+            y: LOOP_LAYOUT.portStartY + index * (LOOP_LAYOUT.portHeight + LOOP_LAYOUT.portGap),
+        });
+    });
+
+    if (indexNode) {
+        updates.set(indexNode.id, {
+            x: LOOP_LAYOUT.leftX + LOOP_LAYOUT.portWidth + LOOP_LAYOUT.innerOffsetX,
+            y: LOOP_LAYOUT.portStartY,
+        });
+    }
+
+    if (accNode) {
+        updates.set(accNode.id, {
+            x: LOOP_LAYOUT.leftX + LOOP_LAYOUT.portWidth + LOOP_LAYOUT.innerOffsetX,
+            y: LOOP_LAYOUT.portStartY + (LOOP_LAYOUT.portHeight + LOOP_LAYOUT.portGap) * 2,
+        });
+    }
+
+    if (updates.size === 0) return nodes;
+
+    return nodes.map(node => {
+        const nextPos = updates.get(node.id);
+        if (!nextPos) return node;
+        return {
+            ...node,
+            position: nextPos,
+        };
+    });
+};
+
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
 
@@ -124,6 +204,7 @@ interface EditorState {
     selectedNodeId: string | null;
     selectedNodeIds: string[]; // For multi-selection
     graphStructureVersion: number;
+    hoveredGroupId: string | null;
 
     // Subgraph state
     subgraphs: Record<string, SubgraphDefinition>;
@@ -189,6 +270,7 @@ interface EditorState {
     deleteNode: (nodeId: string) => void;
     setSelectedNode: (nodeId: string | null) => void;
     setSelectedNodes: (nodeIds: string[]) => void;
+    setHoveredGroupId: (groupId: string | null) => void;
     getSelectedNode: () => Node<TSLNodeData> | undefined;
     getSelectedNodes: () => Node<TSLNodeData>[];
 
@@ -212,6 +294,9 @@ interface EditorState {
     // Group actions
     groupNodes: () => void;
     ungroupNodes: () => void;
+    reparentNodes: (nodeIds: string[], targetGroupId: string | null, options?: { skipSnapshot?: boolean }) => void;
+    removeFromGroup: () => void;
+    createLoopFromSelection: () => void;
 
 
     // Subgraph actions
@@ -249,6 +334,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectedNodeId: null,
     selectedNodeIds: [],
     graphStructureVersion: 0,
+    hoveredGroupId: null,
 
     // Preview settings
     previewSettings: {
@@ -460,8 +546,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // Check if this is a saveable change (anything except selection)
         const hasSaveableChange = changes.some(change => change.type !== 'select');
 
+        let nextNodes = applyNodeChanges(filteredChanges, get().nodes);
+
+        const resizedLoopGroups = filteredChanges
+            .filter(change => change.type === 'dimensions')
+            .map(change => change.id)
+            .filter((id): id is string => typeof id === 'string');
+
+        if (resizedLoopGroups.length > 0) {
+            for (const loopId of resizedLoopGroups) {
+                nextNodes = relayoutLoopChildren(nextNodes, loopId);
+            }
+        }
+
         set({
-            nodes: applyNodeChanges(filteredChanges, get().nodes),
+            nodes: nextNodes,
             graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
 
@@ -715,6 +814,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     setSelectedNode: (nodeId) => {
         set({ selectedNodeId: nodeId });
+    },
+
+    setHoveredGroupId: (groupId) => {
+        set({ hoveredGroupId: groupId });
     },
 
     getSelectedNode: () => {
@@ -995,24 +1098,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     // Parent is not moving to subgraph, so orphan this node
                     delete newNode.parentId;
                     delete newNode.extent;
-                    // Position needs to be absolute now? 
-                    // React Flow might handle this, but usually child positions are relative.
-                    // If we remove parentId, we should convert relative position to absolute.
-                    // BUT, inside the subgraph, the coordinate system is new (0,0 based on bounding box?).
-                    // Actually, we are resetting positions based on the new subgraph context.
-                    // Wait, usually subgraphs have their own coordinate system.
-                    // If we just copy nodes, they keep their positions.
-                    // If we orphan a node, its position is currently relative to the group.
-                    // We need to make it relative to the subgraph origin.
-                    // However, `selectedNodes` still has the original nodes with original positions.
-                    // We need to calculate absolute positions for ALL nodes relative to the subgraph anchor?
-                    // Or does the subgraph just assume the positions are absolute world coordinates?
-                    // Currently TSL Editor seems to use absolute coordinates for everything in proper "main" graph.
-                    // If `parentId` exists, position is relative.
-                    // So if we remove `parentId`, we MUST update `position` to be absolute (world).
-                    // Calculation: absolute = parent.position + child.position
-                    // Position needs to be absolute now
-                    // Use helper to get strictly world coordinates
+
                     const absPos = getAbsolutePosition(n, nodes);
                     newNode.position = absPos;
                 }
@@ -1178,9 +1264,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             // that restores previous state + new node. The new node addition will be the "change"
             // in the PARENT history if we wanted to support undoing "Create Subgraph".
             // But here we are just saving internally.
-
-            // Actually, we SHOULD update the subgraphs definition in the parent context's history
-            // or just let it be. For now, we update the store.
             set({
                 subgraphs: { ...subgraphs, [editingSubgraphId]: updatedSubgraph },
             });
@@ -1727,6 +1810,164 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ history: { past: [], future: [] } });
     },
 
+    reparentNodes: (nodeIds, targetGroupId, options) => {
+        if (!nodeIds.length) return;
+
+        const { nodes, edges } = get();
+        const nodeMap = new Map(nodes.map(n => [n.id, n]));
+        const selectedSet = new Set(nodeIds);
+
+        const selectedRoots = nodes.filter(node => selectedSet.has(node.id) && (!node.parentId || !selectedSet.has(node.parentId)));
+        if (selectedRoots.length === 0) return;
+
+        const targetGroup = targetGroupId ? nodeMap.get(targetGroupId) : null;
+        if (targetGroupId && (!targetGroup || targetGroup.type !== 'group')) {
+            return;
+        }
+
+        const isDescendantOf = (targetId: string, ancestorId: string) => {
+            const current = nodeMap.get(targetId);
+            let parentId = current?.parentId ?? null;
+            while (parentId) {
+                if (parentId === ancestorId) return true;
+                parentId = nodeMap.get(parentId)?.parentId ?? null;
+            }
+            return false;
+        };
+
+        const isProtectedLoopNode = (node: Node<TSLNodeData>, parent: Node<TSLNodeData> | undefined) => {
+            if (!parent || parent.type !== 'group' || parent.data?.loop?.kind !== 'loop') return false;
+            if (node.type === 'loop/input' || node.type === 'loop/output' || node.type === 'loop/index') return true;
+            const accNodeId = parent.data.loop?.accNodeId;
+            return !!accNodeId && node.id === accNodeId;
+        };
+
+        const blockedIds: string[] = [];
+
+        const movableRoots = selectedRoots.filter(node => {
+            if (!targetGroupId) {
+                if (!node.parentId) return false;
+                const parent = node.parentId ? nodeMap.get(node.parentId) : undefined;
+                if (isProtectedLoopNode(node, parent)) {
+                    blockedIds.push(node.id);
+                    return false;
+                }
+                return true;
+            }
+
+            if ((MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)) {
+                const targetParent = nodeMap.get(targetGroupId);
+                if (targetParent?.type === 'group' && targetParent.data?.loop?.kind === 'loop') {
+                    blockedIds.push(node.id);
+                    return false;
+                }
+            }
+
+            if (node.parentId === targetGroupId) return false;
+            if (isDescendantOf(targetGroupId, node.id)) return false;
+            return true;
+        });
+
+        if (blockedIds.length > 0) {
+            toast.error('Some nodes cannot be moved into or out of loop groups.');
+        }
+
+        if (movableRoots.length === 0) return;
+
+        if (!options?.skipSnapshot) {
+            get().takeSnapshot();
+        }
+
+        const movedRootIds = new Set(movableRoots.map(n => n.id));
+        const parentAbs = targetGroup ? getAbsolutePosition(targetGroup, nodes) : null;
+
+        const updatedNodes = nodes.map(node => {
+            if (!movedRootIds.has(node.id)) return node;
+
+            const absPos = getAbsolutePosition(node, nodes);
+
+            if (targetGroupId && parentAbs) {
+                return {
+                    ...node,
+                    parentId: targetGroupId,
+                    extent: 'parent' as const,
+                    position: {
+                        x: absPos.x - parentAbs.x,
+                        y: absPos.y - parentAbs.y,
+                    },
+                };
+            }
+
+            return {
+                ...node,
+                parentId: undefined,
+                extent: undefined,
+                position: absPos,
+            };
+        });
+
+        let nextEdges = edges;
+        if (!targetGroupId) {
+            const removedFromLoopIds = movableRoots
+                .filter(node => {
+                    const parent = node.parentId ? nodeMap.get(node.parentId) : undefined;
+                    return parent?.type === 'group' && parent.data?.loop?.kind === 'loop';
+                })
+                .map(node => node.id);
+
+            if (removedFromLoopIds.length > 0) {
+                const removedSet = new Set(removedFromLoopIds);
+                const loopGroupIds = new Set(
+                    movableRoots
+                        .filter(node => node.parentId)
+                        .map(node => node.parentId as string)
+                );
+                const loopChildIds = new Set(
+                    nodes.filter(n => n.parentId && loopGroupIds.has(n.parentId)).map(n => n.id)
+                );
+
+                nextEdges = edges.filter(edge => {
+                    const fromLoop = loopChildIds.has(edge.source);
+                    const toLoop = loopChildIds.has(edge.target);
+                    const fromRemoved = removedSet.has(edge.source);
+                    const toRemoved = removedSet.has(edge.target);
+                    if (fromLoop && toRemoved) return false;
+                    if (fromRemoved && toLoop) return false;
+                    return true;
+                });
+            }
+        }
+
+        const movedRootsInOrder = updatedNodes.filter(n => movedRootIds.has(n.id));
+        const remainingNodes = updatedNodes.filter(n => !movedRootIds.has(n.id));
+
+        let finalNodes = updatedNodes;
+        if (targetGroupId) {
+            const groupIndex = remainingNodes.findIndex(n => n.id === targetGroupId);
+            const insertIndex = groupIndex >= 0 ? groupIndex + 1 : remainingNodes.length;
+            finalNodes = [
+                ...remainingNodes.slice(0, insertIndex),
+                ...movedRootsInOrder,
+                ...remainingNodes.slice(insertIndex),
+            ];
+        } else {
+            finalNodes = [...remainingNodes, ...movedRootsInOrder];
+        }
+
+        set({
+            nodes: finalNodes,
+            edges: nextEdges,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    removeFromGroup: () => {
+        const { selectedNodeIds } = get();
+        if (selectedNodeIds.length === 0) return;
+        get().reparentNodes(selectedNodeIds, null);
+    },
+
     groupNodes: () => {
         const { nodes, selectedNodeIds } = get();
 
@@ -1816,6 +2057,201 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
     },
 
+    createLoopFromSelection: () => {
+        const { nodes, edges, selectedNodeIds } = get();
+        if (selectedNodeIds.length === 0) return;
+
+        // Expand selection to include descendants of selected groups
+        const expandedIds = new Set<string>(selectedNodeIds);
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const node of nodes) {
+                if (node.parentId && expandedIds.has(node.parentId) && !expandedIds.has(node.id)) {
+                    expandedIds.add(node.id);
+                    changed = true;
+                }
+            }
+        }
+
+        const selectedNodes = nodes.filter(n => expandedIds.has(n.id));
+        if (selectedNodes.length === 0) return;
+
+        // Roots are nodes whose parent isn't in the selection
+        const selectedRoots = selectedNodes.filter(node => {
+            if (!node.parentId) return true;
+            return !expandedIds.has(node.parentId);
+        });
+
+        if (selectedRoots.length === 0) return;
+
+        // Disallow outgoing edges (V0 accumulator-only output)
+        const outgoingEdges = edges.filter(e => expandedIds.has(e.source) && !expandedIds.has(e.target));
+        if (outgoingEdges.length > 0) {
+            toast.error('Loop V0 only supports outputs via accumulator. Remove outgoing edges and try again.');
+            return;
+        }
+
+        get().takeSnapshot();
+
+        // Calculate bounds using absolute positions
+        const nodesForBounds = selectedRoots.map(n => ({
+            ...n,
+            position: getAbsolutePosition(n, nodes),
+        }));
+
+        const bounds = getNodesBounds(nodesForBounds);
+        const PADDING = 60;
+        const baseWidth = bounds.width + PADDING * 2;
+        const baseHeight = bounds.height + PADDING * 2;
+
+        const minHeight = (LOOP_LAYOUT.portHeight + LOOP_LAYOUT.portGap) * 2 + 80;
+
+        const width = baseWidth;
+        const height = Math.max(baseHeight, minHeight);
+        const x = bounds.x - PADDING;
+        const y = bounds.y - PADDING;
+
+        const loopId = `loop-${Date.now()}`;
+        const outputPortId = `${loopId}-out`;
+        const indexNodeId = `${loopId}-index`;
+        const countPortId = `${loopId}-count`;
+
+        const groupNode: Node<TSLNodeData> = {
+            id: loopId,
+            type: 'group',
+            position: { x, y },
+            style: { width, height },
+            data: {
+                type: 'group',
+                values: { label: 'Loop', count: 1, init: 0 },
+                connected: {},
+                loop: {
+                    kind: 'loop',
+                    mode: 'count',
+                    outputPortId,
+                    countPortId,
+                    indexNodeId,
+                },
+            },
+            selected: true,
+        };
+
+        const portWidth = LOOP_LAYOUT.portWidth;
+        const leftX = LOOP_LAYOUT.leftX;
+        const portStartY = LOOP_LAYOUT.portStartY;
+        const rightX = width - portWidth - LOOP_LAYOUT.leftX;
+        const countPortNode: Node<TSLNodeData> = {
+            id: countPortId,
+            type: 'loop/input',
+            parentId: loopId,
+            extent: 'parent',
+            position: { x: leftX, y: portStartY },
+            style: { width: portWidth, height: LOOP_LAYOUT.portHeight },
+            data: {
+                type: 'loop/input',
+                values: {},
+                connected: {},
+                loopPort: {
+                    kind: 'input',
+                    portId: 'count',
+                    label: 'Count',
+                    role: 'count',
+                    type: 'int',
+                },
+            },
+            draggable: false,
+            selectable: true,
+            deletable: false,
+        };
+
+        const outputPortNode: Node<TSLNodeData> = {
+            id: outputPortId,
+            type: 'loop/output',
+            parentId: loopId,
+            extent: 'parent',
+            position: { x: rightX, y: portStartY },
+            style: { width: portWidth, height: LOOP_LAYOUT.portHeight },
+            data: {
+                type: 'loop/output',
+                values: {},
+                connected: {},
+                loopPort: {
+                    kind: 'output',
+                    portId: 'out',
+                    label: 'Acc',
+                    type: 'float',
+                },
+            },
+            draggable: false,
+            selectable: true,
+            deletable: false,
+        };
+
+        const indexNode: Node<TSLNodeData> = {
+            id: indexNodeId,
+            type: 'loop/index',
+            parentId: loopId,
+            extent: 'parent',
+            position: { x: leftX + portWidth + LOOP_LAYOUT.innerOffsetX, y: portStartY },
+            data: {
+                type: 'loop/index',
+                values: {},
+                connected: {},
+            },
+            deletable: false,
+        };
+
+        // Reparent selected roots into the loop group
+        const newNodes = nodes.map(node => {
+            const isRoot = selectedRoots.some(root => root.id === node.id);
+
+            if (isRoot) {
+                return {
+                    ...node,
+                    parentId: loopId,
+                    extent: 'parent' as const,
+                    position: {
+                        x: getAbsolutePosition(node, nodes).x - x,
+                        y: getAbsolutePosition(node, nodes).y - y,
+                    },
+                    selected: false,
+                };
+            }
+            return { ...node, selected: false };
+        });
+
+        const filteredEdges = edges;
+
+        const loopChildNodes = [
+            outputPortNode,
+            countPortNode,
+            indexNode,
+        ];
+
+        const firstRootIndex = newNodes.findIndex(
+            (n) => selectedRoots.some((root) => root.id === n.id)
+        );
+        const insertIndex = firstRootIndex >= 0 ? firstRootIndex : 0;
+
+        const finalNodes = [
+            ...newNodes.slice(0, insertIndex),
+            groupNode,
+            ...loopChildNodes,
+            ...newNodes.slice(insertIndex),
+        ];
+
+        set({
+            nodes: finalNodes,
+            edges: filteredEdges,
+            selectedNodeIds: [loopId],
+            selectedNodeId: loopId,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+
+        get().markDirty();
+    },
+
     ungroupNodes: () => {
         const { nodes, selectedNodeIds } = get();
         if (selectedNodeIds.length === 0) return;
@@ -1901,10 +2337,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     heightSegmentsPlane: 1,
                 }
             },
-            // Reset template callbacks as well? Probably no, they are set by the component. 
-            // The component usually sets them in useEffect.
         });
     },
 }));
-
-// Note: Auto-save is triggered by markDirty() which is called when changes occur

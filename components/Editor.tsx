@@ -20,6 +20,8 @@ import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { TSLNode } from './TSLNode';
 import GroupNode from './GroupNode';
+import LoopPortNode from './LoopPortNode';
+import LoopIndexNode from './LoopIndexNode';
 import { NodePicker } from './NodePicker';
 import { Navbar } from '@/components/Navbar';
 import { registry } from '@/lib/registry';
@@ -70,10 +72,13 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         redo,
         takeSnapshot,
         canvasMode,
+        reparentNodes,
+        selectedNodeIds,
+        setHoveredGroupId,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, getIntersectingNodes, getNodes, getEdges } = useReactFlow<AppNode>();
 
     // const isInitialized = useRef(false);
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
@@ -124,16 +129,107 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         takeSnapshot();
     }, [takeSnapshot]);
 
+    const handleNodeDrag = useCallback(
+        (_event: unknown, node: AppNode) => {
+            if (node.type === 'group') {
+                setHoveredGroupId(null);
+                return;
+            }
+
+            const intersectingGroups = getIntersectingNodes(node).filter(
+                (candidate) => candidate.type === 'group' && candidate.id !== node.id
+            );
+
+            if (intersectingGroups.length === 0) {
+                setHoveredGroupId(null);
+                return;
+            }
+
+            const pickGroup = (groups: AppNode[]) => {
+                const getArea = (group: AppNode) => {
+                    const width = Number(group.width ?? group.style?.width ?? 0);
+                    const height = Number(group.height ?? group.style?.height ?? 0);
+                    return width * height || Number.MAX_SAFE_INTEGER;
+                };
+                return groups.reduce((best, current) => (getArea(current) < getArea(best) ? current : best), groups[0]);
+            };
+
+            const targetGroup = pickGroup(intersectingGroups);
+            setHoveredGroupId(targetGroup.id);
+        },
+        [getIntersectingNodes, setHoveredGroupId]
+    );
+
+    const handleNodeDragStop = useCallback(
+        (_event: unknown, node: AppNode) => {
+            const intersectingGroups = getIntersectingNodes(node).filter(
+                (candidate) => candidate.type === 'group' && candidate.id !== node.id
+            );
+
+            setHoveredGroupId(null);
+            if (intersectingGroups.length === 0) return;
+
+            const pickGroup = (groups: AppNode[]) => {
+                const getArea = (group: AppNode) => {
+                    const width = Number(group.width ?? group.style?.width ?? 0);
+                    const height = Number(group.height ?? group.style?.height ?? 0);
+                    return width * height || Number.MAX_SAFE_INTEGER;
+                };
+                return groups.reduce((best, current) => (getArea(current) < getArea(best) ? current : best), groups[0]);
+            };
+
+            const targetGroup = pickGroup(intersectingGroups);
+            const nodeIds = selectedNodeIds.length > 0 ? selectedNodeIds : [node.id];
+            reparentNodes(nodeIds, targetGroup.id, { skipSnapshot: true });
+        },
+        [getIntersectingNodes, reparentNodes, selectedNodeIds, setHoveredGroupId]
+    );
+
     // 2. Nodes Change: Snapshot only on Add/Remove
     const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
         const hasStructuralChange = changes.some(
             (c) => c.type === 'add' || c.type === 'remove'
         );
+
+        const extraChanges: Parameters<typeof onNodesChange>[0] = []
+
+        for (let index = 0; index < changes.length; index++) {
+            const change = changes[index];
+            if (change.type !== "remove") {
+                continue;
+            }
+
+            const node = getNodes().find((n) => n.id === change.id);
+            if (!node?.data.loop) {
+                continue;
+            }
+
+            const loop = node.data.loop;
+            if (loop.countPortId) {
+                extraChanges.push({
+                    id: loop.countPortId,
+                    type: "remove",
+                })
+            }
+            if (loop.indexNodeId) {
+                extraChanges.push({
+                    id: loop.indexNodeId,
+                    type: "remove",
+                })
+            }
+            if (loop.outputPortId) {
+                extraChanges.push({
+                    id: loop.outputPortId,
+                    type: "remove",
+                })
+            }
+        }
+
         if (hasStructuralChange) {
             takeSnapshot();
         }
-        onNodesChange(changes);
-    }, [onNodesChange, takeSnapshot]);
+        onNodesChange([...changes, ...extraChanges]);
+    }, [getNodes, onNodesChange, takeSnapshot]);
 
     // 3. Edges Change: Snapshot only on Add/Remove
     const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
@@ -170,6 +266,9 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const nodeTypes: NodeTypes = useMemo(() => {
         const types: NodeTypes = {
             group: GroupNode,
+            'loop/input': LoopPortNode,
+            'loop/output': LoopPortNode,
+            'loop/index': LoopIndexNode,
         };
         // Add registry types
         for (const def of registry.all()) {
@@ -186,8 +285,6 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         return types;
     }, [subgraphs, codeNodes]);
 
-    const { getNodes, getEdges } = useReactFlow<AppNode>();
-
     const isValidConnection = useCallback(
         (connection: Connection | Edge) => {
             const nodes = getNodes();
@@ -197,6 +294,79 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
             if (!target || !source) {
                 return false;
+            }
+
+            const nodeById = new Map(nodes.map((n) => [n.id, n]));
+
+            const findLoopParent = (nodeId: string | undefined | null): string | null => {
+                let currentId = nodeId;
+                while (currentId) {
+                    const current = nodeById.get(currentId);
+                    if (!current) return null;
+                    if (current.type === 'group' && current.data?.loop?.kind === 'loop') {
+                        return current.id;
+                    }
+                    currentId = current.parentId ?? null;
+                }
+                return null;
+            };
+
+            const getParentLoopId = (loopId: string): string | null => {
+                let currentId: string | null = nodeById.get(loopId)?.parentId ?? null;
+                while (currentId) {
+                    const current = nodeById.get(currentId);
+                    if (!current) return null;
+                    if (current.type === 'group' && current.data?.loop?.kind === 'loop') {
+                        return current.id;
+                    }
+                    currentId = current.parentId ?? null;
+                }
+                return null;
+            };
+
+            const isAncestorLoop = (loopId: string, ancestorId: string): boolean => {
+                let currentId: string | null = loopId;
+                while (currentId) {
+                    if (currentId === ancestorId) return true;
+                    currentId = getParentLoopId(currentId);
+                }
+                return false;
+            };
+
+            const sourceLoop = findLoopParent(source.id);
+            const targetLoop = findLoopParent(target.id);
+
+            if (sourceLoop !== targetLoop) {
+                const sourceIsLoopOutput =
+                    source.type === 'loop/output' &&
+                    source.data?.loopPort?.kind === 'output' &&
+                    (connection.sourceHandle ?? '') === 'out';
+
+                const sourceParentLoop = sourceLoop ? getParentLoopId(sourceLoop) : null;
+
+                const sourceIsAncestor =
+                    targetLoop !== null && (sourceLoop === null || isAncestorLoop(targetLoop, sourceLoop));
+
+                if (sourceIsAncestor) {
+                    return !hasCycle(target, source, nodes, edges);
+                }
+
+                const isToParentLoop = sourceIsLoopOutput && targetLoop === sourceParentLoop;
+                const isToGlobalFromTop = sourceIsLoopOutput && sourceParentLoop === null && targetLoop === null;
+
+                if (!isToParentLoop && !isToGlobalFromTop) return false;
+
+                if (sourceParentLoop) {
+                    const targetType = target.data?.type;
+                    const isAssignTarget =
+                        targetType === 'math/assign' ||
+                        targetType === 'math/addAssign' ||
+                        targetType === 'math/subAssign' ||
+                        targetType === 'math/mulAssign' ||
+                        targetType === 'math/divAssign';
+
+                    if (!isAssignTarget) return false;
+                }
             }
 
             return !hasCycle(target, source, nodes, edges);
@@ -258,7 +428,9 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     onEdgesChange={handleEdgesChange}
                     onConnect={onConnect}
                     onConnectEnd={onConnectEnd}
+                    onNodeDrag={handleNodeDrag}
                     onNodeDragStart={onNodeDragStart}
+                    onNodeDragStop={handleNodeDragStop}
                     onSelectionChange={onSelectionChange}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}

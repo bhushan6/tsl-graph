@@ -1,6 +1,7 @@
 
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData } from '@/lib/types';
+import { getAbsolutePosition } from '@/lib/utils';
 
 /**
  * Topologically sort nodes so dependencies come first.
@@ -74,3 +75,23 @@ export function hasCycle(target: Node, source: Node, nodes: Node[], edges: Edge[
     return visit(target);
 }
 
+export function getParentedPositionForNewNode(
+    nodes: Node<TSLNodeData>[],
+    sourceNodeId: string | null,
+    flowPosition: { x: number; y: number }
+): { parentId: string; extent: 'parent'; position: { x: number; y: number } } | null {
+    if (!sourceNodeId) return null;
+    const sourceNode = nodes.find(n => n.id === sourceNodeId);
+    if (!sourceNode?.parentId) return null;
+    const parentNode = nodes.find(n => n.id === sourceNode.parentId);
+    if (!parentNode) return null;
+    const parentAbs = getAbsolutePosition(parentNode, nodes);
+    return {
+        parentId: sourceNode.parentId,
+        extent: 'parent',
+        position: {
+            x: flowPosition.x - parentAbs.x,
+            y: flowPosition.y - parentAbs.y,
+        },
+    };
+}

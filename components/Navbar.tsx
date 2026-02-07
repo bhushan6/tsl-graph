@@ -98,10 +98,11 @@ export function Navbar({ projectName, projectId, isReadOnly }: NavbarProps) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `tsl-shader-${Date.now()}.json`;
+        const projectName = project?.name || "untitled";
+        a.download = `${projectName}.json`;
         a.click();
         URL.revokeObjectURL(url);
-    }, [saveToJSON]);
+    }, [saveToJSON, project]);
 
     // Open file picker
     const handleLoadClick = useCallback(() => {
