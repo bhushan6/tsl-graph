@@ -1041,7 +1041,7 @@ export function compileGraph(
                 };
 
                 const countExpr = getLegacyInputExpr(countInput, 'int', node.data?.values?.count ?? 1);
-                // const initExpr = getLegacyInputExpr(initInput, 'float', node.data?.values?.init ?? 0);
+                const initExpr = getLegacyInputExpr(initInput, 'float', node.data?.values?.init ?? 0);
 
                 const localName = node.data.localName || (node.data.values?.localName as string | undefined);
                 const baseName = localName
@@ -1052,12 +1052,12 @@ export function compileGraph(
                 const loopOutName = makeUniqueName(baseName, usedNames);
                 const accVarName = makeUniqueName(`${baseName}_acc`, usedNames);
 
-                // const initVar = initExpr;
+                const initVar = initExpr;
                 const countVar = countExpr;
 
                 outLines.push(`${lineIndent}const ${loopFnName} = Fn(() => {`);
                 const innerIndent = `${lineIndent}  `;
-                // outLines.push(`${innerIndent}const ${accVarName} = Var(${initVar});`);
+                outLines.push(`${innerIndent}const ${accVarName} = Var(${initVar});`);
                 const indexName = indexNode ? 'i' : 'i';
                 outLines.push(`${innerIndent}Loop(${countVar}, ({ ${indexName} }) => {`);
 

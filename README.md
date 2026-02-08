@@ -1,36 +1,189 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TSL Editor
 
-## Getting Started
+## Project Overview
+This project is a **visual node-based editor for Three.js Shading Language (TSL)**. It allows users to create shader materials visually by connecting nodes, similar to Blender's Shader Editor or Unreal Engine's Material Editor.
 
-First, run the development server:
+The application has two main outputs:
+1.  **Generated Code**: It produces valid JavaScript/TSL code that can be used in a Three.js project (displayed in `CodePanel`).
+2.  **Live Preview**: It renders a 3D preview of the material using `three/webgpu` (displayed in `Preview`).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Tech Stack
+*   **Framework**: Next.js 16 (App Router)
+*   **UI Library**: React 19
+*   **Styling**: Tailwind CSS
+*   **State Management**: Zustand
+*   **Node Graph Engine**: React Flow (`@xyflow/react`)
+*   **3D Engine**: Three.js (`three`, specifically valid for WebGPU environment)
+*   **Icons**: Lucide React
+*   **Syntax Highlighting**: Prism React Renderer
+
+## Architecture & Data Flow
+
+```mermaid
+graph TD
+    UserAction[User Interaction] --> Store[Zustand Editor Store]
+    Store --> ReactFlow[React Flow Canvas]
+    Store --> Compiler[Compiler Logic]
+    Store --> RuntimeBuilder[Runtime Builder]
+
+    ReactFlow --> TSLNode[TSLNode Component]
+    TSLNode --> Registry[Node Registry]
+
+    Compiler --> CodeOutput[Generated TSL Code]
+    RuntimeBuilder --> ThreeMaterial[Three.js Material]
+    ThreeMaterial --> WebGPURenderer[WebGPU Preview]
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Detailed Feature Implementation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Node Graph Editing
+*   **Implementation**: Built on top of `ReactFlow` in `components/Editor.tsx`.
+*   **State**: Managed by `store/editor.ts` (Zustand). It tracks `nodes`, `edges`, and `selection`.
+*   **Custom Nodes**: All nodes utilize a single generic component `components/TSLNode.tsx`.
+    *   This component looks up the node definition in `lib/registry.ts` using `data.type`.
+    *   It dynamically renders input/output handles (`TSLHandle.tsx`) based on the definition.
+    *   It handles inline renaming via double-click on the header.
+*   **Cycle Detection**: Before any connection is made, `isValidConnection` in `Editor.tsx` calls `hasCycle` (`lib/graph-utils.ts`) to prevent infinite loops in the shader graph.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Node Library & Picker
+*   **Registry**: The source of truth for all nodes is `lib/registry.ts`. It maps unique strings (e.g., `math/add`) to definitions (inputs, outputs, TSL function mappings).
+*   **Discovery**: `initializeNodes()` in `lib/nodes/index.ts` populates this registry on app launch.
+*   **Picker UI**: `components/NodePicker.tsx` iterates through the registry (grouped by category) and provides buttons to add nodes.
+*   **Placement**: When adding a node, it calculates the center of the viewport using `screenToFlowPosition` and adds a random offset to prevent stacking.
 
-## Learn More
+### 3. Properties Panel (Reactivity)
+*   **Purpose**: Allows editing values (numbers, colors, vectors) for inputs that are *not* connected to other nodes.
+*   **Implementation**: `components/PropertiesPanel.tsx`.
+*   **Selection Tracking**: It listens to `selectedNodeId` from the store.
+*   **Filtering**: It filters out inputs that are already connected, so you can't manually edit a value that is being driven by another node.
+*   **Optimized Rendering**:
+    *   Uses specialized sub-components (`ColorInput`, `VectorInput`).
+    *   **Debouncing**: User input is debounced (delayed) using `useDebouncedCallback` so that we don't trigger a full graph re-render/re-compile on every keystroke.
 
-To learn more about Next.js, take a look at the following resources:
+### 4. Code Generation (Compiler)
+*   **Core Logic**: Located in `lib/compiler.ts`.
+*   **Topological Sort**: The graph is first sorted (`topologicalSort`) so that dependencies are declared before they are used.
+*   **Variable Naming**:
+    *   Generates variable names like `add_1`, `vec3_2`.
+    *   Uses the node's `localName` if the user renamed it (sanitized to be a valid var name).
+*   **Swizzling**:
+    *   The compiler automatically handles vector component access.
+    *   If an edge connects Key `x` of Node A to Node B, the compiler appends `.x` to the variable name (e.g., `nodeA.x`).
+    *   Logic: `getInputValue` checks `edge.sourceHandle` against a map of swizzles (`x`, `y`, `z`, `w`, `r`, `g`, `b`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 5. Live 3D Preview (WebGPU)
+*   **Component**: `components/Preview.tsx`.
+*   **Engine**: Uses `three/webgpu` (WebGPURenderer) for modern shader support.
+*   **Runtime Building**:
+    *   Unlike the *text* compiler, the *runtime* builder (`lib/tsl-builder.ts`) executes the actual TSL functions in JavaScript.
+    *   `import { add } from 'three/tsl'` -> `const result = add(nodeA, nodeB);`
+    *   This builds a real `NodeMaterial` object (e.g., `MeshStandardNodeMaterial`).
+*   **Error Handling**: If the graph is invalid, the builder throws an error, which is caught and displayed in the UI overlay.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Directory Structure & Key Files
 
-## Deploy on Vercel
+### `/lib` (Core Logic)
+*   **`registry.ts`**: Central database of node definitions.
+*   **`compiler.ts`**: Converts graph -> String Code.
+*   **`tsl-builder.ts`**: Converts graph -> Three.js Material (Runtime).
+*   **`graph-utils.ts`**: Algorithms (Topological Sort, Cycle Detection).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### `/components` (UI)
+*   **`Editor.tsx`**: Main canvas wrapper.
+*   **`TSLNode.tsx`**: The visualization of a node.
+*   **`PropertiesPanel.tsx`**: Side panel for editing values.
+*   **`CodePanel.tsx`**: Modal for viewing generated code.
+*   **`Preview.tsx`**: The 3D viewport.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Key Interfaces (`lib/types.ts`)
+```typescript
+export interface TSLNodeData extends Record<string, unknown> {
+    type: NodeType;               // e.g., 'math/add'
+    values: Record<string, any>; // User-edited values (e.g. { a: 0.5 })
+    localName?: string;          // User-defined custom name
+}
+```
+## Data Structure Examples
+
+### 1. Node Object (Runtime Data)
+This is the structure of a node as it exists in the React Flow state (`useEditorStore`).
+
+```json
+{
+  "id": "1",
+  "type": "math/add",
+  "position": { "x": 100, "y": 200 },
+  "data": {
+    "type": "math/add",
+    "localName": "MyAdder",
+    "values": {
+      "a": 1.5,        // User manually entered 1.5 for input 'a'
+      "b": 0           // 'b' might be connected, so this value is ignored
+    },
+    // Tracks which handles have edges connected to them
+    "connected": {
+      "b": true,
+      "out": true
+    }
+  }
+}
+```
+
+### 2. Node Definition (Registry entry)
+This is the static definition found in `lib/registry.ts`, defining how a node behaves and looks.
+
+```json
+{
+  "type": "math/add",
+  "label": "Add",
+  "category": "Math",
+  "tsl": "add",        // Maps to `import { add } from 'three/tsl'`
+  "inputs": {
+    "a": {
+      "label": "A",
+      "type": "any",
+      "default": 0
+    },
+    "b": {
+        "label": "B",
+        "type": "any",
+        "default": 0
+    }
+  },
+  "outputs": {
+    "out": {
+        "label": "Out",
+        "type": "any"
+    }
+  }
+}
+```
+
+## Setup & Running
+1.  **Clone the repository**:
+    ```bash
+    git clone <repository_url>
+    cd tsl-editor
+    ```
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+3.  **Set up environment**:
+    Copy `.env.example` to `.env.local` and configure your keys.
+    ```bash
+    cp .env.example .env.local
+    ```
+4.  **Run development server**:
+    ```bash
+    npm run dev
+    ```
+    Starts at `http://localhost:3000`.
+
+5.  **Run tests**:
+    ```bash
+    npm run test
+    ```
+
+## License
+MIT
