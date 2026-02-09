@@ -39,6 +39,7 @@ const categoryColors: Record<string, string> = {
     'Advanced': 'border-slate-500 bg-slate-100 dark:bg-slate-900/20',
     'Noise': 'border-fuchsia-500 bg-fuchsia-100 dark:bg-fuchsia-900/20',
     'Utils': 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20',
+    'Loop': 'border-indigo-500 bg-indigo-100 dark:bg-indigo-900/20',
     'Default': 'border-gray-500 bg-gray-100 dark:bg-gray-900/20',
 };
 

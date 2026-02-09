@@ -9,6 +9,8 @@ import { modelNodes } from './model';
 import { advancedNodes } from './advanced';
 import { noiseNodes } from './noise';
 import { utilsNodes } from './utils';
+import { loopNodes } from './loop';
+import { assignNodes } from './assign';
 
 
 // Aggregate all nodes
@@ -23,6 +25,8 @@ export const allNodes = [
     ...advancedNodes,
     ...noiseNodes,
     ...utilsNodes,
+    ...loopNodes,
+    ...assignNodes,
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread

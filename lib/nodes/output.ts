@@ -50,6 +50,18 @@ export const meshStandardMaterial = {
     tsl: 'MeshStandardNodeMaterial',
 } as const;
 
+export const nodeMaterial = {
+    type: 'material/node',
+    label: 'NodeMaterial',
+    category: 'Material',
+    inputs: {
+        fragmentNode: { label: 'Fragment', type: 'vec4', connectionOnly: true },
+        vertexNode: { label: 'Vertex', type: 'vec3', connectionOnly: true },
+    },
+    outputs: {},
+    tsl: 'NodeMaterial',
+} as const;
+
 export const meshBasicMaterial = {
     type: 'material/basic',
     label: 'MeshBasicMaterial',
@@ -233,6 +245,7 @@ export const spriteNodeMaterial = {
 
 // All material node types for easy checking
 export const MATERIAL_NODE_TYPES = [
+    'material/node',
     'material/standard',
     'material/basic',
     'material/physical',
@@ -241,6 +254,7 @@ export const MATERIAL_NODE_TYPES = [
 ] as const;
 
 export const materialNodes = [
+    nodeMaterial,
     meshStandardMaterial,
     meshBasicMaterial,
     meshPhysicalMaterial,
@@ -251,7 +265,7 @@ export const materialNodes = [
 // Type checks
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _materialChecks: readonly BaseNodeDef[] = [
-    meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial, spriteNodeMaterial
+    nodeMaterial, meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial, spriteNodeMaterial
 ];
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _materialNodesCheck: readonly BaseNodeDef[] = materialNodes;

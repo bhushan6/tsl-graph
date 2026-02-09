@@ -88,6 +88,10 @@ export function EdgeDropNodePicker({
 
         // Filter out anchor nodes
         return nodes.filter(node => {
+            // Hide loop nodes (created only via toolbar action)
+            if (node.type === 'loop' || node.type.startsWith('loop/')) {
+                return false;
+            }
             const isAnchorNode = ANCHOR_NODE_TYPES.includes(node.type);
 
             if (isAnchorNode) {

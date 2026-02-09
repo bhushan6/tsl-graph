@@ -35,6 +35,14 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'any', label: 'Out' } }
     },
     {
+        type: 'math/fract',
+        label: 'Fract',
+        category: 'Math',
+        tsl: 'fract',
+        inputs: { x: { type: 'any', default: 0, label: 'X' } },
+        outputs: { out: { type: 'any', label: 'Out' } }
+    },
+    {
         type: 'math/normalize',
         label: 'Normalize',
         category: 'Math',
@@ -74,6 +82,16 @@ const mockDefs: NodeDef[] = [
             roughnessNode: { type: 'float', default: 0.5, label: 'Roughness' }
         }
     },
+    {
+        type: 'material/node',
+        label: 'Node Material',
+        category: 'Material',
+        tsl: 'NodeMaterial',
+        inputs: {
+            fragmentNode: { type: 'vec4', default: [0, 0, 0, 1], label: 'Fragment', connectionOnly: true },
+            vertexNode: { type: 'vec3', default: [0, 0, 0], label: 'Vertex', connectionOnly: true }
+        }
+    },
     // Constant nodes
     {
         type: 'const/float',
@@ -82,6 +100,14 @@ const mockDefs: NodeDef[] = [
         tsl: 'float',
         inputs: { value: { type: 'float', default: 0, label: 'Value' } },
         outputs: { out: { type: 'float', label: 'Out' } }
+    },
+    {
+        type: 'const/int',
+        label: 'Int',
+        category: 'Constants',
+        tsl: 'int',
+        inputs: { value: { type: 'int', default: 0, label: 'Value' } },
+        outputs: { out: { type: 'int', label: 'Out' } }
     },
     {
         type: 'const/vec3',
@@ -111,6 +137,7 @@ const mockDefs: NodeDef[] = [
         tsl: 'uv',
         pure: true,
         callable: true,
+        inputs: { index: { type: 'int', default: 0, label: 'Index' } },
         outputs: { out: { type: 'vec2', label: 'XY' } }
     },
     {
@@ -157,6 +184,28 @@ const mockDefs: NodeDef[] = [
         tsl: 'and',
         inputs: { a: { type: 'bool', default: false, label: 'A' }, b: { type: 'bool', default: false, label: 'B' } },
         outputs: { out: { type: 'bool', label: 'Out' } }
+    },
+    {
+        type: 'assign/assign',
+        label: 'Assign',
+        category: 'Advanced',
+        tsl: '__assign__',
+        inputs: {
+            target: { type: 'any', default: 0, label: 'Target', connectionOnly: true },
+            value: { type: 'any', default: 0, label: 'Value' }
+        },
+        outputs: { out: { type: 'any', label: 'Out' } }
+    },
+    {
+        type: 'assign/addAssign',
+        label: 'Add Assign',
+        category: 'Advanced',
+        tsl: '__add_assign__',
+        inputs: {
+            target: { type: 'any', default: 0, label: 'Target', connectionOnly: true },
+            value: { type: 'any', default: 0, label: 'Value' }
+        },
+        outputs: { out: { type: 'any', label: 'Out' } }
     }
 ];
 
@@ -189,6 +238,22 @@ describe('compileGraph', () => {
             const nodes = [createNode('mat', 'material/standard')];
             const code = compileGraph(nodes, []);
             expect(code).toContain('const material = new MeshStandardNodeMaterial();');
+        });
+
+        it('should compile a node material with fragment and vertex inputs', () => {
+            const nodes = [
+                createNode('frag', 'const/vec3', { values: { x: 0.1, y: 0.2, z: 0.3 } }),
+                createNode('vert', 'const/vec3', { values: { x: 1, y: 2, z: 3 } }),
+                createNode('mat', 'material/node'),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'frag', sourceHandle: 'out', target: 'mat', targetHandle: 'fragmentNode' },
+                { id: 'e2', source: 'vert', sourceHandle: 'out', target: 'mat', targetHandle: 'vertexNode' },
+            ];
+            const code = compileGraph(nodes, edges);
+            expect(code).toContain('const material = new NodeMaterial();');
+            expect(code).toContain('material.fragmentNode = _node0;');
+            expect(code).toContain('material.vertexNode = _node1;');
         });
 
         it('should use user-defined names when available', () => {
@@ -313,7 +378,7 @@ describe('compileGraph', () => {
         it('should compile UV node with parentheses', () => {
             const nodes = [createNode('uv1', 'geo/uv')];
             const code = compileGraph(nodes, []);
-            expect(code).toContain('const _node0 = uv();');
+            expect(code).toContain('const _node0 = uv(0);');
         });
 
         it('should compile time node without parentheses', () => {
@@ -384,7 +449,7 @@ describe('compileGraph', () => {
             expect(code).toContain('add(_node0.x, 10)');
         });
 
-        it('should handle complex node chains', () => {
+    it('should handle complex node chains', () => {
             const nodes = [
                 createNode('t1', 'geo/time'),
                 createNode('sin1', 'math/sin'),
@@ -494,6 +559,153 @@ describe('Logic Nodes', () => {
         expect(code).toContain('select(_node');
 
     });
+
+    describe('Loop groups', () => {
+        it('should compile a loop group with accumulator assignment', () => {
+            const loop = createNode('loop1', 'loop');
+            const count = { ...createNode('loop1::count', 'loop/count', { values: { count: 3 } }), parentId: 'loop1' };
+            const index = { ...createNode('loop1::index', 'loop/index'), parentId: 'loop1' };
+            const acc = { ...createNode('loop1::acc', 'loop/accumulator', { values: { seed: 0.2 } }), parentId: 'loop1' };
+            const output = { ...createNode('loop1::output', 'loop/output'), parentId: 'loop1' };
+            const c2 = { ...createNode('c2', 'const/float', { values: { value: 2 } }), parentId: 'loop1' };
+            const add1 = { ...createNode('add1', 'math/add'), parentId: 'loop1' };
+
+            const edges: Edge[] = [
+                { id: 'e1', source: acc.id, sourceHandle: 'acc', target: add1.id, targetHandle: 'a' },
+                { id: 'e2', source: c2.id, sourceHandle: 'out', target: add1.id, targetHandle: 'b' },
+                { id: 'e3', source: add1.id, sourceHandle: 'out', target: output.id, targetHandle: 'next' },
+            ];
+
+            const nodes = [loop, count, index, acc, output, c2, add1];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('Loop(');
+            expect(code).toContain('Var(');
+            expect(code).toContain('.assign(');
+            expect(code).toContain('max(int(');
+        });
+
+        it('should allow missing output (no assign)', () => {
+            const loop = createNode('loop2', 'loop');
+            const count = { ...createNode('loop2::count', 'loop/count', { values: { count: 2 } }), parentId: 'loop2' };
+            const acc = { ...createNode('loop2::acc', 'loop/accumulator', { values: { seed: 1 } }), parentId: 'loop2' };
+            const output = { ...createNode('loop2::output', 'loop/output'), parentId: 'loop2' };
+
+            const nodes = [loop, count, acc, output];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('Loop(');
+            expect(code).not.toContain('.assign(');
+        });
+
+        it('should default seed to float(0) when missing', () => {
+            const loop = createNode('loop3', 'loop');
+            const count = { ...createNode('loop3::count', 'loop/count', { values: { count: 1 } }), parentId: 'loop3' };
+            const acc = { ...createNode('loop3::acc', 'loop/accumulator'), parentId: 'loop3' };
+            const output = { ...createNode('loop3::output', 'loop/output'), parentId: 'loop3' };
+
+            const nodes = [loop, count, acc, output];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('Var(float(0))');
+        });
+
+        it('should compile loop example with uv seed and fract assignment', () => {
+            const uv = createNode('uv0', 'geo/uv', { values: { index: 0 } });
+            const countConst = createNode('count0', 'const/int', { values: { value: 1 } });
+            const loop = createNode('loopExample', 'loop', { localName: 'loop2' });
+            const count = { ...createNode('loopExample::count', 'loop/count'), parentId: 'loopExample' };
+            const index = { ...createNode('loopExample::index', 'loop/index'), parentId: 'loopExample' };
+            const acc = { ...createNode('loopExample::acc', 'loop/accumulator'), parentId: 'loopExample' };
+            const output = { ...createNode('loopExample::output', 'loop/output'), parentId: 'loopExample' };
+            const c10 = { ...createNode('loopExample::c10', 'const/float', { values: { value: 10 } }), parentId: 'loopExample' };
+            const mul = { ...createNode('loopExample::mul', 'math/mul'), parentId: 'loopExample' };
+            const fract = { ...createNode('loopExample::fract', 'math/fract'), parentId: 'loopExample' };
+
+            const edges: Edge[] = [
+                { id: 'e1', source: uv.id, sourceHandle: 'out', target: acc.id, targetHandle: 'seed' },
+                { id: 'e2', source: countConst.id, sourceHandle: 'out', target: count.id, targetHandle: 'count' },
+                { id: 'e3', source: uv.id, sourceHandle: 'out', target: mul.id, targetHandle: 'a' },
+                { id: 'e4', source: c10.id, sourceHandle: 'out', target: mul.id, targetHandle: 'b' },
+                { id: 'e5', source: mul.id, sourceHandle: 'out', target: fract.id, targetHandle: 'x' },
+                { id: 'e6', source: fract.id, sourceHandle: 'out', target: output.id, targetHandle: 'next' },
+            ];
+
+            const nodes = [uv, countConst, loop, count, index, acc, output, c10, mul, fract];
+            const code = compileGraph(nodes, edges);
+
+            const expected = [
+                '// Generated TSL Code',
+                '',
+                'const _node0 = uv(0);',
+                'const _node1 = int(1);',
+                'const loop2_count = max(int(_node1), 0);',
+                'const loop2_fn = Fn(() => {',
+                '    const loop2_acc = Var(_node0);',
+                '    Loop(loop2_count, ({ i }) => {',
+                '        const _node3 = float(10);',
+                '        const _node4 = mul(_node0, _node3);',
+                '        const _node5 = fract(_node4);',
+                '        loop2_acc.assign(_node5);',
+                '    });',
+                '    return loop2_acc;',
+                '});',
+                'const loop2 = loop2_fn();',
+            ].join('\n');
+
+            expect(code.trim()).toBe(expected.trim());
+        });
+    });
+
+    describe('Assign nodes', () => {
+        it('should compile assign node as method call and return target', () => {
+            const target = createNode('t1', 'const/float', { values: { value: 0 } });
+            const value = createNode('v1', 'const/float', { values: { value: 1 } });
+            const assignNode = createNode('assign1', 'assign/assign');
+
+            const edges: Edge[] = [
+                { id: 'e1', source: target.id, sourceHandle: 'out', target: assignNode.id, targetHandle: 'target' },
+                { id: 'e2', source: value.id, sourceHandle: 'out', target: assignNode.id, targetHandle: 'value' },
+            ];
+
+            const nodes = [target, value, assignNode];
+            const code = compileGraph(nodes, edges);
+
+            const expected = [
+                '// Generated TSL Code',
+                '',
+                'const _node0 = float(0);',
+                'const _node1 = float(1);',
+                '_node0.assign(_node1);',
+            ].join('\n');
+
+            expect(code.trim()).toBe(expected.trim());
+        });
+
+        it('should compile addAssign method', () => {
+            const target = createNode('t1', 'const/float', { values: { value: 0 } });
+            const value = createNode('v1', 'const/float', { values: { value: 2 } });
+            const addAssignNode = createNode('assign2', 'assign/addAssign');
+
+            const edges: Edge[] = [
+                { id: 'e1', source: target.id, sourceHandle: 'out', target: addAssignNode.id, targetHandle: 'target' },
+                { id: 'e2', source: value.id, sourceHandle: 'out', target: addAssignNode.id, targetHandle: 'value' },
+            ];
+
+            const nodes = [target, value, addAssignNode];
+            const code = compileGraph(nodes, edges);
+
+            const expected = [
+                '// Generated TSL Code',
+                '',
+                'const _node0 = float(0);',
+                'const _node1 = float(2);',
+                '_node0.addAssign(_node1);',
+            ].join('\n');
+
+            expect(code.trim()).toBe(expected.trim());
+        });
+    });
 });
 
 describe('getRequiredImports', () => {
@@ -589,5 +801,15 @@ describe('getRequiredImports', () => {
         ];
         const imports = getRequiredImports(nodes);
         expect(imports).toEqual(expect.arrayContaining(['add', 'mul', 'sin']));
+    });
+
+    it('should include loop-related imports when loop nodes exist', () => {
+        const loop = createNode('loop1', 'loop');
+        const count = { ...createNode('loop1::count', 'loop/count', { values: { count: 3 } }), parentId: 'loop1' };
+        const acc = { ...createNode('loop1::acc', 'loop/accumulator', { values: { seed: 0 } }), parentId: 'loop1' };
+        const output = { ...createNode('loop1::output', 'loop/output'), parentId: 'loop1' };
+
+        const imports = getRequiredImports([loop, count, acc, output]);
+        expect(imports).toEqual(expect.arrayContaining(['Fn', 'Loop', 'Var', 'int', 'max']));
     });
 });
