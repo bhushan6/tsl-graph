@@ -10,7 +10,6 @@ import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
 import { NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
-import { getParentedPositionForNewNode } from "@/lib/graph-utils";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -257,33 +256,6 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         values: defaultValues,
                         connected: {},
                     } as TSLNodeData,
-                };
-            }
-
-            const parentedPosition = getParentedPositionForNewNode(
-                useEditorStore.getState().nodes,
-                sourceNodeId,
-                flowPosition
-            );
-            let shouldParentInSource = true;
-            if (sourceNodeId) {
-                const sourceNode = useEditorStore.getState().nodes.find(n => n.id === sourceNodeId);
-                if (sourceNode?.type === 'loop/output') {
-                    const loopGroup = sourceNode.parentId
-                        ? useEditorStore.getState().nodes.find(n => n.id === sourceNode.parentId)
-                        : undefined;
-                    const isTopLevelLoop = loopGroup?.type === 'group' && loopGroup.data?.loop?.kind === 'loop' && !loopGroup.parentId;
-                    if (isTopLevelLoop) {
-                        shouldParentInSource = false;
-                    }
-                }
-            }
-            if (parentedPosition && shouldParentInSource) {
-                newNode = {
-                    ...newNode,
-                    parentId: parentedPosition.parentId,
-                    extent: parentedPosition.extent,
-                    position: parentedPosition.position,
                 };
             }
 

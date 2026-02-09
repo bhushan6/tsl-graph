@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, ArrowUpRight } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -31,14 +31,9 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         setCanvasMode,
         groupNodes,
         ungroupNodes,
-        removeFromGroup,
-        createLoopFromSelection,
         debugMode,
         setDebugMode,
     } = useEditorStore();
-
-    const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
-    const canRemoveFromGroup = selectedNodes.some(n => n.parentId);
 
     // Ref to track subgraph name without causing re-renders
     const subgraphNameRef = useRef<HTMLInputElement>(null);
@@ -320,43 +315,6 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                         <TooltipContent>Ungroup Nodes</TooltipContent>
                     </Tooltip>
                 )}
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <span className="inline-flex">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={removeFromGroup}
-                                className="h-8 w-8"
-                                disabled={!canRemoveFromGroup}
-                            >
-                                <ArrowUpRight className="w-4 h-4" />
-                            </Button>
-                        </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Remove From Group</TooltipContent>
-                </Tooltip>
-            </div>
-
-            <div className="w-px h-4 bg-border" />
-
-            <div className="flex items-center gap-0.5">
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <span className="inline-flex">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={createLoopFromSelection}
-                                className="h-8 w-8"
-                                disabled={selectedNodeIds.length < 1}
-                            >
-                                <Repeat className="w-4 h-4" />
-                            </Button>
-                        </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Create Loop</TooltipContent>
-                </Tooltip>
             </div>
 
             <div className="w-px h-4 bg-border" />

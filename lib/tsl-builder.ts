@@ -29,7 +29,6 @@ export function buildTSLMaterial(
         MeshPhysicalNodeMaterial: THREE.MeshPhysicalNodeMaterial,
         MeshPhongNodeMaterial: THREE.MeshPhongNodeMaterial,
         SpriteNodeMaterial: THREE.SpriteNodeMaterial,
-        NodeMaterial: THREE.NodeMaterial,
         THREE: THREE, // Expose THREE namespace for TextureLoader
         rotation3d,
         rotate2D,
@@ -125,7 +124,8 @@ export function buildNodePreviewMaterial(
 
     // If no vars found, just return a fallback
     if (definedVars.length === 0) {
-        const fallback = new THREE.NodeMaterial();
+        const fallback = new THREE.MeshBasicNodeMaterial();
+        fallback.color = new THREE.Color(0x888888);
         return fallback;
     }
 
@@ -135,7 +135,7 @@ export function buildNodePreviewMaterial(
     // Build execution scope
     const scope = {
         ...TSL,
-        NodeMaterial: THREE.NodeMaterial,
+        MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
         THREE: THREE,
     };
 
@@ -146,12 +146,12 @@ export function buildNodePreviewMaterial(
     const functionBody = `
         ${code}
         
-        const material = new NodeMaterial();
+        const material = new MeshBasicNodeMaterial();
         
-        // Map the target node output to fragment
+        // Map the target node output to color
         // Use unique variable name to avoid collision with compiled code
         const __preview_target__ = ${targetVarName};
-        material.fragmentNode = __preview_target__;
+        material.colorNode = __preview_target__;
         
         return material;
     `;
@@ -164,7 +164,8 @@ export function buildNodePreviewMaterial(
     } catch (err) {
         console.error('Node Preview Build Failed:', err);
         // Return a fallback magenta material to indicate error
-        const fallback = new THREE.NodeMaterial();
+        const fallback = new THREE.MeshBasicNodeMaterial();
+        fallback.color = new THREE.Color(0xff00ff);
         return fallback;
     }
 }

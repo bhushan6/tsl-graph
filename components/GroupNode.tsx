@@ -1,15 +1,12 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { NodeResizer, type NodeProps } from '@xyflow/react';
+import { type NodeProps } from '@xyflow/react';
 import { useEditorStore } from '@/store/editor';
-import { Edit2, Group, Repeat } from 'lucide-react';
+import { Edit2, Group } from 'lucide-react';
 import type { AppNode } from '@/lib/types';
 import "../app/globals.css"
 
 function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
-    // console.log("GroupNode", id, data, selected);
-
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
-    const isDropTarget = useEditorStore((s) => s.hoveredGroupId === id);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [isEditing, setIsEditing] = useState(false);
@@ -55,24 +52,18 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
         }
     }, [isEditing]);
 
-    const Icon = data.loop ? Repeat : Group
-
     return (
         <>
-            <NodeResizer
-                isVisible={selected}
-                minWidth={220}
-                minHeight={160}
-            />
 
 
+            {/* Group visual border - pointer-events-none so children can be interacted with */}
             <div
                 className={`
                     w-full h-full
                     rounded-xl
                     bg-foreground/5
                     border-2 border-dashed
-                    ${selected || isDropTarget ? 'border-primary/60 bg-primary/5' : 'border-foreground/20'}
+                    ${selected ? 'border-primary/60 bg-primary/5' : 'border-foreground/20'}
                     transition-colors duration-200
                     pointer-events-none
                     dark:bg-[#f0f0f040]
@@ -81,9 +72,10 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
 
             />
 
+            {/* Header with label - separate element with pointer events enabled */}
             <div className="absolute top-0 left-0 translate-y-[-100%] right-0 px-3 py-2 flex items-center gap-2 pointer-events-auto">
                 <div className={`p-1 rounded-md ${selected ? 'bg-primary/20' : 'bg-muted/50'}`}>
-                    <Icon className={`w-3.5 h-3.5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <Group className={`w-3.5 h-3.5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
                 </div>
 
                 {isEditing ? (
@@ -121,10 +113,10 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                         >
                             {label}
                         </span>
-                        {!data.loop ? <Edit2
+                        <Edit2
                             className="w-3.5 h-3.5 cursor-pointer opacity-0 group-hover:opacity-100"
                             onClick={handleEdit}
-                        /> : null}
+                        />
                     </div>
                 )}
             </div>

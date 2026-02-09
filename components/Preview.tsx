@@ -36,7 +36,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const initRef = useRef<boolean>(false);
 
     const previewSettings = useEditorStore((state) => state.previewSettings);
-    // const debugMode = useEditorStore((state) => state.debugMode);
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -141,13 +140,25 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         }
     }, [nodes.length, isReady, props.projectId, captureSnapshot]);
 
+
+
+
+
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+
+
 
     // Build material from graph
     const { material, error } = useMemo(() => {
         if (!isReady) return { material: null, error: null };
         try {
             const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
+            // Pass instanceCount to the builder so it's available in the scope (if needed)
+            // Even though we moved to baking it into the compiled code, 
+            // the builder might still use it for other things or future proofing.
+            // But wait, compileGraph uses the NODE's value. 
+            // buildTSLMaterial calls compileGraph.
+            // So we don't strictly need to pass it to buildTSLMaterial if the nodes are already updated.
             return {
                 material: buildTSLMaterial(nodes, edges, subgraphs, codeNodes),
                 error: null
@@ -161,7 +172,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
-
 
     // Dispose material when it changes
     useEffect(() => {

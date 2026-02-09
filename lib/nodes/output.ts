@@ -231,18 +231,6 @@ export const spriteNodeMaterial = {
     tsl: 'SpriteNodeMaterial',
 } as const;
 
-export const nodeMaterial = {
-    type: 'material/node',
-    label: 'NodeMaterial',
-    category: 'Material',
-    inputs: {
-        fragmentNode: { label: 'Fragment', type: 'any', connectionOnly: true },
-        vertexNode: { label: 'Vertex', type: 'any', connectionOnly: true },
-    },
-    outputs: {},
-    tsl: 'NodeMaterial',
-} as const;
-
 // All material node types for easy checking
 export const MATERIAL_NODE_TYPES = [
     'material/standard',
@@ -250,7 +238,6 @@ export const MATERIAL_NODE_TYPES = [
     'material/physical',
     'material/phong',
     'material/sprite',
-    'material/node',
 ] as const;
 
 export const materialNodes = [
@@ -259,13 +246,12 @@ export const materialNodes = [
     meshPhysicalMaterial,
     meshPhongMaterial,
     spriteNodeMaterial,
-    nodeMaterial,
 ] as const;
 
 // Type checks
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _materialChecks: readonly BaseNodeDef[] = [
-    meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial, spriteNodeMaterial, nodeMaterial
+    meshStandardMaterial, meshBasicMaterial, meshPhysicalMaterial, meshPhongMaterial, spriteNodeMaterial
 ];
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _materialNodesCheck: readonly BaseNodeDef[] = materialNodes;

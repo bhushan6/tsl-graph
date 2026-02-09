@@ -19,28 +19,6 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'any', label: 'Out' } }
     },
     {
-        type: 'math/assign',
-        label: 'Assign',
-        category: 'Math',
-        tsl: 'assign',
-        inputs: {
-            target: { type: 'any', label: 'Target' },
-            value: { type: 'any', default: 0, label: 'Value' }
-        },
-        outputs: { out: { type: 'any', label: 'Out' } }
-    },
-    {
-        type: 'math/addAssign',
-        label: 'Add Assign',
-        category: 'Math',
-        tsl: 'addAssign',
-        inputs: {
-            target: { type: 'any', label: 'Target' },
-            value: { type: 'any', default: 0, label: 'Value' }
-        },
-        outputs: { out: { type: 'any', label: 'Out' } }
-    },
-    {
         type: 'math/mul',
         label: 'Multiply',
         category: 'Math',
@@ -104,14 +82,6 @@ const mockDefs: NodeDef[] = [
         tsl: 'float',
         inputs: { value: { type: 'float', default: 0, label: 'Value' } },
         outputs: { out: { type: 'float', label: 'Out' } }
-    },
-    {
-        type: 'const/int',
-        label: 'Int',
-        category: 'Constants',
-        tsl: 'int',
-        inputs: { value: { type: 'int', default: 0, label: 'Value' } },
-        outputs: { out: { type: 'int', label: 'Out' } }
     },
     {
         type: 'const/vec3',
@@ -198,7 +168,6 @@ beforeAll(() => {
 
 const createNode = (id: string, type: string, data: Partial<TSLNodeData> = {}): Node<TSLNodeData> => ({
     id,
-    type: type as NodeType,
     position: { x: 0, y: 0 },
     data: {
         type: type as NodeType,
@@ -451,251 +420,6 @@ describe('compileGraph', () => {
             expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), 0.5)');
         });
     });
-
-    describe('Loops', () => {
-        it('should compile loop with accumulator mutation', () => {
-            const loopId = 'loop1';
-            const outputPortId = `${loopId}-out`;
-            const indexNodeId = `${loopId}-index`;
-            const accNodeId = `${loopId}-acc`;
-
-            const nodes: Node<TSLNodeData>[] = [
-                {
-                    id: loopId,
-                    type: 'group',
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'group',
-                        label: 'Loop',
-                        values: { count: 4, init: 0 },
-                        connected: {},
-                        loop: {
-                            kind: 'loop',
-                            mode: 'count',
-                            outputPortId,
-                            accNodeId,
-                            indexNodeId,
-                        },
-                    },
-                },
-                {
-                    id: outputPortId,
-                    type: 'loop/output',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'loop/output',
-                        values: {},
-                        connected: {},
-                        loopPort: {
-                            kind: 'output',
-                            portId: 'out',
-                            label: 'Acc',
-                            type: 'float',
-                        },
-                    },
-                },
-                {
-                    id: indexNodeId,
-                    type: 'loop/index',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'loop/index',
-                        values: {},
-                        connected: {},
-                    },
-                },
-                {
-                    id: accNodeId,
-                    type: 'advanced/var',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'advanced/var',
-                        values: { localName: 'acc' },
-                        connected: {},
-                    },
-                },
-                {
-                    id: 'add1',
-                    type: 'math/addAssign',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'math/addAssign',
-                        values: {},
-                        connected: {},
-                    },
-                },
-            ];
-
-            const edges: Edge[] = [
-                { id: 'e1', source: accNodeId, sourceHandle: 'out', target: 'add1', targetHandle: 'target' },
-                { id: 'e2', source: indexNodeId, sourceHandle: 'out', target: 'add1', targetHandle: 'value' },
-                { id: 'e3', source: accNodeId, sourceHandle: 'out', target: outputPortId, targetHandle: 'in' },
-            ];
-
-            const code = compileGraph(nodes, edges);
-            const expected = [
-                '// Generated TSL Code',
-                '',
-                'const _loop0_fn = Fn(() => {',
-                '  const _loop0_acc = Var(float(0));',
-                '  Loop(int(4), ({ i }) => {',
-                '    _loop0_acc.addAssign(i);',
-                '  });',
-                '  return _loop0_acc;',
-                '});',
-                'const _loop0 = _loop0_fn();',
-            ].join('\n');
-
-            expect(code).toBe(expected);
-        });
-
-        it('should resolve legacy loop count/init from input nodes', () => {
-            const loopId = 'loop-legacy';
-            const outputPortId = `${loopId}-out`;
-            const indexNodeId = `${loopId}-index`;
-            const accNodeId = `${loopId}-acc`;
-            const countPortId = `${loopId}-count`;
-            const initPortId = `${loopId}-init`;
-
-            const nodes: Node<TSLNodeData>[] = [
-                createNode('count-const', 'const/int', { values: { value: 6 } }),
-                createNode('init-const', 'const/vec3', { values: { x: 1, y: 2, z: 3 } }),
-                {
-                    id: loopId,
-                    type: 'group',
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'group',
-                        label: 'Loop',
-                        values: { count: 4, init: 0 },
-                        connected: {},
-                        loop: {
-                            kind: 'loop',
-                            mode: 'count',
-                            outputPortId,
-                            accNodeId,
-                            indexNodeId,
-                            countPortId,
-                            initPortId,
-                        },
-                    },
-                },
-                {
-                    id: countPortId,
-                    type: 'loop/input',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'loop/input',
-                        values: {},
-                        connected: {},
-                        loopPort: {
-                            kind: 'input',
-                            portId: 'count',
-                            label: 'Count',
-                            role: 'count',
-                            type: 'int',
-                        },
-                    },
-                },
-                {
-                    id: initPortId,
-                    type: 'loop/input',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'loop/input',
-                        values: {},
-                        connected: {},
-                        loopPort: {
-                            kind: 'input',
-                            portId: 'init',
-                            label: 'Init',
-                            role: 'init',
-                            type: 'vec3',
-                        },
-                    },
-                },
-                {
-                    id: outputPortId,
-                    type: 'loop/output',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'loop/output',
-                        values: {},
-                        connected: {},
-                        loopPort: {
-                            kind: 'output',
-                            portId: 'out',
-                            label: 'Acc',
-                            type: 'vec3',
-                        },
-                    },
-                },
-                {
-                    id: indexNodeId,
-                    type: 'loop/index',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'loop/index',
-                        values: {},
-                        connected: {},
-                    },
-                },
-                {
-                    id: accNodeId,
-                    type: 'advanced/var',
-                    parentId: loopId,
-                    position: { x: 0, y: 0 },
-                    data: {
-                        type: 'advanced/var',
-                        values: { localName: 'acc' },
-                        connected: {},
-                    },
-                },
-            ];
-
-            const edges: Edge[] = [
-                { id: 'e-count', source: 'count-const', sourceHandle: 'out', target: countPortId, targetHandle: 'in' },
-                { id: 'e-init', source: 'init-const', sourceHandle: 'out', target: initPortId, targetHandle: 'in' },
-                { id: 'e-init-acc', source: initPortId, sourceHandle: 'out', target: accNodeId, targetHandle: 'node' },
-                { id: 'e-acc-out', source: accNodeId, sourceHandle: 'out', target: outputPortId, targetHandle: 'in' },
-            ];
-
-            const code = compileGraph(nodes, edges);
-            const expected = [
-                '// Generated TSL Code',
-                '',
-                'const _node0 = int(6);',
-                'const _node1 = vec3(1, 2, 3);',
-                'const _loop2_fn = Fn(() => {',
-                '  const _loop2_acc = Var(_node1);',
-                '  Loop(_node0, ({ i }) => {',
-                '  });',
-                '  return _loop2_acc;',
-                '});',
-                'const _loop2 = _loop2_fn();',
-            ].join('\n');
-
-            expect(code).toBe(expected);
-        });
-    });
-
-    describe('Assign nodes', () => {
-        it('should skip assign when target input is not connected', () => {
-            const nodes = [
-                createNode('assign1', 'math/assign', { values: { value: 2 } }),
-            ];
-            const code = compileGraph(nodes, []);
-            expect(code).toBe('// Generated TSL Code\n');
-        });
-    });
 });
 
 describe('Logic Nodes', () => {
@@ -865,13 +589,5 @@ describe('getRequiredImports', () => {
         ];
         const imports = getRequiredImports(nodes);
         expect(imports).toEqual(expect.arrayContaining(['add', 'mul', 'sin']));
-    });
-
-    it('should include loop imports when loop groups exist', () => {
-        const nodes = [
-            createNode('loop1', 'group', { loop: { kind: 'loop' } }),
-        ];
-        const imports = getRequiredImports(nodes);
-        expect(imports).toEqual(expect.arrayContaining(['Loop', 'Var', 'Fn', 'float', 'int']));
     });
 });

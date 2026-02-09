@@ -22,28 +22,6 @@ export const mathNodes = [
         tsl: 'add',
     },
     {
-        type: 'math/assign',
-        label: 'Assign',
-        category: 'Math',
-        inputs: {
-            target: { label: 'Target', type: 'any' },
-            value: { label: 'Value', type: 'any', default: 0 },
-        },
-        outputs: { out: { label: 'Out', type: 'any' } },
-        tsl: 'assign',
-    },
-    {
-        type: 'math/addAssign',
-        label: 'Add Assign',
-        category: 'Math',
-        inputs: {
-            target: { label: 'Target', type: 'any' },
-            value: { label: 'Value', type: 'any', default: 0 },
-        },
-        outputs: { out: { label: 'Out', type: 'any' } },
-        tsl: 'addAssign',
-    },
-    {
         type: 'math/sub',
         label: 'Subtract',
         category: 'Math',

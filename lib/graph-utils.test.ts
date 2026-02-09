@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { topologicalSort, hasCycle, getParentedPositionForNewNode } from './graph-utils';
+import { topologicalSort, hasCycle } from './graph-utils';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData } from '@/lib/types';
 
@@ -112,37 +112,5 @@ describe('hasCycle', () => {
 
         // Try to connect A -> A
         expect(hasCycle(createNode('A'), createNode('A'), nodes, edges)).toBe(true);
-    });
-});
-
-describe('getParentedPositionForNewNode', () => {
-    it('should return null when source has no parent', () => {
-        const nodes = [createNode('A')];
-        const result = getParentedPositionForNewNode(nodes, 'A', { x: 100, y: 100 });
-        expect(result).toBeNull();
-    });
-
-    it('should return relative position for parented source', () => {
-        const parent = {
-            id: 'group1',
-            type: 'group',
-            position: { x: 50, y: 75 },
-            data: { type: 'group', values: {}, connected: {} },
-        } as Node<TSLNodeData>;
-        const child = {
-            id: 'child1',
-            position: { x: 10, y: 20 },
-            parentId: 'group1',
-            data: { type: 'math/add', values: {}, connected: {} },
-        } as Node<TSLNodeData>;
-        const nodes = [parent, child];
-
-        const result = getParentedPositionForNewNode(nodes, 'child1', { x: 120, y: 130 });
-
-        expect(result).toEqual({
-            parentId: 'group1',
-            extent: 'parent',
-            position: { x: 70, y: 55 },
-        });
     });
 });
