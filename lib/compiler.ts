@@ -1266,6 +1266,17 @@ export function compileGraph(
             lines.push('// Material');
             lines.push(`const material = new ${materialDef.tsl}();`);
 
+            // MeshPhysicalNodeMaterial feature-gating keys:
+            // These properties control whether Three.js enables expensive PBR features
+            // (clearcoat, sheen, iridescence, transmission). Setting them to non-null
+            // (even float(0)) activates the feature. Only set when actually connected.
+            const PHYSICAL_FEATURE_KEYS = new Set([
+                'clearcoatNode', 'clearcoatRoughnessNode',
+                'sheenNode', 'sheenRoughnessNode',
+                'iridescenceNode',
+                'transmissionNode', 'thicknessNode',
+            ]);
+
             const inputKeys = Object.keys(materialDef.inputs ?? {});
             for (const key of inputKeys) {
                 const inputDef = materialDef.inputs![key];
@@ -1280,6 +1291,16 @@ export function compileGraph(
                 // 2. Use local value (properties panel)
                 // Skip connection-only inputs that aren't connected
                 if (inputDef.connectionOnly) continue;
+
+                // 2b. Skip physical-material feature-gating inputs when not connected.
+                // Setting these to any non-null value (even float(0)) tricks Three.js into
+                // enabling expensive features like transmission rendering, causing a black material.
+                if (PHYSICAL_FEATURE_KEYS.has(key)) {
+                    const userVal = materialNode.data.values?.[key];
+                    if (userVal === undefined || userVal === inputDef.default) {
+                        continue;
+                    }
+                }
 
                 // 3. Handle raw material properties (depthWrite, blending, etc)
                 if (inputDef.isMaterialProp) {
