@@ -92,10 +92,22 @@ export type EditorMode = 'main' | 'subgraph';
 const GRAPH_VERSION = 1;
 const STORAGE_KEY = 'tsl-editor-graph';
 
+type LoopMode = 'count' | 'range' | 'reverse' | 'nested' | 'condition';
+
+const LOOP_MODES: readonly LoopMode[] = ['count', 'range', 'reverse', 'nested', 'condition'];
+const DEFAULT_LOOP_MODE: LoopMode = 'count';
+const DEFAULT_LOOP_TYPE = 'int';
+const DEFAULT_LOOP_COMPARE = '<';
+
 const LOOP_INTERNAL_NODE_TYPES = new Set([
     'loop/count',
+    'loop/start',
+    'loop/end',
     'loop/index',
+    'loop/count2',
+    'loop/index2',
     'loop/accumulator',
+    'loop/condition',
     'loop/output',
 ]);
 
@@ -103,12 +115,96 @@ const LOOP_SLOT_X = 20;
 const LOOP_SLOT_Y = 20;
 const LOOP_SLOT_GAP = 90;
 const LOOP_NODE_WIDTH = 50;
+const LOOP_EXTRA_HEIGHT = 120;
+
+const LOOP_LEFT_NODE_TYPES_BY_MODE: Record<LoopMode, readonly string[]> = {
+    count: ['loop/count', 'loop/index', 'loop/accumulator'],
+    range: ['loop/start', 'loop/end', 'loop/index', 'loop/accumulator'],
+    reverse: ['loop/start', 'loop/index', 'loop/accumulator'],
+    nested: ['loop/count', 'loop/index', 'loop/count2', 'loop/index2', 'loop/accumulator'],
+    condition: ['loop/condition', 'loop/accumulator'],
+};
 
 const isLoopGroupNode = (node: Node<TSLNodeData>) => node.type === 'loop' || node.data.type === 'loop';
 
 const isGroupLikeNode = (node: Node<TSLNodeData>) => node.type === 'group' || isLoopGroupNode(node);
 
 const isLoopInternalNode = (node: Node<TSLNodeData>) => LOOP_INTERNAL_NODE_TYPES.has(node.data.type);
+
+const getLoopMode = (node: Node<TSLNodeData>): LoopMode => {
+    const mode = node.data.values?.loopMode;
+    return LOOP_MODES.includes(mode as LoopMode) ? (mode as LoopMode) : DEFAULT_LOOP_MODE;
+};
+
+const getLoopLeftNodeTypes = (mode: LoopMode): readonly string[] => {
+    return LOOP_LEFT_NODE_TYPES_BY_MODE[mode] ?? LOOP_LEFT_NODE_TYPES_BY_MODE[DEFAULT_LOOP_MODE];
+};
+
+const getLoopRequiredHeight = (mode: LoopMode): number => {
+    const leftCount = getLoopLeftNodeTypes(mode).length;
+    if (leftCount === 0) return LOOP_EXTRA_HEIGHT;
+    return LOOP_SLOT_Y + (leftCount - 1) * LOOP_SLOT_GAP + LOOP_EXTRA_HEIGHT;
+};
+
+const getLoopInternalDefaultValues = (type: string): Record<string, TSLValueType> => {
+    switch (type) {
+        case 'loop/count':
+        case 'loop/count2':
+            return { count: 1 };
+        case 'loop/start':
+            return { start: 0 };
+        case 'loop/end':
+            return { end: 1 };
+        case 'loop/accumulator':
+            return { seed: 0 };
+        case 'loop/condition':
+            return { cond: false };
+        default:
+            return {};
+    }
+};
+
+const LOOP_INTERNAL_ID_SUFFIX: Record<string, string> = {
+    'loop/count': 'count',
+    'loop/start': 'start',
+    'loop/end': 'end',
+    'loop/index': 'index',
+    'loop/count2': 'count2',
+    'loop/index2': 'index2',
+    'loop/accumulator': 'acc',
+    'loop/condition': 'condition',
+    'loop/output': 'output',
+};
+
+const createLoopInternalNode = (
+    loopId: string,
+    type: string,
+    position: { x: number; y: number },
+    width?: number
+): Node<TSLNodeData> => {
+    const idSuffix = LOOP_INTERNAL_ID_SUFFIX[type] ?? type.split('/')[1];
+    const id = `${loopId}::${idSuffix}`;
+    const node: Node<TSLNodeData> = {
+        id,
+        type,
+        position,
+        parentId: loopId,
+        extent: 'parent',
+        draggable: false,
+        data: {
+            type: type as NodeType,
+            values: getLoopInternalDefaultValues(type),
+            connected: {},
+        },
+    };
+
+    if (type === 'loop/output' && typeof width === 'number') {
+        node.position.x = Math.max(LOOP_SLOT_X, width - LOOP_NODE_WIDTH - LOOP_SLOT_X);
+        node.position.y = LOOP_SLOT_Y;
+    }
+
+    return node;
+};
 
 const getNodeDimensionValue = (node: Node<TSLNodeData>, key: 'width' | 'height'): number | null => {
     const direct = (node as Node<TSLNodeData> & { [k: string]: unknown })[key];
@@ -260,6 +356,7 @@ interface EditorState {
     groupNodes: () => void;
     ungroupNodes: () => void;
     createLoopGroup: () => void;
+    setLoopMode: (loopId: string, mode: LoopMode) => void;
     removeNodesFromGroup: (nodeIds: string[]) => void;
     dropNodesIntoGroup: (nodeIds: string[], groupId: string, nodesSnapshot?: Node<TSLNodeData>[]) => void;
 
@@ -561,39 +658,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             updatedNodes = updatedNodes.map((node) => {
                 if (!node.parentId || !resizedLoopGroups.has(node.parentId)) return node;
 
-                if (
-                    node.data.type !== 'loop/output'
-                    && node.data.type !== 'loop/count'
-                    && node.data.type !== 'loop/index'
-                    && node.data.type !== 'loop/accumulator'
-                ) {
-                    return node;
-                }
+                if (!isLoopInternalNode(node)) return node;
 
                 const parent = nodesById.get(node.parentId);
                 if (!parent) return node;
 
-                const width = getNodeDimensionValue(parent, 'width');
-                if (!width) return node;
+                const loopMode = getLoopMode(parent);
+                const leftTypes = getLoopLeftNodeTypes(loopMode);
+                const width = getNodeDimensionValue(parent, 'width') ?? 0;
 
                 if (node.data.type === 'loop/output') {
                     const nextX = Math.max(LOOP_SLOT_X, width - LOOP_NODE_WIDTH - LOOP_SLOT_X);
-                    if (node.position.x === nextX) return node;
+                    if (node.position.x === nextX && node.position.y === LOOP_SLOT_Y) return node;
                     return {
                         ...node,
                         position: {
-                            ...node.position,
                             x: nextX,
+                            y: LOOP_SLOT_Y,
                         },
                     };
                 }
 
+                const index = leftTypes.indexOf(node.data.type);
+                if (index === -1) return node;
                 const expectedX = LOOP_SLOT_X;
-                const expectedY = node.data.type === 'loop/count'
-                    ? LOOP_SLOT_Y
-                    : node.data.type === 'loop/index'
-                        ? LOOP_SLOT_Y + LOOP_SLOT_GAP
-                        : LOOP_SLOT_Y + LOOP_SLOT_GAP * 2;
+                const expectedY = LOOP_SLOT_Y + LOOP_SLOT_GAP * index;
 
                 if (node.position.x === expectedX && node.position.y === expectedY) return node;
 
@@ -2163,7 +2252,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const MIN_HEIGHT = 320;
 
         const width = Math.max(bounds.width + LEFT_PANEL + RIGHT_PANEL, MIN_WIDTH);
-        const height = Math.max(bounds.height + BASE_PADDING * 2, MIN_HEIGHT);
+        const minLoopHeight = getLoopRequiredHeight(DEFAULT_LOOP_MODE);
+        const height = Math.max(bounds.height + BASE_PADDING * 2, MIN_HEIGHT, minLoopHeight);
         const x = bounds.x - LEFT_PANEL;
         const y = bounds.y - BASE_PADDING;
 
@@ -2176,67 +2266,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             style: { width, height },
             data: {
                 type: 'loop',
-                values: { label: 'Loop' },
+                values: {
+                    label: 'Loop',
+                    loopMode: DEFAULT_LOOP_MODE,
+                    loopType: DEFAULT_LOOP_TYPE,
+                    loopCompare: DEFAULT_LOOP_COMPARE,
+                },
                 connected: {},
             },
             selected: true,
         };
 
-        const countNode: Node<TSLNodeData> = {
-            id: `${loopId}::count`,
-            type: 'loop/count',
-            position: { x: LOOP_SLOT_X, y: LOOP_SLOT_Y },
-            parentId: loopId,
-            extent: 'parent',
-            draggable: false,
-            data: {
-                type: 'loop/count',
-                values: { count: 1 },
-                connected: {},
-            },
-        };
+        const leftNodes = getLoopLeftNodeTypes(DEFAULT_LOOP_MODE).map((type, index) =>
+            createLoopInternalNode(loopId, type, {
+                x: LOOP_SLOT_X,
+                y: LOOP_SLOT_Y + LOOP_SLOT_GAP * index,
+            })
+        );
 
-        const indexNode: Node<TSLNodeData> = {
-            id: `${loopId}::index`,
-            type: 'loop/index',
-            position: { x: LOOP_SLOT_X, y: LOOP_SLOT_Y + LOOP_SLOT_GAP },
-            parentId: loopId,
-            extent: 'parent',
-            draggable: false,
-            data: {
-                type: 'loop/index',
-                values: {},
-                connected: {},
-            },
-        };
-
-        const accNode: Node<TSLNodeData> = {
-            id: `${loopId}::acc`,
-            type: 'loop/accumulator',
-            position: { x: LOOP_SLOT_X, y: LOOP_SLOT_Y + LOOP_SLOT_GAP * 2 },
-            parentId: loopId,
-            extent: 'parent',
-            draggable: false,
-            data: {
-                type: 'loop/accumulator',
-                values: { seed: 0 },
-                connected: {},
-            },
-        };
-
-        const outputNode: Node<TSLNodeData> = {
-            id: `${loopId}::output`,
-            type: 'loop/output',
-            position: { x: width - LOOP_NODE_WIDTH - LOOP_SLOT_X, y: LOOP_SLOT_Y },
-            parentId: loopId,
-            extent: 'parent',
-            draggable: false,
-            data: {
-                type: 'loop/output',
-                values: {},
-                connected: {},
-            },
-        };
+        const outputNode = createLoopInternalNode(loopId, 'loop/output', { x: LOOP_SLOT_X, y: LOOP_SLOT_Y }, width);
 
         // 6. Update selected nodes to be children of the loop group
         const newNodes = nodes.map(node => {
@@ -2265,9 +2313,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...newNodes.slice(0, insertIndex),
             loopNode,
             ...newNodes.slice(insertIndex),
-            countNode,
-            indexNode,
-            accNode,
+            ...leftNodes,
             outputNode,
         ];
 
@@ -2275,6 +2321,120 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: finalNodes,
             selectedNodeIds: [loopId],
             selectedNodeId: loopId,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    setLoopMode: (loopId, mode) => {
+        const { nodes, edges } = get();
+        const loopNode = nodes.find(n => n.id === loopId);
+        if (!loopNode || !isLoopGroupNode(loopNode)) return;
+
+        const normalizedMode: LoopMode = LOOP_MODES.includes(mode) ? mode : DEFAULT_LOOP_MODE;
+        const prevMode = getLoopMode(loopNode);
+
+        get().takeSnapshot();
+
+        const desiredLeftTypes = getLoopLeftNodeTypes(normalizedMode);
+        const desiredTypes = new Set<string>([...desiredLeftTypes, 'loop/output']);
+
+        const internalNodes = nodes.filter(n => n.parentId === loopId && isLoopInternalNode(n));
+        const internalByType = new Map(internalNodes.map(n => [n.data.type, n]));
+
+        const removeIds = new Set(
+            internalNodes.filter(n => !desiredTypes.has(n.data.type)).map(n => n.id)
+        );
+
+        const filteredNodes = nodes.filter(n => !removeIds.has(n.id));
+        const filteredEdges = edges.filter(e => !removeIds.has(e.source) && !removeIds.has(e.target));
+
+        const leftPositions = new Map<string, { x: number; y: number }>();
+        desiredLeftTypes.forEach((type, index) => {
+            leftPositions.set(type, { x: LOOP_SLOT_X, y: LOOP_SLOT_Y + LOOP_SLOT_GAP * index });
+        });
+
+        const loopWidth = getNodeDimensionValue(loopNode, 'width') ?? 0;
+        const outputX = Math.max(LOOP_SLOT_X, loopWidth - LOOP_NODE_WIDTH - LOOP_SLOT_X);
+        const outputPosition = { x: outputX, y: LOOP_SLOT_Y };
+
+        const newNodesToAdd: Node<TSLNodeData>[] = [];
+        for (const type of desiredLeftTypes) {
+            if (!internalByType.has(type)) {
+                const pos = leftPositions.get(type)!;
+                newNodesToAdd.push(createLoopInternalNode(loopId, type, pos));
+            }
+        }
+        if (!internalByType.has('loop/output')) {
+            newNodesToAdd.push(createLoopInternalNode(loopId, 'loop/output', outputPosition, loopWidth));
+        }
+
+        const compareOptions = ['<', '<=', '>', '>='];
+        const rawCompare = loopNode.data.values?.loopCompare;
+        let nextCompare = compareOptions.includes(String(rawCompare))
+            ? String(rawCompare)
+            : (normalizedMode === 'reverse' ? '>' : DEFAULT_LOOP_COMPARE);
+
+        if (
+            normalizedMode === 'reverse'
+            && prevMode !== 'range'
+            && prevMode !== 'reverse'
+            && nextCompare === DEFAULT_LOOP_COMPARE
+        ) {
+            nextCompare = '>';
+        }
+
+        const rawType = loopNode.data.values?.loopType;
+        const nextType = rawType === 'float' || rawType === 'int' ? rawType : DEFAULT_LOOP_TYPE;
+
+        const requiredHeight = getLoopRequiredHeight(normalizedMode);
+        const currentHeight = getNodeDimensionValue(loopNode, 'height') ?? 0;
+        const nextHeight = currentHeight > 0 ? Math.max(currentHeight, requiredHeight) : requiredHeight;
+
+        const updatedNodes = filteredNodes.map((node) => {
+            if (node.id === loopId) {
+                return {
+                    ...node,
+                    style: {
+                        ...node.style,
+                        height: nextHeight,
+                    },
+                    data: {
+                        ...node.data,
+                        values: {
+                            ...node.data.values,
+                            loopMode: normalizedMode,
+                            loopType: nextType,
+                            loopCompare: nextCompare,
+                        },
+                    },
+                };
+            }
+
+            if (node.parentId === loopId && desiredTypes.has(node.data.type)) {
+                if (node.data.type === 'loop/output') {
+                    if (node.position.x === outputPosition.x && node.position.y === outputPosition.y) return node;
+                    return {
+                        ...node,
+                        position: outputPosition,
+                    };
+                }
+
+                const pos = leftPositions.get(node.data.type);
+                if (!pos) return node;
+                if (node.position.x === pos.x && node.position.y === pos.y) return node;
+                return {
+                    ...node,
+                    position: pos,
+                };
+            }
+
+            return node;
+        });
+
+        set({
+            nodes: [...updatedNodes, ...newNodesToAdd],
+            edges: filteredEdges,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
