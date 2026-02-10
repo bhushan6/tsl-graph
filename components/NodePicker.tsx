@@ -314,6 +314,10 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                     return false;
                 }
 
+                if (editorMode === 'subgraph' && node.type === 'const/uniform') {
+                    return false;
+                }
+
                 const isAnchorNode = ANCHOR_NODE_TYPES.includes(node.type as typeof ANCHOR_NODE_TYPES[number]);
 
                 if (isAnchorNode) {

@@ -5,6 +5,7 @@ import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types
 import { compileGraph } from './compiler';
 import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
 import { hashBlur } from 'three/addons/tsl/display/hashBlur.js';
+import { ensureUniform, setUniformFactory } from './uniform-store';
 
 /**
  * Build a Three.js material from the node graph by compiling to TSL and evaluating it.
@@ -17,7 +18,10 @@ export function buildTSLMaterial(
     codeNodes?: Record<string, CodeNodeDefinition>
 ): THREE.Material {
     // 1. Compile the graph to TSL code
-    const code = compileGraph(nodes, edges, subgraphs, codeNodes);
+    const code = compileGraph(nodes, edges, subgraphs, codeNodes, { uniformMode: 'runtime' });
+
+    // Ensure uniform factory is wired to TSL runtime
+    setUniformFactory(TSL.uniform);
 
     // 2. Prepare the execution scope
     // We need all TSL functions (float, vec3, Fn, etc.) and Material classes available
@@ -37,6 +41,7 @@ export function buildTSLMaterial(
         fresnelFull,
         node_normalize: TSL.normalize,
         hashBlur,
+        __uniform: ensureUniform,
     };
 
     const scopeKeys = Object.keys(scope);
@@ -109,7 +114,10 @@ export function buildNodePreviewMaterial(
     const partialEdges = edges.filter(e => ancestorIds.has(e.source) && ancestorIds.has(e.target));
 
     // 3. Compile the partial graph (without material node)
-    const code = compileGraph(partialNodes, partialEdges, subgraphs, codeNodes);
+    const code = compileGraph(partialNodes, partialEdges, subgraphs, codeNodes, { uniformMode: 'runtime' });
+
+    // Ensure uniform factory is wired to TSL runtime
+    setUniformFactory(TSL.uniform);
 
     // 4. Extract the variable names from compiled code
     // The code produces lines like "const _node0 = ...;" or "const myVarName = ...;"
@@ -138,6 +146,7 @@ export function buildNodePreviewMaterial(
         ...TSL,
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
         THREE: THREE,
+        __uniform: ensureUniform,
     };
 
     const scopeKeys = Object.keys(scope);

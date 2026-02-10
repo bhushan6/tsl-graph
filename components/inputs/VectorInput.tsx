@@ -10,11 +10,12 @@ interface VectorInputProps {
     onChange: (value: number[]) => void;
     size: 2 | 3 | 4;
     labels?: string[]; // Defaults to ['X', 'Y', 'Z', 'W']
+    immediate?: boolean;
 }
 
 const defaultLabels = ['X', 'Y', 'Z', 'W'];
 
-function VectorInputComponent({ value, onChange, size, labels }: VectorInputProps) {
+function VectorInputComponent({ value, onChange, size, labels, immediate = false }: VectorInputProps) {
     // Ensure value is an array of correct size
 
     const getSafeValue = (): number[] => {
@@ -53,6 +54,7 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
                     <NumberInput
                         value={safeValue[i]}
                         onChange={(v) => handleChange(i, v)}
+                        immediate={immediate}
                         className="pl-5 pr-2"
                     />
                     <div className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none group-focus-within:text-primary transition-colors">
@@ -64,7 +66,17 @@ function VectorInputComponent({ value, onChange, size, labels }: VectorInputProp
     );
 }
 
-function NumberInput({ value, onChange, className }: { value: number; onChange: (val: number) => void; className?: string }) {
+function NumberInput({
+    value,
+    onChange,
+    className,
+    immediate = false,
+}: {
+    value: number;
+    onChange: (val: number) => void;
+    className?: string;
+    immediate?: boolean;
+}) {
     const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -89,7 +101,11 @@ function NumberInput({ value, onChange, className }: { value: number; onChange: 
                     setLocalValue(inputValue);
                     const f = parseFloat(inputValue);
                     if (!isNaN(f)) {
-                        debouncedOnChange(f);
+                        if (immediate) {
+                            onChange(f);
+                        } else {
+                            debouncedOnChange(f);
+                        }
                     }
                 }
             }}

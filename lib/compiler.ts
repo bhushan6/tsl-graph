@@ -4,12 +4,17 @@ import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
+import { formatUniformValueExpression, getUniformKindFromNode } from './uniform-utils';
 
 interface CompiledNode {
     id: string;
     varName: string;
     code: string;
     singleOutput?: boolean;
+}
+
+export interface CompileOptions {
+    uniformMode?: 'inline' | 'runtime';
 }
 
 // Component swizzle mapping for code generation
@@ -280,6 +285,10 @@ function compileSubgraphDefinition(
     usedCodeNodes?: Map<string, string>,
     codeNodesMap?: Record<string, CodeNodeDefinition>
 ): string[] {
+    if (subgraph.nodes.some((n) => n.data.type === 'const/uniform')) {
+        throw new Error('Uniform nodes are not supported inside subgraphs yet.');
+    }
+
     const lines: string[] = [];
     const internalNodes = subgraph.nodes;
     // We saved edges including those to anchor nodes in store/editor.ts
@@ -597,11 +606,14 @@ export function compileGraph(
     nodes: Node<TSLNodeData>[],
     edges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
-    codeNodes?: Record<string, CodeNodeDefinition>
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    options: CompileOptions = {}
 ): string {
     if (nodes.length === 0) {
         return '// No nodes in graph';
     }
+
+    const uniformMode = options.uniformMode ?? 'inline';
 
     const lines: string[] = [];
     const usedSubgraphs = new Map<string, string>(); // subgraphId -> functionName
@@ -772,6 +784,38 @@ export function compileGraph(
     let nodeIndex = 0;
 
     const compileSingleNode = (node: Node<TSLNodeData>, targetLines: string[], edgesForInputs: Edge[]) => {
+        // Handle Uniform node (single node with type selector)
+        if (node.data.type === 'const/uniform') {
+            const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+            const baseName = localName
+                ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                : `_node${nodeIndex}`;
+
+            let displayName = baseName;
+            let suffix = 1;
+            while (usedNames.has(displayName)) {
+                displayName = `${baseName}_${suffix++}`;
+            }
+            usedNames.add(displayName);
+            nodeIndex++;
+
+            const kind = getUniformKindFromNode(node);
+            const valueExpr = formatUniformValueExpression(kind, node.data.values?.value);
+
+            if (uniformMode === 'runtime') {
+                targetLines.push(`const ${displayName} = __uniform("${node.id}", ${valueExpr}, "${kind}");`);
+            } else {
+                targetLines.push(`const ${displayName} = uniform(${valueExpr});`);
+            }
+
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: displayName,
+                code: `/* uniform ${kind} */`,
+            });
+            return;
+        }
+
         // Handle Subgraph Instance
         if (node.data.type.startsWith('custom/')) {
             const funcName = usedSubgraphs.get(node.data.type);

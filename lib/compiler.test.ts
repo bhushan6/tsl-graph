@@ -256,6 +256,32 @@ describe('compileGraph', () => {
             expect(code).toContain('material.vertexNode = _node1;');
         });
 
+        it('should compile a uniform node in inline mode', () => {
+            const nodes = [
+                createNode('u1', 'const/uniform', { values: { uniformType: 'float', value: 0.25 } }),
+            ];
+            const code = compileGraph(nodes, []);
+            const expected = [
+                '// Generated TSL Code',
+                '',
+                'const _node0 = uniform(0.25);',
+            ].join('\n');
+            expect(code.trim()).toBe(expected.trim());
+        });
+
+        it('should compile a uniform node in runtime mode', () => {
+            const nodes = [
+                createNode('u1', 'const/uniform', { values: { uniformType: 'vec3', value: [1, 2, 3] } }),
+            ];
+            const code = compileGraph(nodes, [], undefined, undefined, { uniformMode: 'runtime' });
+            const expected = [
+                '// Generated TSL Code',
+                '',
+                'const _node0 = __uniform(\"u1\", new THREE.Vector3(1, 2, 3), \"vec3\");',
+            ].join('\n');
+            expect(code.trim()).toBe(expected.trim());
+        });
+
         it('should use user-defined names when available', () => {
             const nodes = [
                 createNode('add1', 'math/add', { values: { a: 1, b: 2, localName: 'mySum' } })

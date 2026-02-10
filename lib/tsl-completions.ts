@@ -23,6 +23,7 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'vec3', type: 'function', detail: 'vec3(x, y, z)', info: 'Create a vec3 node', boost: 10 },
     { label: 'vec4', type: 'function', detail: 'vec4(x, y, z, w)', info: 'Create a vec4 node', boost: 10 },
     { label: 'color', type: 'function', detail: 'color(r, g, b)', info: 'Create a color node', boost: 10 },
+    { label: 'uniform', type: 'function', detail: 'uniform(value)', info: 'Create a uniform node', boost: 8 },
 
     // -- Arithmetic --
     { label: 'add', type: 'function', detail: 'add(a, b) / a.add(b)', info: 'Add two values' },

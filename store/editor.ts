@@ -14,10 +14,12 @@ import {
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
+import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
 import { toast } from 'sonner';
+import { coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
+import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
 
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
@@ -227,6 +229,7 @@ interface EditorState {
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
+    setUniformType: (nodeId: string, newKind: UniformKind) => void;
     addMultiOp: (nodeId: string, op?: MultiOpType) => void;
     updateMultiOp: (nodeId: string, opId: string, op: MultiOpType) => void;
     removeMultiOp: (nodeId: string, opId: string) => void;
@@ -610,6 +613,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 .map((c) => c.id)
         );
 
+        if (removedIds.size > 0) {
+            for (const id of removedIds) {
+                const removedNode = currentNodes.find(n => n.id === id);
+                if (removedNode?.data.type === 'const/uniform') {
+                    removeUniform(id);
+                }
+            }
+        }
+
         const updatedEdges = removedIds.size > 0
             ? get().edges.filter(e => !removedIds.has(e.source) && !removedIds.has(e.target))
             : get().edges;
@@ -733,18 +745,61 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     updateNodeValue: (nodeId, key, value) => {
         get().takeSnapshot();
+        const prevNodes = get().nodes;
+        let uniformKind: UniformKind | null = null;
+        let isUniformValueUpdate = false;
+
+        const updatedNodes = prevNodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            const nextValues = { ...node.data.values, [key]: value };
+            if (node.data.type === 'const/uniform' && key === 'value') {
+                isUniformValueUpdate = true;
+                uniformKind = getUniformKindFromNode({ data: { values: nextValues } } as AppNode);
+            }
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: nextValues,
+                },
+            };
+        });
+
+        if (isUniformValueUpdate && uniformKind) {
+            updateUniformValue(nodeId, uniformKind, value);
+        }
+
         set({
-            nodes: get().nodes.map((node) =>
-                node.id === nodeId
-                    ? {
-                        ...node,
-                        data: {
-                            ...node.data,
-                            values: { ...node.data.values, [key]: value },
-                        },
-                    }
-                    : node
-            ),
+            nodes: updatedNodes,
+            graphStructureVersion: isUniformValueUpdate ? get().graphStructureVersion : get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    setUniformType: (nodeId, newKind) => {
+        get().takeSnapshot();
+        const updatedNodes = get().nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            if (node.data.type !== 'const/uniform') return node;
+
+            const prevValue = node.data.values?.value;
+            const nextValue = coerceUniformValue(newKind, prevValue);
+
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: {
+                        ...node.data.values,
+                        uniformType: newKind,
+                        value: nextValue,
+                    },
+                },
+            };
+        });
+
+        set({
+            nodes: updatedNodes,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
@@ -882,6 +937,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 .forEach(n => idsToRemove.add(n.id));
         }
 
+        for (const id of idsToRemove) {
+            const removedNode = nodes.find(n => n.id === id);
+            if (removedNode?.data.type === 'const/uniform') {
+                removeUniform(id);
+            }
+        }
+
         set({
             nodes: nodes.filter((node) => !idsToRemove.has(node.id)),
             edges: get().edges.filter(
@@ -1003,6 +1065,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         try {
             const data = JSON.parse(json) as GraphData;
             if (data.version && data.nodes && data.edges) {
+                clearUniforms();
                 set({
                     nodes: data.nodes,
                     edges: data.edges,
@@ -1078,6 +1141,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Clear the graph
     clearGraph: () => {
         get().takeSnapshot();
+        clearUniforms();
         set({
             nodes: [],
             edges: [],
@@ -1127,6 +1191,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         );
         if (hasMaterialNode) {
             console.warn('Cannot create subgraph: Material nodes cannot be included in a subgraph.');
+            return null;
+        }
+
+        const hasUniformNode = selectedNodes.some(n => n.data.type === 'const/uniform');
+        if (hasUniformNode) {
+            toast.error('Uniform nodes cannot be used inside subgraphs yet.');
             return null;
         }
 
