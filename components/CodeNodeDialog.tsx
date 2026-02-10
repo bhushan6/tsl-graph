@@ -2,6 +2,11 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { Code, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import CodeMirror from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { tslAutocompletion } from '@/lib/tsl-completions';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { useTheme } from 'next-themes';
 import {
     Dialog,
     DialogContent,
@@ -57,6 +62,9 @@ export function CodeNodeDialog({
     const [isSaving, setIsSaving] = useState(false);
     const [inputTypes, setInputTypes] = useState<Record<string, TSLType>>({});
     const { createCodeNode, updateCodeNode, subgraphs, getCodeNode } = useEditorStore();
+
+    const { resolvedTheme } = useTheme();
+    const extensions = useMemo(() => [javascript(), tslAutocompletion], []);
 
     // When editing, load existing input types from the code node
     const existingCodeNode = mode === 'edit' && nodeId ? getCodeNode(nodeId) : null;
@@ -200,16 +208,26 @@ export function CodeNodeDialog({
                         )}
                     </div>
 
-                    {/* Code textarea */}
+                    {/* Code editor */}
                     <div className="space-y-2">
-                        <Label htmlFor="node-code">TSL Code</Label>
-                        <textarea
-                            id="node-code"
-                            value={code}
-                            onChange={(e) => setCode(e.target.value)}
-                            placeholder={PLACEHOLDER_CODE}
-                            className="w-full h-48 px-3 py-2 text-sm font-mono bg-muted rounded-md border border-input resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
+                        <Label>TSL Code</Label>
+                        <div className="rounded-md border border-input overflow-hidden">
+                            <CodeMirror
+                                value={code}
+                                onChange={setCode}
+                                extensions={extensions}
+                                theme={resolvedTheme === 'dark' ? oneDark : undefined}
+                                placeholder={PLACEHOLDER_CODE}
+                                height="200px"
+                                basicSetup={{
+                                    lineNumbers: true,
+                                    foldGutter: false,
+                                    highlightActiveLine: true,
+                                    bracketMatching: true,
+                                    autocompletion: false, // handled by tslAutocompletion extension
+                                }}
+                            />
+                        </div>
 
                         {/* Validation status */}
                         <div className="flex items-center gap-2 text-xs">

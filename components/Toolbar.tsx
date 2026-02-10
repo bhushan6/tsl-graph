@@ -2,13 +2,14 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Sparkles, LayoutGrid } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
+import { detectConvertibleChain } from '@/lib/multi-op-convert';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
@@ -18,6 +19,7 @@ interface ToolbarProps {
 export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
     const {
         nodes,
+        edges,
         selectedNodeIds,
         createSubgraph,
         enterSubgraphEditor,
@@ -32,7 +34,9 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
         setCanvasMode,
         groupNodes,
         ungroupNodes,
-        autoLayoutGraph,
+        createLoopGroup,
+        removeNodesFromGroup,
+        convertChainToMultiOp,
         debugMode,
         setDebugMode,
     } = useEditorStore();
@@ -150,23 +154,6 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>Selection Mode</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span className="inline-flex">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={autoLayoutGraph}
-                                    className="h-8 w-8"
-                                    disabled={nodes.length === 0}
-                                >
-                                    <LayoutGrid className="w-4 h-4" />
-                                </Button>
-                            </span>
-                        </TooltipTrigger>
-                        <TooltipContent>Auto Layout</TooltipContent>
                     </Tooltip>
                 </div>
 
@@ -303,6 +290,52 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
             <div className="w-px h-4 bg-border" />
 
             <div className="flex items-center gap-0.5">
+                {selectedNodeIds.length > 0 && (() => {
+                    const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+                    const canRemoveFromGroup = selectedNodes.length > 0 && selectedNodes.every((node) => {
+                        if (node.type === 'group' || node.data.type === 'loop') return false;
+                        if (!node.parentId) return false;
+                        if (node.data.type.startsWith('loop/')) return false;
+                        const parent = nodes.find(n => n.id === node.parentId);
+                        return !!parent && (parent.type === 'group' || parent.data.type === 'loop');
+                    });
+
+                    if (!canRemoveFromGroup) return null;
+
+                    return (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removeNodesFromGroup(selectedNodeIds)}
+                                        className="h-8 w-8"
+                                    >
+                                        <Ungroup className="w-4 h-4" />
+                                    </Button>
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Remove from Group</TooltipContent>
+                        </Tooltip>
+                    );
+                })()}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={createLoopGroup}
+                                className="h-8 w-8"
+                                disabled={selectedNodeIds.length < 1}
+                            >
+                                <Repeat className="w-4 h-4" />
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Create Loop</TooltipContent>
+                </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <span className="inline-flex">
@@ -319,7 +352,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                     </TooltipTrigger>
                     <TooltipContent>Group Nodes</TooltipContent>
                 </Tooltip>
-                {selectedNodeIds.length > 0 && nodes.filter(n => selectedNodeIds.includes(n.id)).every(n => n.type === 'group') && (
+                {selectedNodeIds.length > 0 && nodes.filter(n => selectedNodeIds.includes(n.id)).every(n => n.type === 'group' && n.data.type !== 'loop') && (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
@@ -334,26 +367,26 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                         <TooltipContent>Ungroup Nodes</TooltipContent>
                     </Tooltip>
                 )}
+                {selectedNodeIds.length >= 2 && (() => {
+                    const chainResult = detectConvertibleChain(selectedNodeIds, nodes, edges);
+                    if (!chainResult.valid) return null;
+                    return (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => convertChainToMultiOp(chainResult.orderedNodeIds)}
+                                    className="h-8 w-8"
+                                >
+                                    <Combine className="w-4 h-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Convert to Multi-op</TooltipContent>
+                        </Tooltip>
+                    );
+                })()}
             </div>
-
-            <div className="w-px h-4 bg-border" />
-
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <span className="inline-flex">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={autoLayoutGraph}
-                            className="h-8 w-8"
-                            disabled={nodes.length === 0}
-                        >
-                            <LayoutGrid className="w-4 h-4" />
-                        </Button>
-                    </span>
-                </TooltipTrigger>
-                <TooltipContent>Auto Layout</TooltipContent>
-            </Tooltip>
 
             <div className="w-px h-4 bg-border" />
 
@@ -445,7 +478,6 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                     </Tooltip>
                 </>
             )}
-
         </div>
     );
 }

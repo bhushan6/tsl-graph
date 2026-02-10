@@ -1,12 +1,23 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { type NodeProps } from '@xyflow/react';
+import { NodeResizer, type NodeProps } from '@xyflow/react';
 import { useEditorStore } from '@/store/editor';
 import { Edit2, Group } from 'lucide-react';
 import type { AppNode } from '@/lib/types';
 import "../app/globals.css"
 
+const LOOP_MODE_OPTIONS = [
+    { label: 'Count', value: 'count' },
+    { label: 'Range', value: 'range' },
+    { label: 'Reverse', value: 'reverse' },
+    { label: 'Nested', value: 'nested' },
+    { label: 'Condition', value: 'condition' },
+];
+
 function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setLoopMode = useEditorStore((s) => s.setLoopMode);
+    const hoveredGroupId = useEditorStore((s) => s.hoveredGroupId);
+    const isDropTarget = hoveredGroupId === id;
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [isEditing, setIsEditing] = useState(false);
@@ -44,6 +55,9 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
         }
     }, [label, id, inputValue, updateNodeValue]);
 
+    const isLoop = data.type === 'loop';
+    const loopMode = String(data.values?.loopMode ?? 'count');
+
     // Focus input when editing starts
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -54,6 +68,13 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
 
     return (
         <>
+            <NodeResizer
+                isVisible={selected}
+                minWidth={200}
+                minHeight={120}
+                lineClassName="border-primary/60"
+                handleClassName="bg-background border border-primary/60"
+            />
 
 
             {/* Group visual border - pointer-events-none so children can be interacted with */}
@@ -64,6 +85,7 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                     bg-foreground/5
                     border-2 border-dashed
                     ${selected ? 'border-primary/60 bg-primary/5' : 'border-foreground/20'}
+                    ${isDropTarget ? 'border-primary/80 bg-primary/10' : ''}
                     transition-colors duration-200
                     pointer-events-none
                     dark:bg-[#f0f0f040]
@@ -117,6 +139,21 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                             className="w-3.5 h-3.5 cursor-pointer opacity-0 group-hover:opacity-100"
                             onClick={handleEdit}
                         />
+                        {isLoop && (
+                            <select
+                                value={loopMode}
+                                onChange={(e) => setLoopMode(id, e.target.value)}
+                                className="h-6 px-2 text-[10px] bg-background/80 border border-border rounded-md text-foreground/80 outline-none focus:ring-1 focus:ring-primary"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {LOOP_MODE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                 )}
             </div>

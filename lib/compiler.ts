@@ -4,12 +4,17 @@ import { registry } from './registry';
 import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
+import { formatUniformValueExpression, getUniformKindFromNode } from './uniform-utils';
 
 interface CompiledNode {
     id: string;
     varName: string;
     code: string;
     singleOutput?: boolean;
+}
+
+export interface CompileOptions {
+    uniformMode?: 'inline' | 'runtime';
 }
 
 // Component swizzle mapping for code generation
@@ -21,6 +26,34 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
     'r': 'x',
     'g': 'y',
     'b': 'z',
+};
+
+const LOOP_INTERNAL_NODE_TYPES = new Set([
+    'loop/count',
+    'loop/start',
+    'loop/end',
+    'loop/index',
+    'loop/count2',
+    'loop/index2',
+    'loop/accumulator',
+    'loop/condition',
+    'loop/output',
+]);
+
+const ASSIGN_NODE_METHODS: Record<string, string> = {
+    'assign/assign': 'assign',
+    'assign/addAssign': 'addAssign',
+    'assign/subAssign': 'subAssign',
+    'assign/mulAssign': 'mulAssign',
+    'assign/divAssign': 'divAssign',
+    'assign/modAssign': 'modAssign',
+    'assign/minAssign': 'minAssign',
+    'assign/maxAssign': 'maxAssign',
+    'assign/bitAndAssign': 'bitAndAssign',
+    'assign/bitOrAssign': 'bitOrAssign',
+    'assign/bitXorAssign': 'bitXorAssign',
+    'assign/shiftLeftAssign': 'shiftLeftAssign',
+    'assign/shiftRightAssign': 'shiftRightAssign',
 };
 
 /**
@@ -88,6 +121,26 @@ function getSwizzleSuffix(sourceHandle: string | null | undefined, isSingleOutpu
 
     // Otherwise assume property access
     return `.${sourceHandle}`;
+}
+
+function getAssignTargetExpression(
+    node: Node<TSLNodeData>,
+    edges: Edge[],
+    compiledNodes: Map<string, CompiledNode>,
+    argsMap?: Record<string, string>
+): string | null {
+    const edge = edges.find(e => e.target === node.id && e.targetHandle === 'target');
+    if (!edge) return null;
+
+    if (edge.source === 'subgraph-input' && argsMap && edge.sourceHandle) {
+        return argsMap[edge.sourceHandle] || null;
+    }
+
+    const upstream = compiledNodes.get(edge.source);
+    if (!upstream) return null;
+
+    const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
+    return `${upstream.varName}${swizzle}`;
 }
 
 /**
@@ -237,6 +290,10 @@ function compileSubgraphDefinition(
     usedCodeNodes?: Map<string, string>,
     codeNodesMap?: Record<string, CodeNodeDefinition>
 ): string[] {
+    if (subgraph.nodes.some((n) => n.data.type === 'const/uniform')) {
+        throw new Error('Uniform nodes are not supported inside subgraphs yet.');
+    }
+
     const lines: string[] = [];
     const internalNodes = subgraph.nodes;
     // We saved edges including those to anchor nodes in store/editor.ts
@@ -403,6 +460,44 @@ function compileSubgraphDefinition(
             continue;
         }
 
+        const assignMethod = ASSIGN_NODE_METHODS[node.data.type];
+        if (assignMethod) {
+            const targetExpr = getAssignTargetExpression(node, internalEdges, compiledNodes, argsMap);
+            const valueExpr = getInputValue(node, 'value', internalEdges, compiledNodes, { type: 'any', default: 0 }, argsMap);
+
+            if (targetExpr) {
+                lines.push(`    ${targetExpr}.${assignMethod}(${valueExpr});`);
+                compiledNodes.set(nodeId, {
+                    id: nodeId,
+                    varName: targetExpr,
+                    code: `/* ${assignMethod} */`,
+                    singleOutput: true,
+                });
+            } else {
+                const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+                const baseName = localName
+                    ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                    : `_subgraph_node${nodeIndex}`;
+
+                let displayName = baseName;
+                let suffix = 1;
+                while (usedNames.has(displayName)) {
+                    displayName = `${baseName}_${suffix++}`;
+                }
+                usedNames.add(displayName);
+                nodeIndex++;
+
+                lines.push(`    const ${displayName} = ${valueExpr};`);
+                compiledNodes.set(nodeId, {
+                    id: nodeId,
+                    varName: displayName,
+                    code: valueExpr,
+                    singleOutput: true,
+                });
+            }
+            continue;
+        }
+
         const def = registry.get(node.data.type);
         if (!def) {
             // Skip if strictly unknown, but custom/ handled above
@@ -516,11 +611,14 @@ export function compileGraph(
     nodes: Node<TSLNodeData>[],
     edges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
-    codeNodes?: Record<string, CodeNodeDefinition>
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    options: CompileOptions = {}
 ): string {
     if (nodes.length === 0) {
         return '// No nodes in graph';
     }
+
+    const uniformMode = options.uniformMode ?? 'inline';
 
     const lines: string[] = [];
     const usedSubgraphs = new Map<string, string>(); // subgraphId -> functionName
@@ -626,21 +724,102 @@ export function compileGraph(
     lines.push('// Generated TSL Code');
     lines.push('');
 
-    // Filter out material nodes and subgraph anchor nodes for initial compilation
+    const nodesById = new Map(nodes.map(n => [n.id, n]));
+
+    const isLoopGroupNode = (node: Node<TSLNodeData>) => node.type === 'loop' || node.data.type === 'loop';
+
+    const loopGroupIds = new Set(
+        nodes.filter(isLoopGroupNode).map(n => n.id)
+    );
+
+    const isLoopInternalNode = (node: Node<TSLNodeData>) =>
+        !!node.parentId && loopGroupIds.has(node.parentId);
+
+    const getLoopParentId = (node: Node<TSLNodeData>): string | null => {
+        if (isLoopGroupNode(node)) return node.id;
+        let parentId = node.parentId;
+        while (parentId) {
+            const parent = nodesById.get(parentId);
+            if (!parent) break;
+            if (isLoopGroupNode(parent)) return parent.id;
+            parentId = parent.parentId;
+        }
+        return null;
+    };
+
+    const loopAwareEdges: Edge[] = [];
+    for (const edge of edges) {
+        const sourceNode = nodesById.get(edge.source);
+        const targetNode = nodesById.get(edge.target);
+        const sourceLoopId = sourceNode ? getLoopParentId(sourceNode) : null;
+        const targetLoopId = targetNode ? getLoopParentId(targetNode) : null;
+
+        if (sourceLoopId && targetLoopId) {
+            if (sourceLoopId === targetLoopId) {
+                continue; // internal to same loop - handled inside loop
+            }
+            // Cross-loop connections are disallowed; skip for ordering
+            continue;
+        }
+
+        if (sourceLoopId && !targetLoopId) {
+            loopAwareEdges.push({ ...edge, source: sourceLoopId });
+            continue;
+        }
+
+        if (!sourceLoopId && targetLoopId) {
+            loopAwareEdges.push({ ...edge, target: targetLoopId });
+            continue;
+        }
+
+        loopAwareEdges.push(edge);
+    }
+
+    // Filter out material nodes, subgraph anchor nodes, and loop internals
     const otherNodes = nodes.filter(n =>
         !(MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type) &&
         n.data.type !== 'subgraph/input' &&
-        n.data.type !== 'subgraph/output'
+        n.data.type !== 'subgraph/output' &&
+        !isLoopInternalNode(n)
     );
 
-    const sorted = topologicalSort(otherNodes, edges);
+    const sorted = topologicalSort(otherNodes, loopAwareEdges);
     const compiledNodes = new Map<string, CompiledNode>();
     const usedNames = new Set<string>();
     let nodeIndex = 0;
 
-    for (const nodeId of sorted) {
-        const node = nodes.find(n => n.id === nodeId);
-        if (!node) continue;
+    const compileSingleNode = (node: Node<TSLNodeData>, targetLines: string[], edgesForInputs: Edge[]) => {
+        // Handle Uniform node (single node with type selector)
+        if (node.data.type === 'const/uniform') {
+            const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+            const baseName = localName
+                ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                : `_node${nodeIndex}`;
+
+            let displayName = baseName;
+            let suffix = 1;
+            while (usedNames.has(displayName)) {
+                displayName = `${baseName}_${suffix++}`;
+            }
+            usedNames.add(displayName);
+            nodeIndex++;
+
+            const kind = getUniformKindFromNode(node);
+            const valueExpr = formatUniformValueExpression(kind, node.data.values?.value);
+
+            if (uniformMode === 'runtime') {
+                targetLines.push(`const ${displayName} = __uniform("${node.id}", ${valueExpr}, "${kind}");`);
+            } else {
+                targetLines.push(`const ${displayName} = uniform(${valueExpr});`);
+            }
+
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: displayName,
+                code: `/* uniform ${kind} */`,
+            });
+            return;
+        }
 
         // Handle Subgraph Instance
         if (node.data.type.startsWith('custom/')) {
@@ -648,7 +827,6 @@ export function compileGraph(
             const subgraph = subgraphs?.[node.data.type];
 
             if (funcName && subgraph) {
-                // Generate unique name for this instance output
                 const localName = node.data.localName || (node.data.values?.localName as string | undefined);
                 const baseName = localName
                     ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
@@ -662,10 +840,9 @@ export function compileGraph(
                 usedNames.add(displayName);
                 nodeIndex++;
 
-                // Collect arguments
                 const args: string[] = [];
                 for (const inputPort of subgraph.inputs) {
-                    const edge = edges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
+                    const edge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === inputPort.id);
                     if (edge) {
                         const upstream = compiledNodes.get(edge.source);
                         if (upstream) {
@@ -679,17 +856,17 @@ export function compileGraph(
                     }
                 }
 
-                lines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
+                targetLines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
 
                 const isSingleOutput = subgraph.outputs.length === 1;
 
-                compiledNodes.set(nodeId, {
-                    id: nodeId,
+                compiledNodes.set(node.id, {
+                    id: node.id,
                     varName: displayName,
                     code: `/* ${funcName} call */`,
                     singleOutput: isSingleOutput
                 });
-                continue;
+                return;
             }
         }
 
@@ -699,7 +876,6 @@ export function compileGraph(
             const codeNode = codeNodes?.[node.data.type];
 
             if (funcName && codeNode) {
-                // Generate unique name for this instance output
                 const localName = node.data.localName || (node.data.values?.localName as string | undefined);
                 const baseName = localName
                     ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
@@ -713,36 +889,32 @@ export function compileGraph(
                 usedNames.add(displayName);
                 nodeIndex++;
 
-                // Collect arguments based on code node inputs
                 const args: string[] = [];
                 for (const inputPort of codeNode.inputs) {
-                    const edge = edges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
+                    const edge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === inputPort.id);
                     if (edge) {
                         const upstream = compiledNodes.get(edge.source);
                         if (upstream) {
                             const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
                             args.push(`${upstream.varName}${swizzle}`);
                         } else {
-                            // Fallback if upstream not found
                             args.push(getTSLDefaultForType(inputPort.type));
                         }
                     } else {
-                        // Not connected - use node value if available, otherwise type default
                         const nodeValue = node.data.values?.[inputPort.id];
                         args.push(getTSLDefaultForType(inputPort.type, nodeValue));
                     }
                 }
 
-                lines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
+                targetLines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
 
-                // Code nodes always have single output
-                compiledNodes.set(nodeId, {
-                    id: nodeId,
+                compiledNodes.set(node.id, {
+                    id: node.id,
                     varName: displayName,
                     code: `/* ${funcName} call */`,
                     singleOutput: true
                 });
-                continue;
+                return;
             }
         }
 
@@ -760,25 +932,63 @@ export function compileGraph(
             usedNames.add(displayName);
             nodeIndex++;
 
-            const code = compileMultiOpChain(node, edges, compiledNodes);
-            lines.push(`const ${displayName} = ${code};`);
+            const code = compileMultiOpChain(node, edgesForInputs, compiledNodes);
+            targetLines.push(`const ${displayName} = ${code};`);
 
-            compiledNodes.set(nodeId, {
-                id: nodeId,
+            compiledNodes.set(node.id, {
+                id: node.id,
                 varName: displayName,
                 code,
                 singleOutput: true,
             });
-            continue;
+            return;
+        }
+
+        const assignMethod = ASSIGN_NODE_METHODS[node.data.type];
+        if (assignMethod) {
+            const targetExpr = getAssignTargetExpression(node, edgesForInputs, compiledNodes);
+            const valueExpr = getInputValue(node, 'value', edgesForInputs, compiledNodes, { type: 'any', default: 0 });
+
+            if (targetExpr) {
+                targetLines.push(`${targetExpr}.${assignMethod}(${valueExpr});`);
+                compiledNodes.set(node.id, {
+                    id: node.id,
+                    varName: targetExpr,
+                    code: `/* ${assignMethod} */`,
+                    singleOutput: true,
+                });
+            } else {
+                const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+                const baseName = localName
+                    ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+                    : `_node${nodeIndex}`;
+
+                let displayName = baseName;
+                let suffix = 1;
+                while (usedNames.has(displayName)) {
+                    displayName = `${baseName}_${suffix++}`;
+                }
+                usedNames.add(displayName);
+                nodeIndex++;
+
+                targetLines.push(`const ${displayName} = ${valueExpr};`);
+
+                compiledNodes.set(node.id, {
+                    id: node.id,
+                    varName: displayName,
+                    code: valueExpr,
+                    singleOutput: true,
+                });
+            }
+            return;
         }
 
         const def = registry.get(node.data.type);
         if (!def) {
-            lines.push(`// Unknown node type: ${node.data.type}`);
-            continue;
+            targetLines.push(`// Unknown node type: ${node.data.type}`);
+            return;
         }
 
-        // Use user-defined name if available, otherwise use auto-generated name
         const localName = node.data.localName || (node.data.values?.localName as string | undefined);
         const baseName = localName
             ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
@@ -799,95 +1009,252 @@ export function compileGraph(
         if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
         } else if (def.type === 'geo/uv') {
-            // Special handling for UV node with index
             const index = Number(node.data.values?.['index'] ?? 0);
             code = `uv(${index})`;
         } else if (def.type === 'geo/instanceCount') {
-            const count = Number(node.data.values?.['value'] ?? 0); // Default to 0 if not set
+            const count = Number(node.data.values?.['value'] ?? 0);
             code = `int(${count})`;
         } else if (def.type === 'math/split') {
-            // Special handling for Split node - pass through the input value
-            // The compiler's swizzling logic will handle the output access (e.g. .x, .y)
-            code = getInputValue(node, 'in', edges, compiledNodes, inputs['in']);
+            code = getInputValue(node, 'in', edgesForInputs, compiledNodes, inputs['in']);
         } else if (def.type === 'texture/sample') {
-            // Special handling for texture node
             const url = getStringValue(node, 'url', inputs['url']);
 
-            // 1. Create Texture
             const texVarName = `${baseName}_tex`;
-            lines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
-            lines.push(`${texVarName}.colorSpace = THREE.SRGBColorSpace;`);
+            targetLines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
+            targetLines.push(`${texVarName}.colorSpace = THREE.SRGBColorSpace;`);
 
-            // Apply texture properties
             const wrapS = node.data.values?.['wrapS'] ?? inputs['wrapS']?.default ?? 'RepeatWrapping';
             const wrapT = node.data.values?.['wrapT'] ?? inputs['wrapT']?.default ?? 'RepeatWrapping';
             const minFilter = node.data.values?.['minFilter'] ?? inputs['minFilter']?.default ?? 'LinearMipmapLinearFilter';
             const magFilter = node.data.values?.['magFilter'] ?? inputs['magFilter']?.default ?? 'LinearFilter';
 
-            lines.push(`${texVarName}.wrapS = THREE.${wrapS};`);
-            lines.push(`${texVarName}.wrapT = THREE.${wrapT};`);
-            lines.push(`${texVarName}.minFilter = THREE.${minFilter};`);
-            lines.push(`${texVarName}.magFilter = THREE.${magFilter};`);
+            targetLines.push(`${texVarName}.wrapS = THREE.${wrapS};`);
+            targetLines.push(`${texVarName}.wrapT = THREE.${wrapT};`);
+            targetLines.push(`${texVarName}.minFilter = THREE.${minFilter};`);
+            targetLines.push(`${texVarName}.magFilter = THREE.${magFilter};`);
 
-            // 2. Get UV input
             const uvInput = inputs['uv'];
-            const uvEdge = edges.find(e => e.target === node.id && e.targetHandle === 'uv');
+            const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');
 
             let uvCode = '';
             if (uvEdge) {
-                const uvVar = getInputValue(node, 'uv', edges, compiledNodes, uvInput);
+                const uvVar = getInputValue(node, 'uv', edgesForInputs, compiledNodes, uvInput);
                 uvCode = `, ${uvVar}`;
             }
             code = `texture(${texVarName}${uvCode})`;
         } else if (def.type === 'texture/viewportShared') {
-            // Special handling for viewportSharedTexture - only pass UV if connected
-            const uvEdge = edges.find(e => e.target === node.id && e.targetHandle === 'uv');
+            const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');
 
             if (uvEdge) {
-                const uvArg = getInputValue(node, 'uv', edges, compiledNodes, inputs['uv']);
+                const uvArg = getInputValue(node, 'uv', edgesForInputs, compiledNodes, inputs['uv']);
                 code = `${def.tsl}(${uvArg})`;
             } else {
-                // No UV connected - call without arguments to use default screen UV
                 code = `${def.tsl}()`;
             }
         } else if (def.type === 'texture/triplanar') {
-            // Special handling for triplanar arguments mapping
-            // Signature: (texX, texY, texZ, scale, position, normal)
-
-            const texEdge = edges.find(e => e.target === node.id && e.targetHandle === 'texture');
-            let texArg = 'color(1.0, 0.0, 1.0)'; // Fallback magenta
+            const texEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'texture');
+            let texArg = 'color(1.0, 0.0, 1.0)';
 
             if (texEdge) {
-                texArg = getInputValue(node, 'texture', edges, compiledNodes, inputs['texture']);
+                texArg = getInputValue(node, 'texture', edgesForInputs, compiledNodes, inputs['texture']);
             }
 
-            const scaleArg = getInputValue(node, 'scale', edges, compiledNodes, inputs['scale']);
+            const scaleArg = getInputValue(node, 'scale', edgesForInputs, compiledNodes, inputs['scale']);
 
-            // For optional position/normal, pass undefined if not connected (let TSL handle defaults)
-            const posEdge = edges.find(e => e.target === node.id && e.targetHandle === 'position');
-            const posArg = posEdge ? getInputValue(node, 'position', edges, compiledNodes, inputs['position']) : 'undefined';
+            const posEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'position');
+            const posArg = posEdge ? getInputValue(node, 'position', edgesForInputs, compiledNodes, inputs['position']) : 'undefined';
 
-            const normalEdge = edges.find(e => e.target === node.id && e.targetHandle === 'normal');
-            const normalArg = normalEdge ? getInputValue(node, 'normal', edges, compiledNodes, inputs['normal']) : 'undefined';
+            const normalEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'normal');
+            const normalArg = normalEdge ? getInputValue(node, 'normal', edgesForInputs, compiledNodes, inputs['normal']) : 'undefined';
 
-            // Pass null for Y and Z to use X for all planes
             code = `${def.tsl}(${texArg}, null, null, ${scaleArg}, ${posArg}, ${normalArg})`;
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
             const args = inputKeys.filter(k => !inputs[k].propertyOnly).map(key =>
-                getInputValue(node, key, edges, compiledNodes, inputs[key])
+                getInputValue(node, key, edgesForInputs, compiledNodes, inputs[key])
             );
             code = `${def.tsl}(${args.join(', ')})`;
         }
 
-        lines.push(`const ${displayName} = ${code};`);
+        targetLines.push(`const ${displayName} = ${code};`);
 
-        compiledNodes.set(nodeId, {
-            id: nodeId,
+        compiledNodes.set(node.id, {
+            id: node.id,
             varName: displayName,
             code,
         });
+    };
+
+    const compileLoopGroup = (loopNode: Node<TSLNodeData>, targetLines: string[]) => {
+        const loopId = loopNode.id;
+        const internalNodes = nodes.filter(n => n.parentId === loopId);
+
+        const countNode = internalNodes.find(n => n.data.type === 'loop/count');
+        const count2Node = internalNodes.find(n => n.data.type === 'loop/count2');
+        const startNode = internalNodes.find(n => n.data.type === 'loop/start');
+        const endNode = internalNodes.find(n => n.data.type === 'loop/end');
+        const indexNode = internalNodes.find(n => n.data.type === 'loop/index');
+        const index2Node = internalNodes.find(n => n.data.type === 'loop/index2');
+        const accNode = internalNodes.find(n => n.data.type === 'loop/accumulator');
+        const conditionNode = internalNodes.find(n => n.data.type === 'loop/condition');
+        const outputNode = internalNodes.find(n => n.data.type === 'loop/output');
+
+        const reserveName = (base: string) => {
+            let name = base;
+            let suffix = 1;
+            while (usedNames.has(name)) {
+                name = `${base}_${suffix++}`;
+            }
+            usedNames.add(name);
+            return name;
+        };
+
+        const localName = loopNode.data.localName || (loopNode.data.values?.localName as string | undefined);
+        const baseName = localName
+            ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+            : `_loop${nodeIndex}`;
+
+        const loopVarName = reserveName(baseName);
+        nodeIndex++;
+
+        const countVarName = reserveName(`${loopVarName}_count`);
+        const count2VarName = reserveName(`${loopVarName}_count2`);
+        const loopFnName = reserveName(`${loopVarName}_fn`);
+        const accVarName = reserveName(`${loopVarName}_acc`);
+
+        const loopModeRaw = String(loopNode.data.values?.loopMode ?? 'count');
+        const loopMode = ['count', 'range', 'reverse', 'nested', 'condition'].includes(loopModeRaw)
+            ? loopModeRaw
+            : 'count';
+        const loopTypeRaw = String(loopNode.data.values?.loopType ?? 'int');
+        const loopType = loopTypeRaw === 'float' ? 'float' : 'int';
+        const compareOptions = ['<', '<=', '>', '>='];
+        const compareRaw = String(loopNode.data.values?.loopCompare ?? (loopMode === 'reverse' ? '>' : '<'));
+        const loopCompare = compareOptions.includes(compareRaw) ? compareRaw : (loopMode === 'reverse' ? '>' : '<');
+
+        const countExpr = countNode
+            ? getInputValue(countNode, 'count', edges, compiledNodes, { type: 'int', default: 1 })
+            : '1';
+
+        const count2Expr = count2Node
+            ? getInputValue(count2Node, 'count', edges, compiledNodes, { type: 'int', default: 1 })
+            : '1';
+
+        const startExpr = startNode
+            ? getInputValue(startNode, 'start', edges, compiledNodes, { type: 'float', default: 0 })
+            : '0';
+
+        const endExpr = endNode
+            ? getInputValue(endNode, 'end', edges, compiledNodes, { type: 'float', default: 1 })
+            : '1';
+
+        const conditionExpr = conditionNode
+            ? getInputValue(conditionNode, 'cond', edges, compiledNodes, { type: 'bool', default: false })
+            : 'false';
+
+        if (loopMode === 'count' || loopMode === 'nested') {
+            targetLines.push(`const ${countVarName} = max(int(${countExpr}), 0);`);
+        }
+        if (loopMode === 'nested') {
+            targetLines.push(`const ${count2VarName} = max(int(${count2Expr}), 0);`);
+        }
+
+        let seedExpr = getTSLDefaultForType('any');
+        if (accNode) {
+            const seedEdge = edges.find(e => e.target === accNode.id && e.targetHandle === 'seed');
+            const seedValue = accNode.data.values?.['seed'];
+            if (seedEdge || seedValue !== undefined) {
+                seedExpr = getInputValue(accNode, 'seed', edges, compiledNodes, { type: 'any', default: 0 });
+            }
+        }
+        targetLines.push(`const ${loopFnName} = Fn(() => {`);
+        targetLines.push(`    const ${accVarName} = Var(${seedExpr});`);
+        if (loopMode === 'nested') {
+            targetLines.push(`    Loop(${countVarName}, ${count2VarName}, ({ i, j }) => {`);
+        } else if (loopMode === 'range') {
+            targetLines.push(`    Loop({ start: ${startExpr}, end: ${endExpr}, type: '${loopType}', condition: '${loopCompare}', name: 'i' }, ({ i }) => {`);
+        } else if (loopMode === 'reverse') {
+            targetLines.push(`    Loop({ start: ${startExpr}, type: '${loopType}', condition: '${loopCompare}', name: 'i' }, ({ i }) => {`);
+        } else if (loopMode === 'condition') {
+            targetLines.push(`    Loop(${conditionExpr}, () => {`);
+        } else {
+            targetLines.push(`    Loop(${countVarName}, ({ i }) => {`);
+        }
+
+        if (countNode) {
+            compiledNodes.set(countNode.id, { id: countNode.id, varName: countVarName, code: countVarName, singleOutput: true });
+        }
+        if (count2Node) {
+            compiledNodes.set(count2Node.id, { id: count2Node.id, varName: count2VarName, code: count2VarName, singleOutput: true });
+        }
+        if (startNode) {
+            compiledNodes.set(startNode.id, { id: startNode.id, varName: startExpr, code: startExpr, singleOutput: true });
+        }
+        if (endNode) {
+            compiledNodes.set(endNode.id, { id: endNode.id, varName: endExpr, code: endExpr, singleOutput: true });
+        }
+        if (indexNode) {
+            compiledNodes.set(indexNode.id, { id: indexNode.id, varName: 'i', code: 'i', singleOutput: true });
+        }
+        if (index2Node) {
+            compiledNodes.set(index2Node.id, { id: index2Node.id, varName: 'j', code: 'j', singleOutput: true });
+        }
+        if (accNode) {
+            compiledNodes.set(accNode.id, { id: accNode.id, varName: accVarName, code: accVarName, singleOutput: true });
+        }
+        if (conditionNode) {
+            compiledNodes.set(conditionNode.id, { id: conditionNode.id, varName: conditionExpr, code: conditionExpr, singleOutput: true });
+        }
+        if (outputNode) {
+            compiledNodes.set(outputNode.id, { id: outputNode.id, varName: loopVarName, code: loopVarName, singleOutput: true });
+        }
+
+        const bodyNodes = internalNodes.filter(n => !LOOP_INTERNAL_NODE_TYPES.has(n.data.type));
+        const bodySorted = topologicalSort(bodyNodes, edges);
+        const innerLines: string[] = [];
+
+        for (const nodeId of bodySorted) {
+            const node = nodesById.get(nodeId);
+            if (!node) continue;
+            compileSingleNode(node, innerLines, edges);
+        }
+
+        if (outputNode) {
+            const outputEdge = edges.find(e => e.target === outputNode.id && e.targetHandle === 'next');
+            if (outputEdge) {
+                const nextExpr = getInputValue(outputNode, 'next', edges, compiledNodes, { type: 'any', default: 0 });
+                innerLines.push(`${accVarName}.assign(${nextExpr});`);
+            }
+        }
+
+        for (const line of innerLines) {
+            targetLines.push(`        ${line}`);
+        }
+
+        targetLines.push(`    });`);
+        targetLines.push(`    return ${accVarName};`);
+        targetLines.push(`});`);
+        targetLines.push(`const ${loopVarName} = ${loopFnName}();`);
+
+        compiledNodes.set(loopNode.id, {
+            id: loopNode.id,
+            varName: loopVarName,
+            code: `/* loop */`,
+            singleOutput: true,
+        });
+    };
+
+    for (const nodeId of sorted) {
+        const node = nodesById.get(nodeId);
+        if (!node) continue;
+
+        if (isLoopGroupNode(node)) {
+            compileLoopGroup(node, lines);
+            continue;
+        }
+
+        compileSingleNode(node, lines, edges);
     }
 
     // Generate material code
@@ -1002,7 +1369,7 @@ export function getRequiredImports(
                 addMultiOpImports(ops);
             } else {
                 const def = registry.get(node.data.type);
-                if (def) imports.add(def.tsl);
+                if (def && !def.tsl.startsWith('__')) imports.add(def.tsl);
             }
 
             // Collect vec imports from values
@@ -1046,7 +1413,7 @@ export function getRequiredImports(
         }
 
         const def = registry.get(node.data.type);
-        if (def) {
+        if (def && !def.tsl.startsWith('__')) {
             imports.add(def.tsl);
         }
 
@@ -1060,6 +1427,15 @@ export function getRequiredImports(
                 }
             }
         }
+    }
+
+    const hasLoops = nodes.some(n => n.type === 'loop' || n.data.type.startsWith('loop/'));
+    if (hasLoops) {
+        imports.add('Fn');
+        imports.add('Loop');
+        imports.add('Var');
+        imports.add('int');
+        imports.add('max');
     }
 
     if (hasSubgraphs) {

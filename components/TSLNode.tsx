@@ -25,6 +25,7 @@ import type { AppNode, Port, TSLType, TSLValueType } from '@/lib/types';
 import { NodeProps } from '@xyflow/react';
 import { MULTI_OP_OPTIONS, getMultiOpHandleId, getMultiOpLabel, getMultiOpParams, type MultiOp, type MultiOpType } from '@/lib/multi-op';
 import { Separator } from './ui/separator';
+import { getUniformKindFromNode, getUniformOutputs } from '@/lib/uniform-utils';
 
 type TSLNodeProps = NodeProps<AppNode>;
 
@@ -39,6 +40,7 @@ const categoryColors: Record<string, string> = {
     'Advanced': 'border-slate-500 bg-slate-100 dark:bg-slate-900/20',
     'Noise': 'border-fuchsia-500 bg-fuchsia-100 dark:bg-fuchsia-900/20',
     'Utils': 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20',
+    'Loop': 'border-indigo-500 bg-indigo-100 dark:bg-indigo-900/20',
     'Default': 'border-gray-500 bg-gray-100 dark:bg-gray-900/20',
 };
 
@@ -91,6 +93,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const isCodeNodeInstance = data.type.startsWith('code/');
     const isCustomInstance = isSubgraphInstance || isCodeNodeInstance;
     const isMultiOpNode = data.type === 'math/multiOp';
+    const isUniformNode = data.type === 'const/uniform';
     const operations = Array.isArray(data.operations) ? (data.operations as MultiOp[]) : [];
 
     // For subgraph and code node instances, we don't need a registry definition
@@ -160,6 +163,11 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         inputs = def.inputs ?? {};
         outputs = def.outputs ?? {};
         nodeLabel = def.label;
+        if (isUniformNode) {
+            const kind = getUniformKindFromNode({ data } as AppNode);
+            inputs = {};
+            outputs = getUniformOutputs(kind);
+        }
     }
 
     let category = 'Default';

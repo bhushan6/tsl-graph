@@ -13,11 +13,13 @@ import {
     getNodesBounds,
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
-import { autoLayoutNodes } from '@/lib/ai/auto-layout';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
+import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
+import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
 import { toast } from 'sonner';
+import { coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
+import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
 
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
@@ -90,6 +92,147 @@ export type EditorMode = 'main' | 'subgraph';
 const GRAPH_VERSION = 1;
 const STORAGE_KEY = 'tsl-editor-graph';
 
+type LoopMode = 'count' | 'range' | 'reverse' | 'nested' | 'condition';
+
+const LOOP_MODES: readonly LoopMode[] = ['count', 'range', 'reverse', 'nested', 'condition'];
+const DEFAULT_LOOP_MODE: LoopMode = 'count';
+const DEFAULT_LOOP_TYPE = 'int';
+const DEFAULT_LOOP_COMPARE = '<';
+
+const LOOP_INTERNAL_NODE_TYPES = new Set([
+    'loop/count',
+    'loop/start',
+    'loop/end',
+    'loop/index',
+    'loop/count2',
+    'loop/index2',
+    'loop/accumulator',
+    'loop/condition',
+    'loop/output',
+]);
+
+const LOOP_SLOT_X = 20;
+const LOOP_SLOT_Y = 20;
+const LOOP_SLOT_GAP = 90;
+const LOOP_NODE_WIDTH = 50;
+const LOOP_EXTRA_HEIGHT = 120;
+
+const LOOP_LEFT_NODE_TYPES_BY_MODE: Record<LoopMode, readonly string[]> = {
+    count: ['loop/count', 'loop/index', 'loop/accumulator'],
+    range: ['loop/start', 'loop/end', 'loop/index', 'loop/accumulator'],
+    reverse: ['loop/start', 'loop/index', 'loop/accumulator'],
+    nested: ['loop/count', 'loop/index', 'loop/count2', 'loop/index2', 'loop/accumulator'],
+    condition: ['loop/condition', 'loop/accumulator'],
+};
+
+const isLoopGroupNode = (node: Node<TSLNodeData>) => node.type === 'loop' || node.data.type === 'loop';
+
+const isGroupLikeNode = (node: Node<TSLNodeData>) => node.type === 'group' || isLoopGroupNode(node);
+
+const isLoopInternalNode = (node: Node<TSLNodeData>) => LOOP_INTERNAL_NODE_TYPES.has(node.data.type);
+
+const isLoopMode = (value: string): value is LoopMode => {
+    return LOOP_MODES.includes(value as LoopMode);
+};
+
+const getLoopMode = (node: Node<TSLNodeData>): LoopMode => {
+    const mode = node.data.values?.loopMode;
+    return typeof mode === 'string' && isLoopMode(mode) ? mode : DEFAULT_LOOP_MODE;
+};
+
+const getLoopLeftNodeTypes = (mode: LoopMode): readonly string[] => {
+    return LOOP_LEFT_NODE_TYPES_BY_MODE[mode] ?? LOOP_LEFT_NODE_TYPES_BY_MODE[DEFAULT_LOOP_MODE];
+};
+
+const getLoopRequiredHeight = (mode: LoopMode): number => {
+    const leftCount = getLoopLeftNodeTypes(mode).length;
+    if (leftCount === 0) return LOOP_EXTRA_HEIGHT;
+    return LOOP_SLOT_Y + (leftCount - 1) * LOOP_SLOT_GAP + LOOP_EXTRA_HEIGHT;
+};
+
+const getLoopInternalDefaultValues = (type: string): Record<string, TSLValueType> => {
+    switch (type) {
+        case 'loop/count':
+        case 'loop/count2':
+            return { count: 1 };
+        case 'loop/start':
+            return { start: 0 };
+        case 'loop/end':
+            return { end: 1 };
+        case 'loop/accumulator':
+            return { seed: 0 };
+        case 'loop/condition':
+            return { cond: false };
+        default:
+            return {};
+    }
+};
+
+const LOOP_INTERNAL_ID_SUFFIX: Record<string, string> = {
+    'loop/count': 'count',
+    'loop/start': 'start',
+    'loop/end': 'end',
+    'loop/index': 'index',
+    'loop/count2': 'count2',
+    'loop/index2': 'index2',
+    'loop/accumulator': 'acc',
+    'loop/condition': 'condition',
+    'loop/output': 'output',
+};
+
+const createLoopInternalNode = (
+    loopId: string,
+    type: string,
+    position: { x: number; y: number },
+    width?: number
+): Node<TSLNodeData> => {
+    const idSuffix = LOOP_INTERNAL_ID_SUFFIX[type] ?? type.split('/')[1];
+    const id = `${loopId}::${idSuffix}`;
+    const node: Node<TSLNodeData> = {
+        id,
+        type,
+        position,
+        parentId: loopId,
+        extent: 'parent',
+        draggable: false,
+        data: {
+            type: type as NodeType,
+            values: getLoopInternalDefaultValues(type),
+            connected: {},
+        },
+    };
+
+    if (type === 'loop/output' && typeof width === 'number') {
+        node.position.x = Math.max(LOOP_SLOT_X, width - LOOP_NODE_WIDTH - LOOP_SLOT_X);
+        node.position.y = LOOP_SLOT_Y;
+    }
+
+    return node;
+};
+
+const getNodeDimensionValue = (node: Node<TSLNodeData>, key: 'width' | 'height'): number | null => {
+    const direct = (node as Node<TSLNodeData> & { [k: string]: unknown })[key];
+    if (typeof direct === 'number') return direct;
+    const styleValue = node.style?.[key];
+    if (typeof styleValue === 'number') return styleValue;
+    if (typeof styleValue === 'string') {
+        const parsed = Number(styleValue.replace('px', ''));
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+};
+
+const getAncestorLoopId = (node: Node<TSLNodeData>, nodes: Node<TSLNodeData>[]): string | null => {
+    let parentId = node.parentId;
+    while (parentId) {
+        const parent = nodes.find(n => n.id === parentId);
+        if (!parent) break;
+        if (isLoopGroupNode(parent)) return parent.id;
+        parentId = parent.parentId;
+    }
+    return null;
+};
+
 
 interface SubgraphStackItem {
     nodes: Node<TSLNodeData>[];
@@ -125,6 +268,8 @@ interface EditorState {
     selectedNodeId: string | null;
     selectedNodeIds: string[]; // For multi-selection
     graphStructureVersion: number;
+    hoveredGroupId: string | null;
+    setHoveredGroupId: (groupId: string | null) => void;
 
     // Subgraph state
     subgraphs: Record<string, SubgraphDefinition>;
@@ -145,6 +290,28 @@ interface EditorState {
     // Preview settings
     previewSettings: PreviewSettings;
     updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
+
+    // Preview snapshot (used for AI visual verification)
+    previewSnapshotProvider: ((
+        options?: { format?: 'png' | 'jpeg'; quality?: number }
+    ) => Promise<{
+        imageUrl: string;
+        storageId: string;
+        width: number;
+        height: number;
+        format: string;
+    }>) | null;
+    setPreviewSnapshotProvider: (
+        provider: ((
+            options?: { format?: 'png' | 'jpeg'; quality?: number }
+        ) => Promise<{
+            imageUrl: string;
+            storageId: string;
+            width: number;
+            height: number;
+            format: string;
+        }>) | null
+    ) => void;
 
     // History state
     history: HistoryState;
@@ -184,6 +351,7 @@ interface EditorState {
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
+    setUniformType: (nodeId: string, newKind: UniformKind) => void;
     addMultiOp: (nodeId: string, op?: MultiOpType) => void;
     updateMultiOp: (nodeId: string, opId: string, op: MultiOpType) => void;
     removeMultiOp: (nodeId: string, opId: string) => void;
@@ -213,29 +381,13 @@ interface EditorState {
     // Group actions
     groupNodes: () => void;
     ungroupNodes: () => void;
-    autoLayoutGraph: () => void;
+    createLoopGroup: () => void;
+    setLoopMode: (loopId: string, mode: string) => void;
+    removeNodesFromGroup: (nodeIds: string[]) => void;
+    dropNodesIntoGroup: (nodeIds: string[], groupId: string, nodesSnapshot?: Node<TSLNodeData>[]) => void;
 
-    // Preview snapshot (used for AI visual verification)
-    previewSnapshotProvider: ((
-        options?: { format?: 'png' | 'jpeg'; quality?: number }
-    ) => Promise<{
-        imageUrl: string;
-        storageId: string;
-        width: number;
-        height: number;
-        format: string;
-    }>) | null;
-    setPreviewSnapshotProvider: (
-        provider: ((
-            options?: { format?: 'png' | 'jpeg'; quality?: number }
-        ) => Promise<{
-            imageUrl: string;
-            storageId: string;
-            width: number;
-            height: number;
-            format: string;
-        }>) | null
-    ) => void;
+    // Chain-to-MultiOp conversion
+    convertChainToMultiOp: (orderedNodeIds: string[]) => void;
 
 
     // Subgraph actions
@@ -261,7 +413,7 @@ interface EditorState {
     // Reset entire store
     resetEditor: () => void;
     // Track event helper
-    trackEvent: (event: string, properties?: Record<string, unknown>) => void;
+    trackEvent: (event: string, properties?: Record<string, any>) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -273,6 +425,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectedNodeId: null,
     selectedNodeIds: [],
     graphStructureVersion: 0,
+    hoveredGroupId: null,
+    setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
 
     // Preview settings
     previewSettings: {
@@ -323,6 +477,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ previewSettings: { ...get().previewSettings, ...updates } });
         get().markDirty();
     },
+    previewSnapshotProvider: null,
+    setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
 
     // Subgraph state initialization
     subgraphs: {},
@@ -359,10 +515,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // History initialization
     history: { past: [], future: [] },
     isUndoRedoInProgress: false,
-
-    // Preview snapshot provider
-    previewSnapshotProvider: null,
-    setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
 
     // Auto-save methods
     setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
@@ -475,21 +627,125 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             return true; // Other changes (like data updates) are structural
         });
 
-        // Prevent deletion of subgraph anchor nodes
-        const filteredChanges = changes.filter(change => {
+        const currentNodes = get().nodes;
+
+        // Prevent deletion of subgraph anchor nodes and loop internal nodes
+        let filteredChanges = changes.filter(change => {
             if (change.type === 'remove') {
                 const nodeId = change.id;
                 if (nodeId === 'subgraph-input' || nodeId === 'subgraph-output') {
                     return false; // Block deletion of anchor nodes
                 }
+                const node = currentNodes.find(n => n.id === nodeId);
+                if (node && isLoopInternalNode(node)) {
+                    return false; // Block deletion of loop internal nodes
+                }
             }
             return true;
         });
+
+        // If a loop group is removed, also remove its children
+        const removedLoopIds = new Set(
+            filteredChanges
+                .filter((c) => c.type === 'remove')
+                .map((c) => c.id)
+                .filter((id) => {
+                    const node = currentNodes.find(n => n.id === id);
+                    return node ? isLoopGroupNode(node) : false;
+                })
+        );
+
+        if (removedLoopIds.size > 0) {
+            const childIds = currentNodes
+                .filter(n => n.parentId && removedLoopIds.has(n.parentId))
+                .map(n => n.id);
+            if (childIds.length > 0) {
+                filteredChanges = [
+                    ...filteredChanges,
+                    ...childIds.map(id => ({ id, type: 'remove' as const })),
+                ];
+            }
+        }
         // Check if this is a saveable change (anything except selection)
         const hasSaveableChange = changes.some(change => change.type !== 'select');
 
+        let updatedNodes = applyNodeChanges(filteredChanges, currentNodes);
+
+        const resizedLoopGroups = new Set(
+            filteredChanges
+                .filter((c) => c.type === 'dimensions')
+                .map((c) => c.id)
+                .filter((id) => {
+                    const node = updatedNodes.find(n => n.id === id);
+                    return node ? isLoopGroupNode(node) : false;
+                })
+        );
+
+        if (resizedLoopGroups.size > 0) {
+            const nodesById = new Map(updatedNodes.map(n => [n.id, n]));
+            updatedNodes = updatedNodes.map((node) => {
+                if (!node.parentId || !resizedLoopGroups.has(node.parentId)) return node;
+
+                if (!isLoopInternalNode(node)) return node;
+
+                const parent = nodesById.get(node.parentId);
+                if (!parent) return node;
+
+                const loopMode = getLoopMode(parent);
+                const leftTypes = getLoopLeftNodeTypes(loopMode);
+                const width = getNodeDimensionValue(parent, 'width') ?? 0;
+
+                if (node.data.type === 'loop/output') {
+                    const nextX = Math.max(LOOP_SLOT_X, width - LOOP_NODE_WIDTH - LOOP_SLOT_X);
+                    if (node.position.x === nextX && node.position.y === LOOP_SLOT_Y) return node;
+                    return {
+                        ...node,
+                        position: {
+                            x: nextX,
+                            y: LOOP_SLOT_Y,
+                        },
+                    };
+                }
+
+                const index = leftTypes.indexOf(node.data.type);
+                if (index === -1) return node;
+                const expectedX = LOOP_SLOT_X;
+                const expectedY = LOOP_SLOT_Y + LOOP_SLOT_GAP * index;
+
+                if (node.position.x === expectedX && node.position.y === expectedY) return node;
+
+                return {
+                    ...node,
+                    position: {
+                        x: expectedX,
+                        y: expectedY,
+                    },
+                };
+            });
+        }
+
+        const removedIds = new Set(
+            filteredChanges
+                .filter((c) => c.type === 'remove')
+                .map((c) => c.id)
+        );
+
+        if (removedIds.size > 0) {
+            for (const id of removedIds) {
+                const removedNode = currentNodes.find(n => n.id === id);
+                if (removedNode?.data.type === 'const/uniform') {
+                    removeUniform(id);
+                }
+            }
+        }
+
+        const updatedEdges = removedIds.size > 0
+            ? get().edges.filter(e => !removedIds.has(e.source) && !removedIds.has(e.target))
+            : get().edges;
+
         set({
-            nodes: applyNodeChanges(filteredChanges, get().nodes),
+            nodes: updatedNodes,
+            edges: updatedEdges,
             graphStructureVersion: hasStructuralChange ? get().graphStructureVersion + 1 : get().graphStructureVersion,
         });
 
@@ -544,6 +800,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     addNode: (type, position, data = {}) => {
         get().takeSnapshot();
+        if (type === 'loop' || type.startsWith('loop/')) {
+            toast.error('Loop nodes can only be created via Create Loop.');
+            return false;
+        }
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
 
         // If trying to add a material node, check if one already exists
@@ -572,6 +832,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             data.values = { value: initialCount, ...data.values };
         }
 
+        // Add a default 'add' operation for MultiOp nodes
+        if (type === 'math/multiOp' && !data.operations) {
+            const opId = `op_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+            data.operations = [{ id: opId, op: 'add' }];
+        }
+
         const newNode: Node<TSLNodeData> = {
             id,
             type,
@@ -596,18 +862,61 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     updateNodeValue: (nodeId, key, value) => {
         get().takeSnapshot();
+        const prevNodes = get().nodes;
+        let uniformKind: UniformKind | null = null;
+        let isUniformValueUpdate = false;
+
+        const updatedNodes = prevNodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            const nextValues = { ...node.data.values, [key]: value };
+            if (node.data.type === 'const/uniform' && key === 'value') {
+                isUniformValueUpdate = true;
+                uniformKind = getUniformKindFromNode({ data: { values: nextValues } } as AppNode);
+            }
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: nextValues,
+                },
+            };
+        });
+
+        if (isUniformValueUpdate && uniformKind) {
+            updateUniformValue(nodeId, uniformKind, value);
+        }
+
         set({
-            nodes: get().nodes.map((node) =>
-                node.id === nodeId
-                    ? {
-                        ...node,
-                        data: {
-                            ...node.data,
-                            values: { ...node.data.values, [key]: value },
-                        },
-                    }
-                    : node
-            ),
+            nodes: updatedNodes,
+            graphStructureVersion: isUniformValueUpdate ? get().graphStructureVersion : get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    setUniformType: (nodeId, newKind) => {
+        get().takeSnapshot();
+        const updatedNodes = get().nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            if (node.data.type !== 'const/uniform') return node;
+
+            const prevValue = node.data.values?.value;
+            const nextValue = coerceUniformValue(newKind, prevValue);
+
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: {
+                        ...node.data.values,
+                        uniformType: newKind,
+                        value: nextValue,
+                    },
+                },
+            };
+        });
+
+        set({
+            nodes: updatedNodes,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
@@ -728,11 +1037,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     deleteNode: (nodeId) => {
+        const nodes = get().nodes;
+        const target = nodes.find(n => n.id === nodeId);
+        if (!target) return;
+
+        if (isLoopInternalNode(target)) {
+            return;
+        }
+
         get().takeSnapshot();
+
+        const idsToRemove = new Set<string>([nodeId]);
+        if (isLoopGroupNode(target)) {
+            nodes
+                .filter(n => n.parentId === nodeId)
+                .forEach(n => idsToRemove.add(n.id));
+        }
+
+        for (const id of idsToRemove) {
+            const removedNode = nodes.find(n => n.id === id);
+            if (removedNode?.data.type === 'const/uniform') {
+                removeUniform(id);
+            }
+        }
+
         set({
-            nodes: get().nodes.filter((node) => node.id !== nodeId),
+            nodes: nodes.filter((node) => !idsToRemove.has(node.id)),
             edges: get().edges.filter(
-                (edge) => edge.source !== nodeId && edge.target !== nodeId
+                (edge) => !idsToRemove.has(edge.source) && !idsToRemove.has(edge.target)
             ),
             // Clear selection if the deleted node was selected
             selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
@@ -850,6 +1182,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         try {
             const data = JSON.parse(json) as GraphData;
             if (data.version && data.nodes && data.edges) {
+                clearUniforms();
                 set({
                     nodes: data.nodes,
                     edges: data.edges,
@@ -925,6 +1258,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Clear the graph
     clearGraph: () => {
         get().takeSnapshot();
+        clearUniforms();
         set({
             nodes: [],
             edges: [],
@@ -953,7 +1287,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const initialSelectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
 
         // Find all groups in selection
-        const selectedGroups = initialSelectedNodes.filter(n => n.type === 'group');
+        const selectedGroups = initialSelectedNodes.filter(isGroupLikeNode);
 
         // Add all children of selected groups to the selection
         if (selectedGroups.length > 0) {
@@ -974,6 +1308,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         );
         if (hasMaterialNode) {
             console.warn('Cannot create subgraph: Material nodes cannot be included in a subgraph.');
+            return null;
+        }
+
+        const hasUniformNode = selectedNodes.some(n => n.data.type === 'const/uniform');
+        if (hasUniformNode) {
+            toast.error('Uniform nodes cannot be used inside subgraphs yet.');
             return null;
         }
 
@@ -1852,7 +2192,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // Find groups to ungroup (only selected groups)
         const groupsToUngroup = nodes.filter(n =>
-            selectedNodeIds.includes(n.id) && n.type === 'group'
+            selectedNodeIds.includes(n.id) && n.type === 'group' && !isLoopGroupNode(n)
         );
 
         if (groupsToUngroup.length === 0) return;
@@ -1888,17 +2228,474 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
     },
 
-    autoLayoutGraph: () => {
-        const { nodes, edges } = get();
-        if (nodes.length === 0) return;
+    createLoopGroup: () => {
+        const { nodes, selectedNodeIds } = get();
+        if (selectedNodeIds.length === 0) return;
+
+        // 1. Get all selected nodes
+        const allSelectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+        if (allSelectedNodes.length === 0) return;
+
+        // 2. Prevent nested loops
+        const hasLoopInSelection = allSelectedNodes.some(n => isLoopGroupNode(n) || getAncestorLoopId(n, nodes));
+        if (hasLoopInSelection) {
+            toast.error('Cannot create a loop inside another loop.');
+            return;
+        }
+
+        // 3. Expand selection to include children of selected groups
+        let expandedNodeIds = [...selectedNodeIds];
+        const selectedGroups = allSelectedNodes.filter(isGroupLikeNode);
+        if (selectedGroups.length > 0) {
+            const groupIds = selectedGroups.map(g => g.id);
+            const children = nodes.filter(n => n.parentId && groupIds.includes(n.parentId));
+            const childrenIds = children.map(c => c.id);
+            expandedNodeIds = [...new Set([...expandedNodeIds, ...childrenIds])];
+        }
+
+        const selectedNodes = nodes.filter(n => expandedNodeIds.includes(n.id));
+        if (selectedNodes.length === 0) return;
+
+        // 4. Compute selected roots (avoid moving children if parent selected)
+        const selectedRoots = selectedNodes.filter(node => {
+            if (!node.parentId) return true;
+            return !expandedNodeIds.includes(node.parentId);
+        });
+
+        if (selectedRoots.length === 0) return;
 
         get().takeSnapshot();
-        const layoutedNodes = autoLayoutNodes(nodes, edges);
+
+        // 5. Calculate bounds of selected roots (absolute)
+        const nodesForBounds = selectedRoots.map(n => ({
+            ...n,
+            position: getAbsolutePosition(n, nodes),
+        }));
+        const bounds = getNodesBounds(nodesForBounds);
+
+        const BASE_PADDING = 40;
+        const LEFT_PANEL = 220;
+        const RIGHT_PANEL = 220;
+        const MIN_WIDTH = 600;
+        const MIN_HEIGHT = 320;
+
+        const width = Math.max(bounds.width + LEFT_PANEL + RIGHT_PANEL, MIN_WIDTH);
+        const minLoopHeight = getLoopRequiredHeight(DEFAULT_LOOP_MODE);
+        const height = Math.max(bounds.height + BASE_PADDING * 2, MIN_HEIGHT, minLoopHeight);
+        const x = bounds.x - LEFT_PANEL;
+        const y = bounds.y - BASE_PADDING;
+
+        const loopId = `loop-${Date.now()}`;
+
+        const loopNode: Node<TSLNodeData> = {
+            id: loopId,
+            type: 'group',
+            position: { x, y },
+            style: { width, height },
+            data: {
+                type: 'loop',
+                values: {
+                    label: 'Loop',
+                    loopMode: DEFAULT_LOOP_MODE,
+                    loopType: DEFAULT_LOOP_TYPE,
+                    loopCompare: DEFAULT_LOOP_COMPARE,
+                },
+                connected: {},
+            },
+            selected: true,
+        };
+
+        const leftNodes = getLoopLeftNodeTypes(DEFAULT_LOOP_MODE).map((type, index) =>
+            createLoopInternalNode(loopId, type, {
+                x: LOOP_SLOT_X,
+                y: LOOP_SLOT_Y + LOOP_SLOT_GAP * index,
+            })
+        );
+
+        const outputNode = createLoopInternalNode(loopId, 'loop/output', { x: LOOP_SLOT_X, y: LOOP_SLOT_Y }, width);
+
+        // 6. Update selected nodes to be children of the loop group
+        const newNodes = nodes.map(node => {
+            const isRoot = selectedRoots.some(root => root.id === node.id);
+            if (isRoot) {
+                return {
+                    ...node,
+                    parentId: loopId,
+                    extent: 'parent' as const,
+                    position: {
+                        x: getAbsolutePosition(node, nodes).x - x,
+                        y: getAbsolutePosition(node, nodes).y - y,
+                    },
+                    selected: false,
+                };
+            }
+            return { ...node, selected: false };
+        });
+
+        const firstRootIndex = newNodes.findIndex(
+            (n) => selectedRoots.some((root) => root.id === n.id)
+        );
+        const insertIndex = firstRootIndex >= 0 ? firstRootIndex : 0;
+
+        const finalNodes = [
+            ...newNodes.slice(0, insertIndex),
+            loopNode,
+            ...newNodes.slice(insertIndex),
+            ...leftNodes,
+            outputNode,
+        ];
+
         set({
-            nodes: layoutedNodes,
+            nodes: finalNodes,
+            selectedNodeIds: [loopId],
+            selectedNodeId: loopId,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
+    },
+
+    setLoopMode: (loopId, mode) => {
+        const { nodes, edges } = get();
+        const loopNode = nodes.find(n => n.id === loopId);
+        if (!loopNode || !isLoopGroupNode(loopNode)) return;
+
+        const normalizedMode: LoopMode = isLoopMode(mode) ? mode : DEFAULT_LOOP_MODE;
+        const prevMode = getLoopMode(loopNode);
+
+        get().takeSnapshot();
+
+        const desiredLeftTypes = getLoopLeftNodeTypes(normalizedMode);
+        const desiredTypes = new Set<string>([...desiredLeftTypes, 'loop/output']);
+
+        const internalNodes = nodes.filter(n => n.parentId === loopId && isLoopInternalNode(n));
+        const internalByType = new Map(internalNodes.map(n => [n.data.type, n]));
+
+        const removeIds = new Set(
+            internalNodes.filter(n => !desiredTypes.has(n.data.type)).map(n => n.id)
+        );
+
+        const filteredNodes = nodes.filter(n => !removeIds.has(n.id));
+        const filteredEdges = edges.filter(e => !removeIds.has(e.source) && !removeIds.has(e.target));
+
+        const leftPositions = new Map<string, { x: number; y: number }>();
+        desiredLeftTypes.forEach((type, index) => {
+            leftPositions.set(type, { x: LOOP_SLOT_X, y: LOOP_SLOT_Y + LOOP_SLOT_GAP * index });
+        });
+
+        const loopWidth = getNodeDimensionValue(loopNode, 'width') ?? 0;
+        const outputX = Math.max(LOOP_SLOT_X, loopWidth - LOOP_NODE_WIDTH - LOOP_SLOT_X);
+        const outputPosition = { x: outputX, y: LOOP_SLOT_Y };
+
+        const newNodesToAdd: Node<TSLNodeData>[] = [];
+        for (const type of desiredLeftTypes) {
+            if (!internalByType.has(type)) {
+                const pos = leftPositions.get(type)!;
+                newNodesToAdd.push(createLoopInternalNode(loopId, type, pos));
+            }
+        }
+        if (!internalByType.has('loop/output')) {
+            newNodesToAdd.push(createLoopInternalNode(loopId, 'loop/output', outputPosition, loopWidth));
+        }
+
+        const compareOptions = ['<', '<=', '>', '>='];
+        const rawCompare = loopNode.data.values?.loopCompare;
+        let nextCompare = compareOptions.includes(String(rawCompare))
+            ? String(rawCompare)
+            : (normalizedMode === 'reverse' ? '>' : DEFAULT_LOOP_COMPARE);
+
+        if (
+            normalizedMode === 'reverse'
+            && prevMode !== 'range'
+            && prevMode !== 'reverse'
+            && nextCompare === DEFAULT_LOOP_COMPARE
+        ) {
+            nextCompare = '>';
+        }
+
+        const rawType = loopNode.data.values?.loopType;
+        const nextType = rawType === 'float' || rawType === 'int' ? rawType : DEFAULT_LOOP_TYPE;
+
+        const requiredHeight = getLoopRequiredHeight(normalizedMode);
+        const currentHeight = getNodeDimensionValue(loopNode, 'height') ?? 0;
+        const nextHeight = currentHeight > 0 ? Math.max(currentHeight, requiredHeight) : requiredHeight;
+
+        const updatedNodes = filteredNodes.map((node) => {
+            if (node.id === loopId) {
+                return {
+                    ...node,
+                    style: {
+                        ...node.style,
+                        height: nextHeight,
+                    },
+                    data: {
+                        ...node.data,
+                        values: {
+                            ...node.data.values,
+                            loopMode: normalizedMode,
+                            loopType: nextType,
+                            loopCompare: nextCompare,
+                        },
+                    },
+                };
+            }
+
+            if (node.parentId === loopId && desiredTypes.has(node.data.type)) {
+                if (node.data.type === 'loop/output') {
+                    if (node.position.x === outputPosition.x && node.position.y === outputPosition.y) return node;
+                    return {
+                        ...node,
+                        position: outputPosition,
+                    };
+                }
+
+                const pos = leftPositions.get(node.data.type);
+                if (!pos) return node;
+                if (node.position.x === pos.x && node.position.y === pos.y) return node;
+                return {
+                    ...node,
+                    position: pos,
+                };
+            }
+
+            return node;
+        });
+
+        set({
+            nodes: [...updatedNodes, ...newNodesToAdd],
+            edges: filteredEdges,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    removeNodesFromGroup: (nodeIds) => {
+        if (nodeIds.length === 0) return;
+        get().takeSnapshot();
+
+        const nodes = get().nodes;
+        const updatedNodes = nodes.map((node) => {
+            if (!nodeIds.includes(node.id)) return node;
+            if (!node.parentId) return node;
+            if (isLoopInternalNode(node)) return node;
+
+            const absPos = getAbsolutePosition(node, nodes);
+            const parent = nodes.find(n => n.id === node.parentId);
+            if (!parent || !isGroupLikeNode(parent)) {
+                return {
+                    ...node,
+                    parentId: undefined,
+                    extent: undefined,
+                    position: {
+                        x: absPos.x,
+                        y: absPos.y,
+                    },
+                };
+            }
+
+            const parentAbs = getAbsolutePosition(parent, nodes);
+            const parentWidth = getNodeDimensionValue(parent, 'width') ?? 0;
+            const parentHeight = getNodeDimensionValue(parent, 'height') ?? 0;
+
+            if (!parentWidth || !parentHeight) {
+                return {
+                    ...node,
+                    parentId: undefined,
+                    extent: undefined,
+                    position: {
+                        x: absPos.x,
+                        y: absPos.y,
+                    },
+                };
+            }
+
+            const nodeWidth = getNodeDimensionValue(node, 'width') ?? 0;
+            const nodeHeight = getNodeDimensionValue(node, 'height') ?? 0;
+
+            const groupCenter = {
+                x: parentAbs.x + parentWidth / 2,
+                y: parentAbs.y + parentHeight / 2,
+            };
+
+            const nodeCenter = {
+                x: absPos.x + nodeWidth / 2,
+                y: absPos.y + nodeHeight / 2,
+            };
+
+            let dirX = nodeCenter.x - groupCenter.x;
+            let dirY = nodeCenter.y - groupCenter.y;
+            const dirLen = Math.hypot(dirX, dirY);
+            if (dirLen < 1e-6) {
+                dirX = 1;
+                dirY = 0;
+            } else {
+                dirX /= dirLen;
+                dirY /= dirLen;
+            }
+
+            const halfW = parentWidth / 2;
+            const halfH = parentHeight / 2;
+            const tX = dirX !== 0 ? halfW / Math.abs(dirX) : Number.POSITIVE_INFINITY;
+            const tY = dirY !== 0 ? halfH / Math.abs(dirY) : Number.POSITIVE_INFINITY;
+            const boundaryT = Math.min(tX, tY);
+
+            const nodeHalfAlongDir = Math.abs(dirX) * (nodeWidth / 2) + Math.abs(dirY) * (nodeHeight / 2);
+            const padding = 24;
+            const offset = boundaryT + nodeHalfAlongDir + padding;
+
+            const nextCenter = {
+                x: groupCenter.x + dirX * offset,
+                y: groupCenter.y + dirY * offset,
+            };
+
+            const nextX = nextCenter.x - nodeWidth / 2;
+            const nextY = nextCenter.y - nodeHeight / 2;
+            return {
+                ...node,
+                parentId: undefined,
+                extent: undefined,
+                position: {
+                    x: nextX,
+                    y: nextY,
+                },
+            };
+        });
+
+        set({
+            nodes: updatedNodes,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    dropNodesIntoGroup: (nodeIds, groupId, nodesSnapshot) => {
+        if (nodeIds.length === 0) return;
+        const nodes = nodesSnapshot ?? get().nodes;
+        const nodesById = new Map(nodes.map(n => [n.id, n]));
+        const targetGroup = nodesById.get(groupId);
+        if (!targetGroup || !isGroupLikeNode(targetGroup)) return;
+
+        const isDescendantOf = (ancestorId: string, nodeId: string): boolean => {
+            let currentParentId = nodesById.get(nodeId)?.parentId;
+            while (currentParentId) {
+                if (currentParentId === ancestorId) return true;
+                currentParentId = nodesById.get(currentParentId)?.parentId;
+            }
+            return false;
+        };
+
+        const targetAbs = getAbsolutePosition(targetGroup, nodes);
+        const isTargetLoop = isLoopGroupNode(targetGroup);
+
+        get().takeSnapshot();
+
+        const updatedNodes = nodes.map((node) => {
+            if (!nodeIds.includes(node.id)) return node;
+            if (isLoopInternalNode(node)) return node;
+            if (node.id === groupId) return node;
+            if (node.parentId === groupId) return node;
+
+            if (isDescendantOf(node.id, groupId)) return node;
+
+            if (isTargetLoop && (isLoopGroupNode(node) || getAncestorLoopId(node, nodes))) {
+                return node;
+            }
+            if (isTargetLoop && (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)) {
+                return node;
+            }
+
+            const absPos = getAbsolutePosition(node, nodes);
+            return {
+                ...node,
+                parentId: groupId,
+                extent: 'parent' as const,
+                position: {
+                    x: absPos.x - targetAbs.x,
+                    y: absPos.y - targetAbs.y,
+                },
+            };
+        });
+
+        set({
+            nodes: updatedNodes,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    convertChainToMultiOp: (orderedNodeIds) => {
+        if (orderedNodeIds.length < 2) return;
+        get().takeSnapshot();
+
+        const { nodes, edges } = get();
+        const { operations, values, incomingEdges, outgoingEdges } = buildMultiOpFromChain(
+            orderedNodeIds,
+            nodes,
+            edges
+        );
+
+        // Compute position: average of all chain nodes
+        const chainNodes = orderedNodeIds
+            .map((id) => nodes.find((n) => n.id === id))
+            .filter(Boolean) as Node<TSLNodeData>[];
+        const avgX = chainNodes.reduce((s, n) => s + n.position.x, 0) / chainNodes.length;
+        const avgY = chainNodes.reduce((s, n) => s + n.position.y, 0) / chainNodes.length;
+
+        // Create the new MultiOp node
+        const multiOpId = `math/multiOp-${Date.now()}`;
+        const newNode: Node<TSLNodeData> = {
+            id: multiOpId,
+            type: 'math/multiOp',
+            position: { x: avgX, y: avgY },
+            data: {
+                type: 'math/multiOp' as NodeType,
+                values: values as Record<string, TSLValueType>,
+                connected: {},
+                operations,
+            },
+        };
+
+        // Remove chain nodes
+        const chainSet = new Set(orderedNodeIds);
+        const filteredNodes = nodes.filter((n) => !chainSet.has(n.id));
+        const filteredEdges = edges.filter(
+            (e) => !chainSet.has(e.source) && !chainSet.has(e.target)
+        );
+
+        // Rewire edges
+        const newEdges = [...filteredEdges];
+        for (const { originalEdge, newTargetHandle } of incomingEdges) {
+            newEdges.push({
+                id: `e-${originalEdge.source}-${originalEdge.sourceHandle}-${multiOpId}-${newTargetHandle}`,
+                source: originalEdge.source,
+                sourceHandle: originalEdge.sourceHandle,
+                target: multiOpId,
+                targetHandle: newTargetHandle,
+            });
+        }
+        for (const { originalEdge, newSourceHandle } of outgoingEdges) {
+            newEdges.push({
+                id: `e-${multiOpId}-${newSourceHandle}-${originalEdge.target}-${originalEdge.targetHandle}`,
+                source: multiOpId,
+                sourceHandle: newSourceHandle,
+                target: originalEdge.target,
+                targetHandle: originalEdge.targetHandle,
+            });
+        }
+
+        set({
+            nodes: [...filteredNodes, newNode],
+            edges: newEdges,
+            selectedNodeIds: [multiOpId],
+            selectedNodeId: multiOpId,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+
+        posthog.capture('chain_converted_to_multiop', {
+            chain_length: orderedNodeIds.length,
+            operations: operations.map((op) => op.op),
+            project_id: get().projectId,
+        });
     },
 
     resetEditor: () => {
@@ -1942,10 +2739,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     heightSegmentsPlane: 1,
                 }
             },
-            // Reset template callbacks as well? Probably no, they are set by the component. 
-            // The component usually sets them in useEffect.
         });
     },
 }));
-
-// Note: Auto-save is triggered by markDirty() which is called when changes occur

@@ -2,6 +2,16 @@ import { BaseNodeDef } from './definitions';
 
 export const constantNodes = [
     {
+        type: 'const/uniform',
+        label: 'Uniform',
+        category: 'Constants',
+        inputs: {},
+        outputs: {
+            out: { label: 'Out', type: 'any' },
+        },
+        tsl: 'uniform',
+    },
+    {
         type: 'const/float',
         label: 'Float',
         category: 'Constants',

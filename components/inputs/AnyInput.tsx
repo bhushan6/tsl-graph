@@ -12,6 +12,7 @@ import { TSLValueType } from '@/lib/types';
 interface AnyInputProps {
     value: TSLValueType;
     onChange: (value: TSLValueType) => void;
+    immediate?: boolean;
 }
 
 type InputType = 'float' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'bool';
@@ -116,7 +117,7 @@ export function convertValue(oldValue: TSLValueType, newType: InputType): TSLVal
 }
 
 
-function AnyInputComponent({ value, onChange }: AnyInputProps) {
+function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps) {
     // Current active type state, defaults to inferred
     const [currentType, setCurrentType] = useState<InputType>(inferType(value));
 
@@ -153,6 +154,7 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
                         size={2}
                         value={Array.isArray(value) ? value : Number(value ?? 0)}
                         onChange={onChange}
+                        immediate={immediate}
                         labels={['X', 'Y']}
                     />
                 );
@@ -162,6 +164,7 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
                         size={3}
                         value={Array.isArray(value) ? value : Number(value ?? 0)}
                         onChange={onChange}
+                        immediate={immediate}
                         labels={['X', 'Y', 'Z']}
                     />
                 );
@@ -171,17 +174,19 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
                         size={4}
                         value={Array.isArray(value) ? value : Number(value ?? 0)}
                         onChange={onChange}
+                        immediate={immediate}
                         labels={['X', 'Y', 'Z', 'W']}
                     />
                 );
             case 'color':
-                return <SimpleColorInput value={String(value)} onChange={onChange} />;
+                return <SimpleColorInput value={String(value)} onChange={onChange} immediate={immediate} />;
             case 'float':
             default:
                 return (
                     <DebouncedFloatInput
                         value={Number(value ?? 0)}
                         onChange={onChange}
+                        immediate={immediate}
                     />
                 );
         }
@@ -215,7 +220,15 @@ function AnyInputComponent({ value, onChange }: AnyInputProps) {
 }
 
 // Debounced float input with local state
-function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v: TSLValueType) => void }) {
+function DebouncedFloatInput({
+    value,
+    onChange,
+    immediate = false,
+}: {
+    value: number;
+    onChange: (v: TSLValueType) => void;
+    immediate?: boolean;
+}) {
     const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -235,10 +248,14 @@ function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v:
             setLocalValue(inputValue);
             const parsed = parseFloat(inputValue);
             if (!isNaN(parsed)) {
-                debouncedOnChange(parsed);
+                if (immediate) {
+                    onChange(parsed);
+                } else {
+                    debouncedOnChange(parsed);
+                }
             }
         }
-    }, [debouncedOnChange]);
+    }, [debouncedOnChange, immediate, onChange]);
 
     const handleBlur = useCallback(() => {
         // On blur, normalize the value
@@ -261,7 +278,15 @@ function DebouncedFloatInput({ value, onChange }: { value: number; onChange: (v:
 }
 
 // Simple color input for usage here with debouncing
-function SimpleColorInput({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+function SimpleColorInput({
+    value,
+    onChange,
+    immediate = false,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+    immediate?: boolean;
+}) {
     const [localColor, setLocalColor] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -271,8 +296,12 @@ function SimpleColorInput({ value, onChange }: { value: string, onChange: (v: st
 
     const handleColorChange = useCallback((newColor: string) => {
         setLocalColor(newColor);
-        debouncedOnChange(newColor);
-    }, [debouncedOnChange]);
+        if (immediate) {
+            onChange(newColor);
+        } else {
+            debouncedOnChange(newColor);
+        }
+    }, [debouncedOnChange, immediate, onChange]);
 
     return (
         <div className="flex flex-col gap-2">

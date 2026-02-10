@@ -117,3 +117,11 @@ export function getMultiOpInputs(ops: MultiOp[]): MultiOpInputDef[] {
 export function getMultiOpInputHandleIds(ops: MultiOp[]): string[] {
     return getMultiOpInputs(ops).map((input) => input.handleId);
 }
+
+export function isValidMultiOp(tsl: string): boolean {
+    return MULTI_OP_DEF_MAP.has(tsl);
+}
+
+export function getMultiOpChainKey(tsl: string): string | null {
+    return MULTI_OP_DEF_MAP.get(tsl)?.chainKey ?? null;
+}

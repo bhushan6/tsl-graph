@@ -88,6 +88,10 @@ export function EdgeDropNodePicker({
 
         // Filter out anchor nodes
         return nodes.filter(node => {
+            // Hide loop nodes (created only via toolbar action)
+            if (node.type === 'loop' || node.type.startsWith('loop/')) {
+                return false;
+            }
             const isAnchorNode = ANCHOR_NODE_TYPES.includes(node.type);
 
             if (isAnchorNode) {
@@ -98,6 +102,11 @@ export function EdgeDropNodePicker({
                 if (node.type === 'subgraph/input' && hasInputAnchor) return false;
                 if (node.type === 'subgraph/output' && hasOutputAnchor) return false;
             }
+
+            if (editorMode === 'subgraph' && node.type === 'const/uniform') {
+                return false;
+            }
+
             return true;
         });
     }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor, nodes]); // nodes dependency for memo safety though logic uses filtered booleans

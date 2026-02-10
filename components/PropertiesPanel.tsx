@@ -18,6 +18,7 @@ import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { AssetInput } from './inputs/AssetInput';
 import { Id } from '@/convex/_generated/dataModel';
+import { UNIFORM_KINDS, getUniformKindFromNode, getUniformDefaultValue, type UniformKind } from '@/lib/uniform-utils';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -34,6 +35,26 @@ const PORT_TYPES: { value: TSLType; label: string }[] = [
     { value: 'color', label: 'Color' },
     { value: 'int', label: 'Int' },
     { value: 'bool', label: 'Bool' },
+];
+
+const LOOP_MODE_OPTIONS = [
+    { label: 'Count', value: 'count' },
+    { label: 'Range', value: 'range' },
+    { label: 'Reverse', value: 'reverse' },
+    { label: 'Nested', value: 'nested' },
+    { label: 'Condition', value: 'condition' },
+];
+
+const LOOP_TYPE_OPTIONS = [
+    { label: 'Int', value: 'int' },
+    { label: 'Float', value: 'float' },
+];
+
+const LOOP_COMPARE_OPTIONS = [
+    { label: '<', value: '<' },
+    { label: '<=', value: '<=' },
+    { label: '>', value: '>' },
+    { label: '>=', value: '>=' },
 ];
 
 interface AnchorNodePortEditorProps {
@@ -289,6 +310,146 @@ function CodeNodeInstancePanel({
     );
 }
 
+function LoopGroupPanel({ node }: { node: AppNode }) {
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setLoopMode = useEditorStore((s) => s.setLoopMode);
+
+    const loopMode = String(node.data.values?.loopMode ?? 'count');
+    const loopType = String(node.data.values?.loopType ?? 'int');
+    const loopCompare = String(node.data.values?.loopCompare ?? (loopMode === 'reverse' ? '>' : '<'));
+    const showRangeOptions = loopMode === 'range' || loopMode === 'reverse';
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Loop</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {node.data.localName || node.id}
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                        Mode
+                    </label>
+                    <select
+                        value={loopMode}
+                        onChange={(e) => setLoopMode(node.id, e.target.value)}
+                        className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                    >
+                        {LOOP_MODE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {showRangeOptions && (
+                    <>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Type
+                            </label>
+                            <select
+                                value={loopType}
+                                onChange={(e) => updateNodeValue(node.id, 'loopType', e.target.value)}
+                                className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                            >
+                                {LOOP_TYPE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Compare
+                            </label>
+                            <select
+                                value={loopCompare}
+                                onChange={(e) => updateNodeValue(node.id, 'loopCompare', e.target.value)}
+                                className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                            >
+                                {LOOP_COMPARE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function UniformNodePanel({
+    node,
+    debugMode,
+    updateNodeValue,
+    setUniformType,
+}: {
+    node: AppNode;
+    debugMode: boolean;
+    updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
+    setUniformType: (nodeId: string, newKind: UniformKind) => void;
+}) {
+    const uniformKind = getUniformKindFromNode(node);
+    const uniformValue = useNodeInputValue(node.id, 'value', getUniformDefaultValue(uniformKind));
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Uniform</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {node.data.localName || node.id}
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+                {debugMode && <NodePreview />}
+
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Type
+                        </label>
+                        <select
+                            value={uniformKind}
+                            onChange={(e) => setUniformType(node.id, e.target.value as UniformKind)}
+                            className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                        >
+                            {UNIFORM_KINDS.map((kind) => (
+                                <option key={kind} value={kind}>
+                                    {kind}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Value
+                        </label>
+                        <PropertyInput
+                            type={uniformKind}
+                            value={uniformValue}
+                            onChange={(v) => updateNodeValue(node.id, 'value', v)}
+                            nodeId={node.id}
+                            propertyName="value"
+                            immediate={true}
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function MultiOpNodePanel({
     node,
     connectedInputs,
@@ -382,6 +543,7 @@ function PropertiesPanelContent() {
         s.nodes.find((n) => n.id === s.selectedNodeId)
     );
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setUniformType = useEditorStore((s) => s.setUniformType);
     const addDynamicPort = useEditorStore((s) => s.addDynamicPort);
     const removeDynamicPort = useEditorStore((s) => s.removeDynamicPort);
     const updateDynamicPort = useEditorStore((s) => s.updateDynamicPort);
@@ -453,6 +615,17 @@ function PropertiesPanelContent() {
         );
     }
 
+    if (node.data.type === 'const/uniform') {
+        return (
+            <UniformNodePanel
+                node={node}
+                debugMode={debugMode}
+                updateNodeValue={updateNodeValue}
+                setUniformType={setUniformType}
+            />
+        );
+    }
+
     if (node.data.type === 'math/multiOp') {
         return (
             <MultiOpNodePanel
@@ -460,6 +633,10 @@ function PropertiesPanelContent() {
                 connectedInputs={connectedInputs}
             />
         );
+    }
+
+    if (node.data.type === 'loop') {
+        return <LoopGroupPanel node={node} />;
     }
 
     const def = registry.get(node.data.type);
@@ -589,9 +766,10 @@ interface PropertyInputProps {
     nodeId?: string;
     propertyName?: string;
     projectId?: string | null;
+    immediate?: boolean;
 }
 
-function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId }: PropertyInputProps) {
+function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId, immediate = false }: PropertyInputProps) {
     if (options && options.length > 0) {
         return (
             <select
@@ -614,7 +792,7 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
     }
 
     if (type === 'any') {
-        return <AnyInput value={value} onChange={onChange} />;
+        return <AnyInput value={value} onChange={onChange} immediate={immediate} />;
     }
     if (type === 'string') {
         // Use AssetInput for string types when we have nodeId (for texture uploads)
@@ -633,19 +811,19 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
         return <StringInput value={String(value ?? '')} onChange={onChange} />;
     }
     if (type === 'color') {
-        return <ColorInput value={String(value ?? '#ffffff')} onChange={onChange} />;
+        return <ColorInput value={String(value ?? '#ffffff')} onChange={onChange} immediate={immediate} />;
     }
     if (type === 'bool') {
         return <BooleanInput value={value} onChange={onChange} />;
     }
     if (type === 'vec2') {
-        return <VectorInput size={2} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y']} />;
+        return <VectorInput size={2} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y']} immediate={immediate} />;
     }
     if (type === 'vec3') {
-        return <VectorInput size={3} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z']} />;
+        return <VectorInput size={3} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z']} immediate={immediate} />;
     }
     if (type === 'vec4') {
-        return <VectorInput size={4} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} />;
+        return <VectorInput size={4} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} immediate={immediate} />;
     }
 
     return (
@@ -653,6 +831,7 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
             value={Number(value ?? 0)}
             onChange={onChange}
             step={type === 'int' || type === 'uint' ? 1 : 0.1}
+            immediate={immediate}
         />
     );
 }
@@ -707,7 +886,15 @@ function StringInput({ value, onChange }: { value: string; onChange: (value: TSL
     );
 }
 
-function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLValueType) => void }) {
+function ColorInput({
+    value,
+    onChange,
+    immediate = false,
+}: {
+    value: string;
+    onChange: (value: TSLValueType) => void;
+    immediate?: boolean;
+}) {
     const [localColor, setLocalColor] = useState(value);
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -717,8 +904,12 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLV
 
     const handleColorChange = useCallback((newColor: string) => {
         setLocalColor(newColor);
-        debouncedOnChange(newColor);
-    }, [debouncedOnChange]);
+        if (immediate) {
+            onChange(newColor);
+        } else {
+            debouncedOnChange(newColor);
+        }
+    }, [debouncedOnChange, immediate, onChange]);
 
     return (
         <div className="flex flex-col gap-3">
@@ -746,7 +937,17 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: TSLV
     );
 }
 
-function NumberInput({ value, onChange }: { value: number; onChange: (value: TSLValueType) => void; step?: number }) {
+function NumberInput({
+    value,
+    onChange,
+    step,
+    immediate = false,
+}: {
+    value: number;
+    onChange: (value: TSLValueType) => void;
+    step?: number;
+    immediate?: boolean;
+}) {
     const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
@@ -766,10 +967,14 @@ function NumberInput({ value, onChange }: { value: number; onChange: (value: TSL
             setLocalValue(inputValue);
             const parsed = parseFloat(inputValue);
             if (!isNaN(parsed)) {
-                debouncedOnChange(parsed);
+                if (immediate) {
+                    onChange(parsed);
+                } else {
+                    debouncedOnChange(parsed);
+                }
             }
         }
-    }, [debouncedOnChange]);
+    }, [debouncedOnChange, immediate, onChange]);
 
     const handleBlur = useCallback(() => {
         // On blur, normalize the value
