@@ -17,15 +17,43 @@ const LOOP_INTERNAL_CONFIG: Record<string, {
         output: { id: 'count', type: 'int' },
         valueKey: 'count',
     },
+    'loop/start': {
+        label: 'Start',
+        input: { id: 'start', type: 'float' },
+        output: { id: 'start', type: 'float' },
+        valueKey: 'start',
+    },
+    'loop/end': {
+        label: 'End',
+        input: { id: 'end', type: 'float' },
+        output: { id: 'end', type: 'float' },
+        valueKey: 'end',
+    },
     'loop/index': {
         label: 'Index',
-        output: { id: 'index', type: 'int' },
+        output: { id: 'index', type: 'any' },
+    },
+    'loop/count2': {
+        label: 'Count 2',
+        input: { id: 'count', type: 'int' },
+        output: { id: 'count', type: 'int' },
+        valueKey: 'count',
+    },
+    'loop/index2': {
+        label: 'Index 2',
+        output: { id: 'index', type: 'any' },
     },
     'loop/accumulator': {
         label: 'Acc',
         input: { id: 'seed', type: 'any' },
         output: { id: 'acc', type: 'any' },
         valueKey: 'seed',
+    },
+    'loop/condition': {
+        label: 'Condition',
+        input: { id: 'cond', type: 'bool' },
+        output: { id: 'cond', type: 'bool' },
+        valueKey: 'cond',
     },
     'loop/output': {
         label: 'Output',

@@ -5,8 +5,17 @@ import { Edit2, Group } from 'lucide-react';
 import type { AppNode } from '@/lib/types';
 import "../app/globals.css"
 
+const LOOP_MODE_OPTIONS = [
+    { label: 'Count', value: 'count' },
+    { label: 'Range', value: 'range' },
+    { label: 'Reverse', value: 'reverse' },
+    { label: 'Nested', value: 'nested' },
+    { label: 'Condition', value: 'condition' },
+];
+
 function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setLoopMode = useEditorStore((s) => s.setLoopMode);
     const hoveredGroupId = useEditorStore((s) => s.hoveredGroupId);
     const isDropTarget = hoveredGroupId === id;
     const inputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +54,9 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
             setIsEditing(false);
         }
     }, [label, id, inputValue, updateNodeValue]);
+
+    const isLoop = data.type === 'loop';
+    const loopMode = String(data.values?.loopMode ?? 'count');
 
     // Focus input when editing starts
     useEffect(() => {
@@ -127,6 +139,21 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                             className="w-3.5 h-3.5 cursor-pointer opacity-0 group-hover:opacity-100"
                             onClick={handleEdit}
                         />
+                        {isLoop && (
+                            <select
+                                value={loopMode}
+                                onChange={(e) => setLoopMode(id, e.target.value)}
+                                className="h-6 px-2 text-[10px] bg-background/80 border border-border rounded-md text-foreground/80 outline-none focus:ring-1 focus:ring-primary"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {LOOP_MODE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                 )}
             </div>

@@ -22,14 +22,61 @@ export const loopNodes = [
         tsl: '__loop_count__',
     },
     {
+        type: 'loop/start',
+        label: 'Start',
+        category: 'Loop',
+        inputs: {
+            start: { label: 'Start', type: 'float', default: 0 },
+        },
+        outputs: {
+            start: { label: 'Start', type: 'float' },
+        },
+        tsl: '__loop_start__',
+    },
+    {
+        type: 'loop/end',
+        label: 'End',
+        category: 'Loop',
+        inputs: {
+            end: { label: 'End', type: 'float', default: 1 },
+        },
+        outputs: {
+            end: { label: 'End', type: 'float' },
+        },
+        tsl: '__loop_end__',
+    },
+    {
         type: 'loop/index',
         label: 'Index',
         category: 'Loop',
         inputs: {},
         outputs: {
-            index: { label: 'Index', type: 'int' },
+            index: { label: 'Index', type: 'any' },
         },
         tsl: '__loop_index__',
+        pure: true,
+    },
+    {
+        type: 'loop/count2',
+        label: 'Count 2',
+        category: 'Loop',
+        inputs: {
+            count: { label: 'Count', type: 'int', default: 1 },
+        },
+        outputs: {
+            count: { label: 'Count', type: 'int' },
+        },
+        tsl: '__loop_count2__',
+    },
+    {
+        type: 'loop/index2',
+        label: 'Index 2',
+        category: 'Loop',
+        inputs: {},
+        outputs: {
+            index: { label: 'Index', type: 'any' },
+        },
+        tsl: '__loop_index2__',
         pure: true,
     },
     {
@@ -43,6 +90,18 @@ export const loopNodes = [
             acc: { label: 'Acc', type: 'any' },
         },
         tsl: '__loop_accumulator__',
+    },
+    {
+        type: 'loop/condition',
+        label: 'Condition',
+        category: 'Loop',
+        inputs: {
+            cond: { label: 'Cond', type: 'bool', default: false },
+        },
+        outputs: {
+            cond: { label: 'Cond', type: 'bool' },
+        },
+        tsl: '__loop_condition__',
     },
     {
         type: 'loop/output',

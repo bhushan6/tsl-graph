@@ -37,6 +37,26 @@ const PORT_TYPES: { value: TSLType; label: string }[] = [
     { value: 'bool', label: 'Bool' },
 ];
 
+const LOOP_MODE_OPTIONS = [
+    { label: 'Count', value: 'count' },
+    { label: 'Range', value: 'range' },
+    { label: 'Reverse', value: 'reverse' },
+    { label: 'Nested', value: 'nested' },
+    { label: 'Condition', value: 'condition' },
+];
+
+const LOOP_TYPE_OPTIONS = [
+    { label: 'Int', value: 'int' },
+    { label: 'Float', value: 'float' },
+];
+
+const LOOP_COMPARE_OPTIONS = [
+    { label: '<', value: '<' },
+    { label: '<=', value: '<=' },
+    { label: '>', value: '>' },
+    { label: '>=', value: '>=' },
+];
+
 interface AnchorNodePortEditorProps {
     nodeId: string;
     dynamicPorts: SubgraphPort[];
@@ -290,6 +310,83 @@ function CodeNodeInstancePanel({
     );
 }
 
+function LoopGroupPanel({ node }: { node: AppNode }) {
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setLoopMode = useEditorStore((s) => s.setLoopMode);
+
+    const loopMode = String(node.data.values?.loopMode ?? 'count');
+    const loopType = String(node.data.values?.loopType ?? 'int');
+    const loopCompare = String(node.data.values?.loopCompare ?? (loopMode === 'reverse' ? '>' : '<'));
+    const showRangeOptions = loopMode === 'range' || loopMode === 'reverse';
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Loop</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {node.data.localName || node.id}
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                        Mode
+                    </label>
+                    <select
+                        value={loopMode}
+                        onChange={(e) => setLoopMode(node.id, e.target.value)}
+                        className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                    >
+                        {LOOP_MODE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {showRangeOptions && (
+                    <>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Type
+                            </label>
+                            <select
+                                value={loopType}
+                                onChange={(e) => updateNodeValue(node.id, 'loopType', e.target.value)}
+                                className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                            >
+                                {LOOP_TYPE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Compare
+                            </label>
+                            <select
+                                value={loopCompare}
+                                onChange={(e) => updateNodeValue(node.id, 'loopCompare', e.target.value)}
+                                className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                            >
+                                {LOOP_COMPARE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function UniformNodePanel({
     node,
     debugMode,
@@ -536,6 +633,10 @@ function PropertiesPanelContent() {
                 connectedInputs={connectedInputs}
             />
         );
+    }
+
+    if (node.data.type === 'loop') {
+        return <LoopGroupPanel node={node} />;
     }
 
     const def = registry.get(node.data.type);

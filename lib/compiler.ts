@@ -30,8 +30,13 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
 
 const LOOP_INTERNAL_NODE_TYPES = new Set([
     'loop/count',
+    'loop/start',
+    'loop/end',
     'loop/index',
+    'loop/count2',
+    'loop/index2',
     'loop/accumulator',
+    'loop/condition',
     'loop/output',
 ]);
 
@@ -1086,8 +1091,13 @@ export function compileGraph(
         const internalNodes = nodes.filter(n => n.parentId === loopId);
 
         const countNode = internalNodes.find(n => n.data.type === 'loop/count');
+        const count2Node = internalNodes.find(n => n.data.type === 'loop/count2');
+        const startNode = internalNodes.find(n => n.data.type === 'loop/start');
+        const endNode = internalNodes.find(n => n.data.type === 'loop/end');
         const indexNode = internalNodes.find(n => n.data.type === 'loop/index');
+        const index2Node = internalNodes.find(n => n.data.type === 'loop/index2');
         const accNode = internalNodes.find(n => n.data.type === 'loop/accumulator');
+        const conditionNode = internalNodes.find(n => n.data.type === 'loop/condition');
         const outputNode = internalNodes.find(n => n.data.type === 'loop/output');
 
         const reserveName = (base: string) => {
@@ -1109,14 +1119,46 @@ export function compileGraph(
         nodeIndex++;
 
         const countVarName = reserveName(`${loopVarName}_count`);
+        const count2VarName = reserveName(`${loopVarName}_count2`);
         const loopFnName = reserveName(`${loopVarName}_fn`);
         const accVarName = reserveName(`${loopVarName}_acc`);
+
+        const loopModeRaw = String(loopNode.data.values?.loopMode ?? 'count');
+        const loopMode = ['count', 'range', 'reverse', 'nested', 'condition'].includes(loopModeRaw)
+            ? loopModeRaw
+            : 'count';
+        const loopTypeRaw = String(loopNode.data.values?.loopType ?? 'int');
+        const loopType = loopTypeRaw === 'float' ? 'float' : 'int';
+        const compareOptions = ['<', '<=', '>', '>='];
+        const compareRaw = String(loopNode.data.values?.loopCompare ?? (loopMode === 'reverse' ? '>' : '<'));
+        const loopCompare = compareOptions.includes(compareRaw) ? compareRaw : (loopMode === 'reverse' ? '>' : '<');
 
         const countExpr = countNode
             ? getInputValue(countNode, 'count', edges, compiledNodes, { type: 'int', default: 1 })
             : '1';
 
-        targetLines.push(`const ${countVarName} = max(int(${countExpr}), 0);`);
+        const count2Expr = count2Node
+            ? getInputValue(count2Node, 'count', edges, compiledNodes, { type: 'int', default: 1 })
+            : '1';
+
+        const startExpr = startNode
+            ? getInputValue(startNode, 'start', edges, compiledNodes, { type: 'float', default: 0 })
+            : '0';
+
+        const endExpr = endNode
+            ? getInputValue(endNode, 'end', edges, compiledNodes, { type: 'float', default: 1 })
+            : '1';
+
+        const conditionExpr = conditionNode
+            ? getInputValue(conditionNode, 'cond', edges, compiledNodes, { type: 'bool', default: false })
+            : 'false';
+
+        if (loopMode === 'count' || loopMode === 'nested') {
+            targetLines.push(`const ${countVarName} = max(int(${countExpr}), 0);`);
+        }
+        if (loopMode === 'nested') {
+            targetLines.push(`const ${count2VarName} = max(int(${count2Expr}), 0);`);
+        }
 
         let seedExpr = getTSLDefaultForType('any');
         if (accNode) {
@@ -1128,16 +1170,41 @@ export function compileGraph(
         }
         targetLines.push(`const ${loopFnName} = Fn(() => {`);
         targetLines.push(`    const ${accVarName} = Var(${seedExpr});`);
-        targetLines.push(`    Loop(${countVarName}, ({ i }) => {`);
+        if (loopMode === 'nested') {
+            targetLines.push(`    Loop(${countVarName}, ${count2VarName}, ({ i, j }) => {`);
+        } else if (loopMode === 'range') {
+            targetLines.push(`    Loop({ start: ${startExpr}, end: ${endExpr}, type: '${loopType}', condition: '${loopCompare}', name: 'i' }, ({ i }) => {`);
+        } else if (loopMode === 'reverse') {
+            targetLines.push(`    Loop({ start: ${startExpr}, type: '${loopType}', condition: '${loopCompare}', name: 'i' }, ({ i }) => {`);
+        } else if (loopMode === 'condition') {
+            targetLines.push(`    Loop(${conditionExpr}, () => {`);
+        } else {
+            targetLines.push(`    Loop(${countVarName}, ({ i }) => {`);
+        }
 
         if (countNode) {
             compiledNodes.set(countNode.id, { id: countNode.id, varName: countVarName, code: countVarName, singleOutput: true });
         }
+        if (count2Node) {
+            compiledNodes.set(count2Node.id, { id: count2Node.id, varName: count2VarName, code: count2VarName, singleOutput: true });
+        }
+        if (startNode) {
+            compiledNodes.set(startNode.id, { id: startNode.id, varName: startExpr, code: startExpr, singleOutput: true });
+        }
+        if (endNode) {
+            compiledNodes.set(endNode.id, { id: endNode.id, varName: endExpr, code: endExpr, singleOutput: true });
+        }
         if (indexNode) {
             compiledNodes.set(indexNode.id, { id: indexNode.id, varName: 'i', code: 'i', singleOutput: true });
         }
+        if (index2Node) {
+            compiledNodes.set(index2Node.id, { id: index2Node.id, varName: 'j', code: 'j', singleOutput: true });
+        }
         if (accNode) {
             compiledNodes.set(accNode.id, { id: accNode.id, varName: accVarName, code: accVarName, singleOutput: true });
+        }
+        if (conditionNode) {
+            compiledNodes.set(conditionNode.id, { id: conditionNode.id, varName: conditionExpr, code: conditionExpr, singleOutput: true });
         }
         if (outputNode) {
             compiledNodes.set(outputNode.id, { id: outputNode.id, varName: loopVarName, code: loopVarName, singleOutput: true });

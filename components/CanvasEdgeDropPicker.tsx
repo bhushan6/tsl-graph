@@ -275,7 +275,11 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             const isGroupNode = (node: AppNode) => node.type === 'group' || node.data.type === 'loop';
             const isLoopBoundaryHandle = (node: AppNode, direction: 'input' | 'output', handleId?: string | null) => {
                 if (node.data.type === 'loop/count' && direction === 'input' && handleId === 'count') return true;
+                if (node.data.type === 'loop/start' && direction === 'input' && handleId === 'start') return true;
+                if (node.data.type === 'loop/end' && direction === 'input' && handleId === 'end') return true;
+                if (node.data.type === 'loop/count2' && direction === 'input' && handleId === 'count') return true;
                 if (node.data.type === 'loop/accumulator' && direction === 'input' && handleId === 'seed') return true;
+                if (node.data.type === 'loop/condition' && direction === 'input' && handleId === 'cond') return true;
                 if (node.data.type === 'loop/output' && direction === 'output' && (!handleId || handleId === 'out')) return true;
                 return false;
             };

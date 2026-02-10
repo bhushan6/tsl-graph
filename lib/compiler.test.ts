@@ -681,6 +681,68 @@ describe('Logic Nodes', () => {
 
             expect(code.trim()).toBe(expected.trim());
         });
+
+        it('should compile range loop config', () => {
+            const loop = createNode('loopRange', 'loop', {
+                values: { loopMode: 'range', loopType: 'int', loopCompare: '<' }
+            });
+            const start = { ...createNode('loopRange::start', 'loop/start', { values: { start: 0 } }), parentId: 'loopRange' };
+            const end = { ...createNode('loopRange::end', 'loop/end', { values: { end: 10 } }), parentId: 'loopRange' };
+            const index = { ...createNode('loopRange::index', 'loop/index'), parentId: 'loopRange' };
+            const acc = { ...createNode('loopRange::acc', 'loop/accumulator'), parentId: 'loopRange' };
+            const output = { ...createNode('loopRange::output', 'loop/output'), parentId: 'loopRange' };
+
+            const nodes = [loop, start, end, index, acc, output];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain(`Loop({ start: 0, end: 10, type: 'int', condition: '<', name: 'i' }, ({ i }) => {`);
+        });
+
+        it('should compile reverse loop config', () => {
+            const loop = createNode('loopReverse', 'loop', {
+                values: { loopMode: 'reverse', loopType: 'int', loopCompare: '>' }
+            });
+            const start = { ...createNode('loopReverse::start', 'loop/start', { values: { start: 10 } }), parentId: 'loopReverse' };
+            const index = { ...createNode('loopReverse::index', 'loop/index'), parentId: 'loopReverse' };
+            const acc = { ...createNode('loopReverse::acc', 'loop/accumulator'), parentId: 'loopReverse' };
+            const output = { ...createNode('loopReverse::output', 'loop/output'), parentId: 'loopReverse' };
+
+            const nodes = [loop, start, index, acc, output];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain(`Loop({ start: 10, type: 'int', condition: '>', name: 'i' }, ({ i }) => {`);
+        });
+
+        it('should compile nested loop', () => {
+            const loop = createNode('loopNested', 'loop', {
+                values: { loopMode: 'nested' }
+            });
+            const count = { ...createNode('loopNested::count', 'loop/count', { values: { count: 3 } }), parentId: 'loopNested' };
+            const index = { ...createNode('loopNested::index', 'loop/index'), parentId: 'loopNested' };
+            const count2 = { ...createNode('loopNested::count2', 'loop/count2', { values: { count: 5 } }), parentId: 'loopNested' };
+            const index2 = { ...createNode('loopNested::index2', 'loop/index2'), parentId: 'loopNested' };
+            const acc = { ...createNode('loopNested::acc', 'loop/accumulator'), parentId: 'loopNested' };
+            const output = { ...createNode('loopNested::output', 'loop/output'), parentId: 'loopNested' };
+
+            const nodes = [loop, count, index, count2, index2, acc, output];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('({ i, j }) => {');
+        });
+
+        it('should compile condition loop', () => {
+            const loop = createNode('loopCond', 'loop', {
+                values: { loopMode: 'condition' }
+            });
+            const condition = { ...createNode('loopCond::condition', 'loop/condition', { values: { cond: true } }), parentId: 'loopCond' };
+            const acc = { ...createNode('loopCond::acc', 'loop/accumulator'), parentId: 'loopCond' };
+            const output = { ...createNode('loopCond::output', 'loop/output'), parentId: 'loopCond' };
+
+            const nodes = [loop, condition, acc, output];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('Loop(true, () => {');
+        });
     });
 
     describe('Assign nodes', () => {

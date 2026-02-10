@@ -180,8 +180,13 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
             group: GroupNode,
             loop: GroupNode,
             'loop/count': LoopInternalNode,
+            'loop/start': LoopInternalNode,
+            'loop/end': LoopInternalNode,
             'loop/index': LoopInternalNode,
+            'loop/count2': LoopInternalNode,
+            'loop/index2': LoopInternalNode,
             'loop/accumulator': LoopInternalNode,
+            'loop/condition': LoopInternalNode,
             'loop/output': LoopInternalNode,
         };
         // Add registry types
