@@ -28,3 +28,17 @@ export const getPreviewUrl = query({
         return { url };
     },
 });
+
+export const deletePreviewImage = mutation({
+    args: {
+        storageId: v.id("_storage"),
+    },
+    handler: async (ctx, args) => {
+        const user = await authComponent.getAuthUser(ctx);
+        if (!user) {
+            throw new Error("Not authenticated");
+        }
+        await ctx.storage.delete(args.storageId);
+        return { success: true };
+    },
+});

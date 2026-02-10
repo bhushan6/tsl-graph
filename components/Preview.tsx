@@ -9,7 +9,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { usePreviewStore } from '@/store/preview';
 import {
     Popover,
     PopoverContent,
@@ -18,7 +17,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input'; // Keeping it if instance count uses it or we can replace that too
 import { DebouncedInput } from './DebouncedInput';
-import { useMutation } from "convex/react";
+import { useMutation, useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 import { Maximize2, Minimize2, Settings2, Camera } from 'lucide-react';
@@ -39,15 +38,14 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const [isFullScreen, setIsFullScreen] = useState(false);
-    const registerRenderer = usePreviewStore((state) => state.registerRenderer);
-    const setLastError = usePreviewStore((state) => state.setLastError);
-
-
     const [isReady, setIsReady] = useState(false);
+    const setPreviewSnapshotProvider = useEditorStore((state) => state.setPreviewSnapshotProvider);
+    const convex = useConvex();
 
     // Thumbnail generation
     const generateThumbnailUploadUrl = useMutation(api.projects.generateThumbnailUploadUrl);
     const updateThumbnail = useMutation(api.projects.updateThumbnail);
+    const generatePreviewUploadUrl = useMutation(api.ai.generatePreviewUploadUrl);
     const nodes = useEditorStore((state) => state.nodes);
     const lastSnapshotNodeCount = useRef(nodes.length);
     // Track if we've done the initial snapshot for this session
@@ -109,6 +107,57 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             console.error('Failed to update thumbnail:', err);
         }
     }, [props.projectId, generateThumbnailUploadUrl, updateThumbnail]);
+
+    const capturePreviewForAi = useCallback(
+        async (options?: { format?: 'png' | 'jpeg'; quality?: number }) => {
+            if (!rendererRef.current) {
+                throw new Error('Preview renderer not ready');
+            }
+
+            const canvas = rendererRef.current.domElement;
+            const format = options?.format === 'jpeg' ? 'jpeg' : 'png';
+            const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+            const quality = format === 'jpeg' ? options?.quality ?? 0.85 : undefined;
+
+            const blob = await new Promise<Blob | null>((resolve) => {
+                canvas.toBlob((b) => resolve(b), mimeType, quality);
+            });
+
+            if (!blob) {
+                throw new Error('Failed to create preview image');
+            }
+
+            const uploadUrl = await generatePreviewUploadUrl();
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': mimeType },
+                body: blob,
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to upload preview image');
+            }
+
+            const { storageId } = await response.json();
+            const result = await convex.query(api.ai.getPreviewUrl, {
+                storageId: storageId as Id<"_storage">,
+            });
+
+            return {
+                imageUrl: result.url,
+                storageId,
+                width: canvas.width,
+                height: canvas.height,
+                format: mimeType,
+            };
+        },
+        [convex, generatePreviewUploadUrl]
+    );
+
+    useEffect(() => {
+        setPreviewSnapshotProvider(capturePreviewForAi);
+        return () => setPreviewSnapshotProvider(null);
+    }, [capturePreviewForAi, setPreviewSnapshotProvider]);
 
     // Initial snapshot when landing in editor
     useEffect(() => {
@@ -175,10 +224,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
-
-    useEffect(() => {
-        setLastError(error ?? null);
-    }, [error, setLastError]);
 
     // Dispose material when it changes
     useEffect(() => {
@@ -289,8 +334,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
-            registerRenderer(renderer);
-
             // Lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
             scene.add(ambientLight);
@@ -363,7 +406,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     container.removeChild(rendererRef.current.domElement);
                 }
             }
-            registerRenderer(null);
         };
     }, []);
 

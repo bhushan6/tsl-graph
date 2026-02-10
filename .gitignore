@@ -50,3 +50,6 @@ dist-ssr
 .next
 
 *.tsbuildinfo
+
+# AI logs
+/logs

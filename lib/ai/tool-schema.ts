@@ -26,8 +26,23 @@ export const TOOL_SET = {
       additionalProperties: false,
     }),
   }),
+  compileGraph: tool({
+    description: 'Compile the current graph into TSL code (read-only).',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        includeImports: { type: 'boolean' },
+        maxChars: { type: 'number' },
+      },
+      additionalProperties: false,
+    }),
+  }),
+  validateGraph: tool({
+    description: 'Validate the current graph for missing nodes/handles and material node issues.',
+    inputSchema: emptySchema,
+  }),
   addNode: tool({
-    description: 'Add a node at a position with optional initial values.',
+    description: 'Add a node with optional position and initial values.',
     inputSchema: jsonSchema({
       type: 'object',
       properties: {
@@ -43,37 +58,12 @@ export const TOOL_SET = {
         },
         values: { type: 'object' },
       },
-      required: ['type', 'position'],
-      additionalProperties: false,
-    }),
-  }),
-  deleteNode: tool({
-    description: 'Delete a node and its edges.',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: {
-        nodeId: { type: 'string' },
-      },
-      required: ['nodeId'],
+      required: ['type'],
       additionalProperties: false,
     }),
   }),
   connectNodes: tool({
     description: 'Connect two node handles.',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: {
-        source: { type: 'string' },
-        sourcePort: { type: ['string', 'null'] },
-        target: { type: 'string' },
-        targetPort: { type: ['string', 'null'] },
-      },
-      required: ['source', 'target'],
-      additionalProperties: false,
-    }),
-  }),
-  disconnectNodes: tool({
-    description: 'Disconnect two node handles.',
     inputSchema: jsonSchema({
       type: 'object',
       properties: {
@@ -99,55 +89,31 @@ export const TOOL_SET = {
       additionalProperties: false,
     }),
   }),
-  moveNode: tool({
-    description: 'Move a node to a new position.',
+  deleteNode: tool({
+    description: 'Delete a node and its edges.',
     inputSchema: jsonSchema({
       type: 'object',
       properties: {
         nodeId: { type: 'string' },
-        position: {
-          type: 'object',
-          properties: {
-            x: { type: 'number' },
-            y: { type: 'number' },
-          },
-          required: ['x', 'y'],
-          additionalProperties: false,
-        },
       },
-      required: ['nodeId', 'position'],
+      required: ['nodeId'],
       additionalProperties: false,
     }),
   }),
-  bulkOperation: tool({
-    description: 'Apply multiple graph operations atomically with tempId resolution.',
+  autoLayout: tool({
+    description: 'Automatically layout the current graph.',
+    inputSchema: emptySchema,
+  }),
+  capturePreviewImage: tool({
+    description: 'Capture the current shader preview image and return a URL for visual verification.',
     inputSchema: jsonSchema({
       type: 'object',
       properties: {
-        operations: {
-          type: 'array',
-          items: { type: 'object' },
-        },
+        format: { type: 'string', enum: ['png', 'jpeg'] },
+        quality: { type: 'number' },
       },
-      required: ['operations'],
       additionalProperties: false,
     }),
-  }),
-  validateGraph: tool({
-    description: 'Validate the current graph for errors and warnings.',
-    inputSchema: emptySchema,
-  }),
-  compileAndValidate: tool({
-    description: 'Compile the graph and return any errors.',
-    inputSchema: emptySchema,
-  }),
-  getPreviewStatus: tool({
-    description: 'Get preview renderer status and last error.',
-    inputSchema: emptySchema,
-  }),
-  capturePreview: tool({
-    description: 'Capture a preview snapshot, upload to storage, and return a URL plus metadata.',
-    inputSchema: emptySchema,
   }),
 } as const;
 

@@ -1,75 +1,116 @@
 import { NextResponse } from 'next/server';
-import { streamText, createGateway, convertToModelMessages } from 'ai';
-import { TOOL_SET } from '@/lib/ai/tool-schema';
+import { createGateway, streamText, convertToModelMessages } from 'ai';
 import { fetchAuthQuery } from '@/lib/auth-server';
 import { api } from '@/convex/_generated/api';
-import { aiLog, aiError } from '@/lib/ai/logger';
+import { TOOL_SET } from '@/lib/ai/tool-schema';
+import { appendTraceEvent } from '@/lib/ai/trace-store';
 
-// const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
-const gateway = createGateway({
-  apiKey: "vck_56aztJkxC65S4mEBBiSFagiDxBP7zAXIniGvPd388PL2rOXY6j19845s",
-})
-
-
-
-
-
-const DEFAULT_MODEL = 'google/gemini-3-pro-preview';
-
-(async () => {
-  console.log(await gateway.getAvailableModels());
-})()
+const DEFAULT_MODEL = 'openai/gpt-4.1';
+const SYSTEM_PROMPT = [
+  'You are an assistant for a shader node editor.',
+  'Use tools to read the graph and make changes only when the user asks.',
+  'Tool protocol: 1) getGraphSnapshot + getAvailableNodes, 2) getNodeDefinition for any node you will touch, 3) add nodes, 4) set values, 5) connect nodes, 6) validateGraph and fix errors, 7) compileGraph (for verification), 8) capturePreviewImage only if visual verification is requested, 9) summarize.',
+  'Do not invent ids or port names; rely on tool outputs.',
+  'Do not mutate the graph for purely explanatory questions.',
+  'Keep edits minimal; do not delete nodes unless asked.',
+  'When changing material type, delete the existing material node and reconnect outputs to the new one.',
+  'Adding nodes does not require positions unless the user provides coordinates.',
+  'For color inputs, pass hex strings like #ff00ff.',
+  'Call autoLayout only if the user asks for it, and it must be the last tool call.',
+  'capturePreviewImage is expensive; call it only when visual verification is needed and only in main editor mode.',
+  'If intent is unclear, ask a brief clarifying question instead of guessing.',
+  'After any mutations, call validateGraph and compileGraph before your final response.',
+  'If validateGraph reports errors, fix them and run validateGraph again.',
+  'Include a short validation + compile summary in the final response.',
+  'Reply with a brief summary or answer after tool calls are done.',
+].join(' ');
+const DEBUG = process.env.AI_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
+const log = (...args: unknown[]) => {
+  if (DEBUG) console.log('[AI API]', ...args);
+};
 
 export async function POST(req: Request) {
-  const requestId = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  aiLog(requestId, 'Incoming AI request');
-
   try {
-    if (!gateway) {
-      aiError(requestId, 'Missing AI_GATEWAY_API_KEY');
-      return NextResponse.json({ error: 'Missing AI gateway API key' }, { status: 500 });
+    const apiKey = process.env.AI_GATEWAY_API_KEY;
+    if (!apiKey) {
+      log('missing api key');
+      return NextResponse.json({ error: 'Missing AI_GATEWAY_API_KEY' }, { status: 500 });
     }
 
     const user = await fetchAuthQuery(api.auth.getCurrentUser, {});
     if (!user) {
-      aiLog(requestId, 'Unauthorized request');
+      log('unauthorized');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
-    const messages = body.messages ?? [];
-    const systemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt : undefined;
-    const model = typeof body.model === 'string' ? body.model : DEFAULT_MODEL;
+    const body = await req.json().catch(() => ({}));
+    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const traceId = typeof body?.traceId === 'string' ? body.traceId : 'unknown';
+    const chatId = typeof body?.chatId === 'string' ? body.chatId : undefined;
+    const model = typeof body?.model === 'string' && body.model.trim().length > 0
+      ? body.model
+      : (process.env.AI_MODEL || DEFAULT_MODEL);
 
-    aiLog(requestId, 'Auth OK', { model, messageCount: messages.length });
+    log('request', { messageCount: messages.length, model, tools: Object.keys(TOOL_SET), traceId, chatId });
+    void appendTraceEvent({
+      ts: new Date().toISOString(),
+      traceId,
+      chatId,
+      source: 'server',
+      event: 'agent_request',
+      payload: {
+        messageCount: messages.length,
+        model,
+        tools: Object.keys(TOOL_SET),
+      },
+    });
 
+    const gateway = createGateway({ apiKey });
     const result = streamText({
       model: gateway(model),
-      system: systemPrompt,
-      messages: await convertToModelMessages(messages),
+      messages: await convertToModelMessages(messages, { tools: TOOL_SET }),
+      system: SYSTEM_PROMPT,
       tools: TOOL_SET,
-      onStepFinish: (step) => {
-        aiLog(requestId, 'AI step finished', {
-          finishReason: step.finishReason,
-          textLength: step.text?.length ?? 0,
-          toolCalls: step.toolCalls?.map((call) => call.toolName) ?? [],
-        });
-      },
       onFinish: (event) => {
-        aiLog(requestId, 'AI response', {
-          finishReason: event.finishReason,
-          toolCalls: event.toolCalls?.length ?? 0,
-          textLength: event.text?.length ?? 0,
+        void appendTraceEvent({
+          ts: new Date().toISOString(),
+          traceId,
+          chatId,
+          source: 'server',
+          event: 'agent_response',
+          payload: {
+            finishReason: event.finishReason,
+            textLength: event.text?.length ?? 0,
+          },
         });
       },
-      onError: (error) => {
-        aiError(requestId, 'AI stream error', error);
+      onError: (err) => {
+        void appendTraceEvent({
+          ts: new Date().toISOString(),
+          traceId,
+          chatId,
+          source: 'server',
+          event: 'error',
+          payload: {
+            message: err instanceof Error ? err.message : String(err),
+          },
+        });
       },
     });
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
-    aiError(requestId, 'AI request failed', error);
-    return NextResponse.json({ error: 'AI request failed' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'AI request failed';
+    console.error('[AI API] error', error);
+    void appendTraceEvent({
+      ts: new Date().toISOString(),
+      traceId: 'unknown',
+      source: 'server',
+      event: 'error',
+      payload: {
+        message,
+      },
+    });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

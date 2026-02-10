@@ -1,63 +1,86 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { Send, Loader2, Sparkles, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Send, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { useChat } from '@ai-sdk/react';
-import {
-  DefaultChatTransport,
-  getToolName,
-  isTextUIPart,
-  isToolUIPart,
-  lastAssistantMessageIsCompleteWithToolCalls,
-} from 'ai';
 import { runToolCall } from '@/lib/ai/tool-runner';
 import type { ToolName, ToolResult } from '@/lib/ai/types';
-import { useEditorStore } from '@/store/editor';
-import { aiLog, aiError } from '@/lib/ai/logger';
-import { clearAiLogEntries, formatAiLogEntries, getAiLogEntries, subscribeAiLogs } from '@/lib/ai/log-store';
-
-const SYSTEM_PROMPT = `You are an AI shader assistant for a node-based editor.\n\nRules:\n- Always start by calling getGraphSnapshot and getAvailableNodes.\n- Use tools to modify the graph; avoid guessing node IDs or ports.\n- Prefer bulkOperation when making multiple changes.\n- After edits, call validateGraph and compileAndValidate.\n- Only call capturePreview at most once per user request.\n- After tool calls, respond with a short, action-focused summary.`;
+import { DefaultChatTransport } from 'ai';
+import { logTrace, setTraceContext } from '@/lib/ai/trace';
+import { useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 
 interface AiChatPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+const makeId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+};
+
 export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
+
+
+  const traceId = useMemo(() => makeId(), []);
+  const chatId = useMemo(() => makeId(), []);
+
   const [input, setInput] = useState('');
+  const [lastError, setLastError] = useState<string | null>(null);
+  const debug = process.env.NEXT_PUBLIC_AI_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
+  const log = (...args: unknown[]) => {
+    if (debug) console.log('[AI Chat]', ...args);
+  };
+
   const [lastToolResults, setLastToolResults] = useState<ToolResult[]>([]);
-  const [showLogs, setShowLogs] = useState(false);
-  const [logEntries, setLogEntries] = useState(() => getAiLogEntries());
-  const undo = useEditorStore((s) => s.undo);
+  const lastAutoSendSignatureRef = useRef<string | null>(null);
+  const pendingPreviewStorageIdsRef = useRef<string[]>([]);
+  const deletePreviewImage = useMutation(api.ai.deletePreviewImage);
+  const transport = useMemo(() => new DefaultChatTransport({ api: '/api/ai', body: { traceId, chatId } }), [traceId, chatId]);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: '/api/ai',
-        body: {
-          systemPrompt: SYSTEM_PROMPT,
-        },
-      }),
-    []
-  );
+  const cleanupPreviewImages = useCallback(async () => {
+    const ids = pendingPreviewStorageIdsRef.current;
+    if (!ids.length) return;
+    pendingPreviewStorageIdsRef.current = [];
+    try {
+      await Promise.all(
+        ids.map((storageId) =>
+          deletePreviewImage({ storageId: storageId as Id<'_storage'> })
+        )
+      );
+    } catch (err) {
+      log('preview cleanup error', err);
+    }
+  }, [deletePreviewImage]);
 
-  const { messages, sendMessage, status, addToolOutput } = useChat({
-    transport,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    async onToolCall({ toolCall }) {
-      aiLog('AI tool call received', { toolName: toolCall.toolName, toolCallId: toolCall.toolCallId });
+  const chatOptions = {
+    transport: transport as unknown,
+    id: chatId,
+    async onToolCall({ toolCall }: { toolCall: { toolCallId: string; toolName: string; input?: unknown; args?: unknown } }) {
+      log('tool call', { tool: toolCall.toolName, toolCallId: toolCall.toolCallId });
       const input = (toolCall as { input?: unknown; args?: unknown }).input ?? (toolCall as { args?: unknown }).args;
       const result = await runToolCall({
         toolCallId: toolCall.toolCallId,
         toolName: toolCall.toolName as ToolName,
         input,
       });
+      log('tool result', { tool: toolCall.toolName, toolCallId: toolCall.toolCallId, result });
 
       setLastToolResults((prev) => [...prev, result]);
+      if (!result.isError && toolCall.toolName === 'capturePreviewImage') {
+        const storageId = (result.output as { storageId?: string } | undefined)?.storageId;
+        if (typeof storageId === 'string') {
+          pendingPreviewStorageIdsRef.current = [...pendingPreviewStorageIdsRef.current, storageId];
+        }
+      }
 
       if (result.isError) {
         const errorText =
@@ -68,70 +91,72 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
           state: 'output-error',
           errorText,
         });
-        aiError('AI tool output error', { toolName: toolCall.toolName, errorText });
       } else {
         addToolOutput({
           tool: toolCall.toolName,
           toolCallId: toolCall.toolCallId,
           output: result.output,
         });
-        aiLog('AI tool output queued', { toolName: toolCall.toolName });
       }
     },
-    onError(error) {
-      aiError('AI chat error', error);
+    onError: (err: Error) => {
+      log('error', err);
+      setLastError(err.message ?? 'AI request failed.');
+      void logTrace('error', { message: err.message });
+      void cleanupPreviewImages();
     },
-    onFinish({ finishReason, message }) {
-      const text = message.parts.filter(isTextUIPart).map((part) => part.text).join('');
-      aiLog('AI response finished', { finishReason, textLength: text.length });
+    onFinish: ({ message }: { message: { id: string } }) => {
+      log('finish', { messageId: message.id });
+      void logTrace('final_response', { messageId: message.id });
+      void cleanupPreviewImages();
     },
-  });
+    sendAutomaticallyWhen: (options: { messages: Array<{ id?: string; role?: string; parts?: Array<{ type?: string; state?: string }> }> }) => {
+      const last = options.messages[options.messages.length - 1];
+      if (!last || last.role !== 'assistant') return false;
+      const parts = last.parts ?? [];
+      const toolParts = parts.filter((part) => {
+        if (!part || typeof part.type !== 'string') return false;
+        const isTool = part.type.startsWith('tool-') || part.type === 'dynamic-tool';
+        return isTool && (part.state === 'output-available' || part.state === 'output-error');
+      });
+      if (toolParts.length === 0) return false;
+      const signature = `${last.id ?? `idx-${options.messages.length - 1}`}:${toolParts.length}`;
+      if (lastAutoSendSignatureRef.current === signature) {
+        return false;
+      }
+      lastAutoSendSignatureRef.current = signature;
+      log('auto-send after tool outputs', { signature });
+      return true;
+    },
+  } as unknown as Parameters<typeof useChat>[0];
+
+  const { messages, sendMessage, status, addToolOutput, error } = useChat(chatOptions);
+
+  useEffect(() => {
+    if (!error) return;
+    setLastError(error.message ?? 'AI request failed.');
+  }, [error]);
+
+  useEffect(() => {
+    setTraceContext({ traceId, chatId });
+  }, [traceId, chatId]);
 
   const isRunning = status === 'submitted' || status === 'streaming';
-
-  const lastMessageIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.id === lastMessageIdRef.current) {
-      return;
-    }
-    lastMessageIdRef.current = lastMessage.id;
-    const partSummaries = lastMessage.parts.map((part) => {
-      if (isToolUIPart(part)) {
-        return `tool:${getToolName(part)}:${part.state}`;
-      }
-      return part.type;
-    });
-    aiLog('AI message received', {
-      role: lastMessage.role,
-      partTypes: partSummaries,
-    });
-  }, [messages]);
-
-  useEffect(() => {
-    aiLog('AI status', status);
-  }, [status]);
-
-  useEffect(() => {
-    setLogEntries(getAiLogEntries());
-    return subscribeAiLogs(() => {
-      setLogEntries(getAiLogEntries());
-    });
-  }, []);
 
   const displayMessages = useMemo(
     () =>
       messages
         .filter((message) => message.role === 'user' || message.role === 'assistant')
-        .map((message) => ({
-          id: message.id,
-          role: message.role,
-          text: message.parts
-            .filter(isTextUIPart)
-            .map((part) => part.text)
-            .join(''),
-        }))
+        .map((message) => {
+          const parts = Array.isArray(message.parts) ? message.parts : [];
+          const text = parts.reduce((acc, part) => {
+            if (!part || part.type !== 'text' || typeof part.text !== 'string') {
+              return acc;
+            }
+            return acc + part.text;
+          }, '');
+          return { id: message.id, role: message.role, text };
+        })
         .filter((message) => message.text.trim().length > 0),
     [messages]
   );
@@ -141,12 +166,12 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
     const nextInput = input.trim();
     setInput('');
     setLastToolResults([]);
-    aiLog('AI chat send', nextInput);
-    try {
-      await sendMessage({ text: nextInput });
-    } catch (error) {
-      aiError('AI chat send failed', error);
-    }
+    setLastError(null);
+    lastAutoSendSignatureRef.current = null;
+    pendingPreviewStorageIdsRef.current = [];
+    log('send message', { text: nextInput });
+    void logTrace('user_message', { text: nextInput });
+    await sendMessage({ text: nextInput });
   };
 
   return (
@@ -155,10 +180,10 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
         <SheetHeader className="shrink-0">
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
-            AI Shader Assistant
+            AI Chat
           </SheetTitle>
           <SheetDescription>
-            Describe the shader or ask for edits. Changes apply automatically with one undo step.
+            Ask questions about shaders or describe what you want to build.
           </SheetDescription>
         </SheetHeader>
 
@@ -167,17 +192,21 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
             <div className="space-y-3">
               {displayMessages.length === 0 && (
                 <div className="text-sm text-muted-foreground">
-                  Try: "Make a glossy blue material" or "Add animated noise to color."
+                  Try: &quot;Create a yellow-blue gradient&quot; or &quot;Explain what this node does.&quot;
+                </div>
+              )}
+              {lastError && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive max-w-[450px]">
+                  {lastError}
                 </div>
               )}
               {displayMessages.map((message) => (
                 <div
                   key={message.id}
-                  className={`rounded-lg px-3 py-2 text-sm ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground ml-8'
-                      : 'bg-muted text-foreground mr-8'
-                  }`}
+                  className={`rounded-lg px-3 py-2 text-sm ${message.role === 'user'
+                    ? 'bg-primary text-primary-foreground ml-8'
+                    : 'bg-muted text-foreground mr-8'
+                    }`}
                 >
                   {message.text}
                 </div>
@@ -199,52 +228,10 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
           </ScrollArea>
 
           <div className="border-t border-border p-4 space-y-3 shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">
-                {logEntries.length} log entries saved
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const text = formatAiLogEntries(getAiLogEntries());
-                    navigator.clipboard.writeText(text).catch(() => {
-                      // clipboard might be blocked
-                    });
-                  }}
-                >
-                  Copy logs
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => clearAiLogEntries()}
-                >
-                  Clear logs
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowLogs((prev) => !prev)}
-                >
-                  {showLogs ? 'Hide logs' : 'Show logs'}
-                </Button>
-              </div>
-            </div>
-
-            {showLogs && (
-              <ScrollArea className="max-h-56 rounded-md border border-border bg-muted/40 p-2">
-                <pre className="text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
-                  {formatAiLogEntries(logEntries) || 'No logs yet.'}
-                </pre>
-              </ScrollArea>
-            )}
-
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe a shader or ask for a change..."
+              placeholder="Ask the assistant..."
               className="min-h-[90px]"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -253,17 +240,7 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
                 }
               }}
             />
-            <div className="flex items-center justify-between">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={undo}
-                disabled={isRunning}
-                className="gap-2"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Undo last AI batch
-              </Button>
+            <div className="flex items-center justify-end">
               <Button onClick={handleSend} disabled={isRunning} className="gap-2">
                 {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Send

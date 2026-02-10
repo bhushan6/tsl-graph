@@ -1,10 +1,10 @@
-import type { Node, Edge } from '@xyflow/react';
 import { registry } from '@/lib/registry';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { compileGraph } from '@/lib/compiler';
 import { useEditorStore } from '@/store/editor';
-import type { AppNode, TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
-import type { AvailableNode, CompileResult, EdgeSummary, GraphSnapshot, NodeDefinition, NodeSummary, ValidationResult } from './types';
+import type { SubgraphDefinition, CodeNodeDefinition, TSLNodeData } from '@/lib/types';
+import type { Node } from '@xyflow/react';
+import { getMultiOpInputHandleIds } from '@/lib/multi-op';
+import type { AvailableNode, GraphSnapshot, NodeDefinition, NodeSummary, ValidationIssue, ValidationReport } from './types';
 
 const GROUP_NODE_TYPE = 'group';
 
@@ -51,32 +51,28 @@ function getCustomNodeDefinition(
 }
 
 export function getGraphSnapshot(): GraphSnapshot {
-  const { nodes, edges, selectedNodeIds, graphStructureVersion } = useEditorStore.getState();
+  const { nodes, edges, selectedNodeIds } = useEditorStore.getState();
   const materialNode = nodes.find((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
 
   const summarizedNodes: NodeSummary[] = nodes.map((node) => ({
     id: node.id,
     type: node.data.type as NodeSummary['type'],
-    position: node.position,
     values: node.data.values ?? {},
-    localName: node.data.localName,
     dynamicPorts: node.data.dynamicPorts,
   }));
 
-  const summarizedEdges: EdgeSummary[] = edges.map((edge) => ({
-    id: edge.id,
+  const summarizedEdges = edges.map((edge) => ({
     source: edge.source,
-    sourceHandle: edge.sourceHandle ?? null,
+    sourcePort: edge.sourceHandle ?? null,
     target: edge.target,
-    targetHandle: edge.targetHandle ?? null,
+    targetPort: edge.targetHandle ?? null,
   }));
 
   return {
-    graphVersion: graphStructureVersion,
-    selectedNodeIds,
-    materialNodeId: materialNode?.id ?? null,
     nodes: summarizedNodes,
     edges: summarizedEdges,
+    materialNodeId: materialNode?.id ?? null,
+    selectedNodeIds,
   };
 }
 
@@ -91,15 +87,39 @@ export function getAvailableNodes(): Record<string, AvailableNode[]> {
       category: def.category,
       inputs: def.inputs
         ? Object.fromEntries(
-            Object.entries(def.inputs).map(([key, port]) => [key, { label: port.label, type: port.type }])
-          )
+          Object.entries(def.inputs).map(([key, port]) => [key, { label: port.label, type: port.type }])
+        )
         : undefined,
       outputs: def.outputs
         ? Object.fromEntries(
-            Object.entries(def.outputs).map(([key, port]) => [key, { label: port.label, type: port.type }])
-          )
+          Object.entries(def.outputs).map(([key, port]) => [key, { label: port.label, type: port.type }])
+        )
         : undefined,
     }));
+  }
+
+  const { subgraphs, codeNodes } = useEditorStore.getState();
+
+  if (Object.keys(subgraphs).length) {
+    result.Subgraph = [
+      ...(result.Subgraph ?? []),
+      ...Object.values(subgraphs).map((sg) => ({
+        type: sg.id as AvailableNode['type'],
+        label: sg.name,
+        category: 'Subgraph',
+      })),
+    ];
+  }
+
+  if (Object.keys(codeNodes).length) {
+    result.Advanced = [
+      ...(result.Advanced ?? []),
+      ...Object.values(codeNodes).map((cn) => ({
+        type: cn.id as AvailableNode['type'],
+        label: cn.name,
+        category: 'Advanced',
+      })),
+    ];
   }
 
   return result;
@@ -125,104 +145,185 @@ export function getNodeDefinition(type: string): NodeDefinition | null {
   return getCustomNodeDefinition(type, subgraphs, codeNodes);
 }
 
-function getNodePorts(node: AppNode, subgraphs: Record<string, SubgraphDefinition>, codeNodes: Record<string, CodeNodeDefinition>) {
-  if (node.data.type === GROUP_NODE_TYPE) {
-    return { inputs: {}, outputs: {} };
+type PortSets = {
+  inputs: Set<string>;
+  outputs: Set<string>;
+  isKnown: boolean;
+};
+
+function getPortSets(node: Node<TSLNodeData>, def: NodeDefinition | null): PortSets {
+  const inputs = new Set<string>();
+  const outputs = new Set<string>();
+  const type = node.data.type;
+  const dynamicPorts = node.data.dynamicPorts ?? [];
+
+  if (type === 'math/multiOp') {
+    const handles = getMultiOpInputHandleIds(Array.isArray(node.data.operations) ? node.data.operations : []);
+    handles.forEach((handle) => inputs.add(handle));
+    outputs.add('out');
+    return { inputs, outputs, isKnown: true };
   }
 
-  const registryDef = registry.get(node.data.type);
-  if (registryDef) {
-    return { inputs: registryDef.inputs ?? {}, outputs: registryDef.outputs ?? {} };
+  if (type.startsWith('custom/')) {
+    for (const port of dynamicPorts) {
+      if (port.id.startsWith('in_')) inputs.add(port.id);
+      if (port.id.startsWith('out_') || port.id === 'out') outputs.add(port.id);
+    }
+    return { inputs, outputs, isKnown: dynamicPorts.length > 0 };
   }
 
-  const customDef = getCustomNodeDefinition(node.data.type, subgraphs, codeNodes);
-  if (customDef) {
-    return { inputs: customDef.inputs ?? {}, outputs: customDef.outputs ?? {} };
+  if (type.startsWith('code/')) {
+    for (const port of dynamicPorts) {
+      if (port.id.startsWith('in_')) inputs.add(port.id);
+      if (port.id === 'out') outputs.add(port.id);
+    }
+    return { inputs, outputs, isKnown: dynamicPorts.length > 0 };
   }
 
-  if (node.data.dynamicPorts) {
-    const inputs: Record<string, { label: string; type: string }> = {};
-    const outputs: Record<string, { label: string; type: string }> = {};
-    node.data.dynamicPorts.forEach((port) => {
-      if (port.id.startsWith('in_')) {
-        inputs[port.id] = { label: port.label, type: port.type };
-      } else {
-        outputs[port.id] = { label: port.label, type: port.type };
-      }
-    });
-    return { inputs, outputs };
+  if (type === 'subgraph/input') {
+    for (const port of dynamicPorts) outputs.add(port.id);
+    return { inputs, outputs, isKnown: dynamicPorts.length > 0 };
   }
 
-  return { inputs: {}, outputs: {} };
+  if (type === 'subgraph/output') {
+    for (const port of dynamicPorts) inputs.add(port.id);
+    return { inputs, outputs, isKnown: dynamicPorts.length > 0 };
+  }
+
+  if (def) {
+    Object.keys(def.inputs ?? {}).forEach((key) => inputs.add(key));
+    Object.keys(def.outputs ?? {}).forEach((key) => outputs.add(key));
+    return { inputs, outputs, isKnown: true };
+  }
+
+  return { inputs, outputs, isKnown: false };
 }
 
-export function validateGraph(): ValidationResult {
-  const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
-  const errors: string[] = [];
-  const warnings: string[] = [];
+export function validateGraph(): ValidationReport {
+  const { nodes, edges } = useEditorStore.getState();
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const definitionCache = new Map<string, NodeDefinition | null>();
+  const incomingCount = new Map<string, number>();
+  const outgoingCount = new Map<string, number>();
 
-  const allowedTypes = new Set([
-    ...registry.types(),
-    ...Object.keys(subgraphs),
-    ...Object.keys(codeNodes),
-    GROUP_NODE_TYPE,
-  ]);
+  const resolveDefinition = (type: string) => {
+    if (definitionCache.has(type)) return definitionCache.get(type) ?? null;
+    const def = getNodeDefinition(type);
+    definitionCache.set(type, def);
+    return def;
+  };
 
   for (const node of nodes) {
-    if (!allowedTypes.has(node.data.type)) {
-      errors.push(`Unknown node type: ${node.data.type}`);
+    const def = resolveDefinition(node.data.type);
+    const isCustom = node.data.type.startsWith('custom/') || node.data.type.startsWith('code/');
+    const isAnchor = node.data.type === 'subgraph/input' || node.data.type === 'subgraph/output';
+    if (!def && !isCustom && !isAnchor && node.data.type !== GROUP_NODE_TYPE && node.data.type !== 'math/multiOp') {
+      warnings.push({
+        type: 'unknown-node',
+        nodeId: node.id,
+        message: `Unknown node type "${node.data.type}" (${node.id}).`,
+      });
     }
   }
 
-  const materialNode = nodes.find((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
-  if (!materialNode) {
-    errors.push('No material node found. Add a material node (e.g., MeshStandardMaterial).');
-  }
-
+  let danglingEdges = 0;
   for (const edge of edges) {
-    const source = nodes.find((node) => node.id === edge.source);
-    const target = nodes.find((node) => node.id === edge.target);
+    const sourceNode = nodeMap.get(edge.source);
+    const targetNode = nodeMap.get(edge.target);
 
-    if (!source) {
-      errors.push(`Edge source node not found: ${edge.source}`);
+    if (!sourceNode || !targetNode) {
+      danglingEdges += 1;
+      errors.push({
+        type: 'missing-node',
+        edgeId: edge.id,
+        message: `Edge "${edge.id}" references missing node(s).`,
+      });
       continue;
     }
-    if (!target) {
-      errors.push(`Edge target node not found: ${edge.target}`);
-      continue;
-    }
 
-    const sourcePorts = getNodePorts(source, subgraphs, codeNodes).outputs;
-    const targetPorts = getNodePorts(target, subgraphs, codeNodes).inputs;
+    incomingCount.set(edge.target, (incomingCount.get(edge.target) ?? 0) + 1);
+    outgoingCount.set(edge.source, (outgoingCount.get(edge.source) ?? 0) + 1);
+
+    const sourceDef = resolveDefinition(sourceNode.data.type);
+    const targetDef = resolveDefinition(targetNode.data.type);
+    const sourcePorts = getPortSets(sourceNode, sourceDef);
+    const targetPorts = getPortSets(targetNode, targetDef);
+
     const sourceHandle = edge.sourceHandle ?? 'out';
-    const targetHandle = edge.targetHandle ?? 'in';
-
-    if (edge.sourceHandle && !sourcePorts[edge.sourceHandle]) {
-      errors.push(`Unknown output handle "${edge.sourceHandle}" on node ${source.id}`);
+    if (sourcePorts.isKnown && sourceHandle && sourceHandle !== 'out' && !sourcePorts.outputs.has(sourceHandle)) {
+      errors.push({
+        type: 'missing-handle',
+        edgeId: edge.id,
+        nodeId: sourceNode.id,
+        handle: sourceHandle,
+        message: `Edge "${edge.id}" uses missing source handle "${sourceHandle}" on ${sourceNode.id}.`,
+      });
     }
 
-    if (edge.targetHandle && !targetPorts[edge.targetHandle]) {
-      errors.push(`Unknown input handle "${edge.targetHandle}" on node ${target.id}`);
-    }
-
-    if (!edge.sourceHandle && !sourcePorts[sourceHandle]) {
-      warnings.push(`Edge ${edge.id} is missing a source handle.`);
-    }
-
-    if (!edge.targetHandle && !targetPorts[targetHandle]) {
-      warnings.push(`Edge ${edge.id} is missing a target handle.`);
+    const targetHandle = edge.targetHandle ?? null;
+    if (targetPorts.isKnown && targetHandle && !targetPorts.inputs.has(targetHandle)) {
+      errors.push({
+        type: 'missing-handle',
+        edgeId: edge.id,
+        nodeId: targetNode.id,
+        handle: targetHandle,
+        message: `Edge "${edge.id}" uses missing target handle "${targetHandle}" on ${targetNode.id}.`,
+      });
     }
   }
 
-  return { errors, warnings };
+  const materialNodes = nodes.filter((node) =>
+    (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)
+  );
+
+  if (materialNodes.length === 0) {
+    warnings.push({
+      type: 'material-count',
+      message: 'No material node found. The preview may be empty.',
+    });
+  } else if (materialNodes.length > 1) {
+    errors.push({
+      type: 'material-count',
+      message: `Multiple material nodes found (${materialNodes.length}). Keep exactly one.`,
+    });
+  } else {
+    const materialNode = materialNodes[0];
+    const hasMaterialInput = edges.some((edge) => edge.target === materialNode.id);
+    if (!hasMaterialInput) {
+      warnings.push({
+        type: 'material-unconnected',
+        nodeId: materialNode.id,
+        message: 'Material node has no incoming connections.',
+      });
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.data.type === GROUP_NODE_TYPE) continue;
+    const hasIncoming = (incomingCount.get(node.id) ?? 0) > 0;
+    const hasOutgoing = (outgoingCount.get(node.id) ?? 0) > 0;
+    if (!hasIncoming && !hasOutgoing) {
+      warnings.push({
+        type: 'unused-node',
+        nodeId: node.id,
+        message: `Node "${node.id}" is not connected to anything.`,
+      });
+    }
+  }
+
+  return {
+    errors,
+    warnings,
+    stats: {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      materialCount: materialNodes.length,
+      danglingEdges,
+    },
+  };
 }
 
-export function compileAndValidate(): CompileResult {
-  const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
-  try {
-    compileGraph(nodes as Node<TSLNodeData>[], edges as Edge[], subgraphs, codeNodes);
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
-  }
-}
+
+

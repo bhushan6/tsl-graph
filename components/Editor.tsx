@@ -28,6 +28,7 @@ import { initializeNodes } from '@/lib/nodes';
 import { UILayer } from './UILayer';
 import { Preview } from './Preview';
 import { Toolbar } from './Toolbar';
+import { AiChatDock } from './AiChatDock';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
 import { Button } from '@/components/ui/button';
@@ -81,6 +82,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
+    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('ai');
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
@@ -325,9 +327,18 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
                 {!isReadOnly && (
                     <UILayer.BottomBar>
-                        <Toolbar
-                            onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                        />
+                        {editorMode === 'subgraph' ? (
+                            <Toolbar
+                                onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                            />
+                        ) : bottomBarMode === 'toolbar' ? (
+                            <Toolbar
+                                onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                                onOpenAiDock={() => setBottomBarMode('ai')}
+                            />
+                        ) : (
+                            <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} />
+                        )}
                     </UILayer.BottomBar>
                 )}
             </UILayer >

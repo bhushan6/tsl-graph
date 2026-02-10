@@ -2,20 +2,20 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Sparkles } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Sparkles, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
-import { AiChatPanel } from '@/components/AiChatPanel';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
+    onOpenAiDock?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
+export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
     const {
         nodes,
         selectedNodeIds,
@@ -32,6 +32,7 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         setCanvasMode,
         groupNodes,
         ungroupNodes,
+        autoLayoutGraph,
         debugMode,
         setDebugMode,
     } = useEditorStore();
@@ -39,7 +40,6 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
     // Ref to track subgraph name without causing re-renders
     const subgraphNameRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isAiOpen, setIsAiOpen] = useState(false);
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
@@ -150,6 +150,23 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>Selection Mode</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={autoLayoutGraph}
+                                    className="h-8 w-8"
+                                    disabled={nodes.length === 0}
+                                >
+                                    <LayoutGrid className="w-4 h-4" />
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Auto Layout</TooltipContent>
                     </Tooltip>
                 </div>
 
@@ -321,6 +338,25 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
 
             <div className="w-px h-4 bg-border" />
 
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={autoLayoutGraph}
+                            className="h-8 w-8"
+                            disabled={nodes.length === 0}
+                        >
+                            <LayoutGrid className="w-4 h-4" />
+                        </Button>
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent>Auto Layout</TooltipContent>
+            </Tooltip>
+
+            <div className="w-px h-4 bg-border" />
+
             <div className="flex items-center gap-0.5">
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -372,21 +408,24 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 <TooltipContent>Debug Mode {debugMode ? '(On)' : '(Off)'}</TooltipContent>
             </Tooltip>
 
-            <div className="w-px h-4 bg-border" />
-
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setIsAiOpen(true)}
-                        className="h-8 w-8"
-                    >
-                        <Sparkles className="w-4 h-4" />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>AI Assistant</TooltipContent>
-            </Tooltip>
+            {onOpenAiDock && (
+                <>
+                    <div className="w-px h-4 bg-border" />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onOpenAiDock}
+                                className="h-8 w-8"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>AI Assistant</TooltipContent>
+                    </Tooltip>
+                </>
+            )}
 
             {onOpenCodePanel && (
                 <>
@@ -407,7 +446,6 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 </>
             )}
 
-            <AiChatPanel open={isAiOpen} onOpenChange={setIsAiOpen} />
         </div>
     );
 }
