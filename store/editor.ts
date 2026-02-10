@@ -131,9 +131,13 @@ const isGroupLikeNode = (node: Node<TSLNodeData>) => node.type === 'group' || is
 
 const isLoopInternalNode = (node: Node<TSLNodeData>) => LOOP_INTERNAL_NODE_TYPES.has(node.data.type);
 
+const isLoopMode = (value: string): value is LoopMode => {
+    return LOOP_MODES.includes(value as LoopMode);
+};
+
 const getLoopMode = (node: Node<TSLNodeData>): LoopMode => {
     const mode = node.data.values?.loopMode;
-    return LOOP_MODES.includes(mode as LoopMode) ? (mode as LoopMode) : DEFAULT_LOOP_MODE;
+    return typeof mode === 'string' && isLoopMode(mode) ? mode : DEFAULT_LOOP_MODE;
 };
 
 const getLoopLeftNodeTypes = (mode: LoopMode): readonly string[] => {
@@ -2331,7 +2335,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const loopNode = nodes.find(n => n.id === loopId);
         if (!loopNode || !isLoopGroupNode(loopNode)) return;
 
-        const normalizedMode: LoopMode = LOOP_MODES.includes(mode) ? mode : DEFAULT_LOOP_MODE;
+        const normalizedMode: LoopMode = isLoopMode(mode) ? mode : DEFAULT_LOOP_MODE;
         const prevMode = getLoopMode(loopNode);
 
         get().takeSnapshot();
