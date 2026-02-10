@@ -2,13 +2,14 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
+import { detectConvertibleChain } from '@/lib/multi-op-convert';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
@@ -17,6 +18,7 @@ interface ToolbarProps {
 export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
     const {
         nodes,
+        edges,
         selectedNodeIds,
         createSubgraph,
         enterSubgraphEditor,
@@ -33,6 +35,7 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
         ungroupNodes,
         createLoopGroup,
         removeNodesFromGroup,
+        convertChainToMultiOp,
         debugMode,
         setDebugMode,
     } = useEditorStore();
@@ -363,6 +366,25 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                         <TooltipContent>Ungroup Nodes</TooltipContent>
                     </Tooltip>
                 )}
+                {selectedNodeIds.length >= 2 && (() => {
+                    const chainResult = detectConvertibleChain(selectedNodeIds, nodes, edges);
+                    if (!chainResult.valid) return null;
+                    return (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => convertChainToMultiOp(chainResult.orderedNodeIds)}
+                                    className="h-8 w-8"
+                                >
+                                    <Combine className="w-4 h-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Convert to Multi-op</TooltipContent>
+                        </Tooltip>
+                    );
+                })()}
             </div>
 
             <div className="w-px h-4 bg-border" />

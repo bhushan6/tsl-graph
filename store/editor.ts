@@ -16,6 +16,7 @@ import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
+import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
 import { toast } from 'sonner';
 
 // Preview mesh type
@@ -258,6 +259,9 @@ interface EditorState {
     createLoopGroup: () => void;
     removeNodesFromGroup: (nodeIds: string[]) => void;
     dropNodesIntoGroup: (nodeIds: string[], groupId: string, nodesSnapshot?: Node<TSLNodeData>[]) => void;
+
+    // Chain-to-MultiOp conversion
+    convertChainToMultiOp: (orderedNodeIds: string[]) => void;
 
 
     // Subgraph actions
@@ -697,6 +701,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             const { previewSettings } = get();
             const initialCount = previewSettings.isInstanced ? previewSettings.instanceCount : 1;
             data.values = { value: initialCount, ...data.values };
+        }
+
+        // Add a default 'add' operation for MultiOp nodes
+        if (type === 'math/multiOp' && !data.operations) {
+            const opId = `op_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+            data.operations = [{ id: opId, op: 'add' }];
         }
 
         const newNode: Node<TSLNodeData> = {
@@ -2352,6 +2362,82 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
+    },
+
+    convertChainToMultiOp: (orderedNodeIds) => {
+        if (orderedNodeIds.length < 2) return;
+        get().takeSnapshot();
+
+        const { nodes, edges } = get();
+        const { operations, values, incomingEdges, outgoingEdges } = buildMultiOpFromChain(
+            orderedNodeIds,
+            nodes,
+            edges
+        );
+
+        // Compute position: average of all chain nodes
+        const chainNodes = orderedNodeIds
+            .map((id) => nodes.find((n) => n.id === id))
+            .filter(Boolean) as Node<TSLNodeData>[];
+        const avgX = chainNodes.reduce((s, n) => s + n.position.x, 0) / chainNodes.length;
+        const avgY = chainNodes.reduce((s, n) => s + n.position.y, 0) / chainNodes.length;
+
+        // Create the new MultiOp node
+        const multiOpId = `math/multiOp-${Date.now()}`;
+        const newNode: Node<TSLNodeData> = {
+            id: multiOpId,
+            type: 'math/multiOp',
+            position: { x: avgX, y: avgY },
+            data: {
+                type: 'math/multiOp' as NodeType,
+                values: values as Record<string, TSLValueType>,
+                connected: {},
+                operations,
+            },
+        };
+
+        // Remove chain nodes
+        const chainSet = new Set(orderedNodeIds);
+        const filteredNodes = nodes.filter((n) => !chainSet.has(n.id));
+        const filteredEdges = edges.filter(
+            (e) => !chainSet.has(e.source) && !chainSet.has(e.target)
+        );
+
+        // Rewire edges
+        const newEdges = [...filteredEdges];
+        for (const { originalEdge, newTargetHandle } of incomingEdges) {
+            newEdges.push({
+                id: `e-${originalEdge.source}-${originalEdge.sourceHandle}-${multiOpId}-${newTargetHandle}`,
+                source: originalEdge.source,
+                sourceHandle: originalEdge.sourceHandle,
+                target: multiOpId,
+                targetHandle: newTargetHandle,
+            });
+        }
+        for (const { originalEdge, newSourceHandle } of outgoingEdges) {
+            newEdges.push({
+                id: `e-${multiOpId}-${newSourceHandle}-${originalEdge.target}-${originalEdge.targetHandle}`,
+                source: multiOpId,
+                sourceHandle: newSourceHandle,
+                target: originalEdge.target,
+                targetHandle: originalEdge.targetHandle,
+            });
+        }
+
+        set({
+            nodes: [...filteredNodes, newNode],
+            edges: newEdges,
+            selectedNodeIds: [multiOpId],
+            selectedNodeId: multiOpId,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+
+        posthog.capture('chain_converted_to_multiop', {
+            chain_length: orderedNodeIds.length,
+            operations: operations.map((op) => op.op),
+            project_id: get().projectId,
+        });
     },
 
     resetEditor: () => {

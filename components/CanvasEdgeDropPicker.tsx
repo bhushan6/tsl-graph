@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { EdgeDropNodePicker } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
+import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
 import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
@@ -247,16 +248,24 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 };
             } else {
                 // Regular node from registry
+                const nodeData: TSLNodeData = {
+                    type: nodeType,
+                    values: defaultValues,
+                    connected: {},
+                } as TSLNodeData;
+
+                // Add default operation for MultiOp nodes
+                if (nodeType === 'math/multiOp') {
+                    const opId = `op_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                    nodeData.operations = [{ id: opId, op: 'add' }];
+                }
+
                 newNode = {
                     id: newNodeId,
                     type: nodeType,
                     position: flowPosition,
                     selected: true,
-                    data: {
-                        type: nodeType,
-                        values: defaultValues,
-                        connected: {},
-                    } as TSLNodeData,
+                    data: nodeData,
                 };
             }
 
@@ -360,6 +369,13 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     // Subgraph node: find first input
                     if (subgraphTemplateData.inputs.length > 0) {
                         targetHandleId = subgraphTemplateData.inputs[0].id;
+                    }
+                } else if (nodeType === 'math/multiOp' && newNode.data.operations?.length) {
+                    // MultiOp: connect to the first operation's first param
+                    const op = newNode.data.operations[0];
+                    const params = getMultiOpParams(op.op, true);
+                    if (params.length > 0) {
+                        targetHandleId = getMultiOpHandleId(op.id, params[0].key);
                     }
                 } else if (definition) {
                     // Find compatible input on new node

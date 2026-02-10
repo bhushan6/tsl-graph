@@ -13,6 +13,9 @@ export const getCompatibleNodes = (sourceDataType: string): NodeDef[] => {
     const allDefs = registry.all();
 
     return allDefs.filter(def => {
+        // MultiOp has dynamic inputs via operations, always compatible
+        if (def.type === 'math/multiOp') return true;
+
         if (!def.inputs) return false;
 
         // Iterate through all inputs of the node
