@@ -36,6 +36,8 @@ import { useChat } from '@ai-sdk/react';
 import { runToolCall } from '@/lib/ai/tool-runner';
 import type { ToolName, ToolResult } from '@/lib/ai/types';
 import { getToolLabel } from '@/lib/ai/tool-labels';
+import { autoLayoutNodes } from '@/lib/ai/auto-layout';
+import { useEditorStore } from '@/store/editor';
 import { DefaultChatTransport } from 'ai';
 import { logTrace, setTraceContext } from '@/lib/ai/trace';
 import {
@@ -66,6 +68,7 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const [messagesCollapsed, setMessagesCollapsed] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const autoLayoutNeededRef = useRef(false);
   const modelAnchor = useComboboxAnchor();
   const debug = process.env.NEXT_PUBLIC_AI_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
   const log = (...args: unknown[]) => {
@@ -124,6 +127,18 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
     }
   }, [deletePreviewImage]);
 
+  const runAutoLayoutIfNeeded = useCallback(() => {
+    if (!autoLayoutNeededRef.current) return;
+    autoLayoutNeededRef.current = false;
+    log('auto-layout after tool changes');
+    const state = useEditorStore.getState();
+    if (state.editorMode !== 'main') return;
+    state.takeSnapshot();
+    const layoutedNodes = autoLayoutNodes(state.nodes, state.edges);
+    useEditorStore.setState({ nodes: layoutedNodes });
+    state.markDirty();
+  }, []);
+
   const chatOptions = {
     transport: transport as unknown,
     id: chatId,
@@ -138,6 +153,12 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
       log('tool result', { tool: toolCall.toolName, toolCallId: toolCall.toolCallId, result });
 
       setLastToolResults((prev) => [...prev, result]);
+      if (
+        !result.isError &&
+        (toolCall.toolName === 'addNode' || toolCall.toolName === 'connectNodes')
+      ) {
+        autoLayoutNeededRef.current = true;
+      }
 
       if (!result.isError && toolCall.toolName === 'capturePreviewImage') {
         const storageId = (result.output as { storageId?: string } | undefined)?.storageId;
@@ -173,6 +194,7 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
       log('finish', { messageId: message.id });
       void logTrace('final_response', { messageId: message.id });
       void cleanupPreviewImages();
+      runAutoLayoutIfNeeded();
     },
     sendAutomaticallyWhen: (options: { messages: Array<{ id?: string; role?: string; parts?: Array<{ type?: string; state?: string }> }> }) => {
       const last = options.messages[options.messages.length - 1];
@@ -270,6 +292,7 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
     const nextInput = input.trim();
     setInput('');
     setLastToolResults([]);
+    autoLayoutNeededRef.current = false;
     setLastError(null);
     lastAutoSendSignatureRef.current = null;
     pendingPreviewStorageIdsRef.current = [];
