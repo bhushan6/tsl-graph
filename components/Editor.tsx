@@ -82,7 +82,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
-    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('ai');
+    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
@@ -331,13 +331,18 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                             <Toolbar
                                 onOpenCodePanel={() => setIsCodePanelOpen(true)}
                             />
-                        ) : bottomBarMode === 'toolbar' ? (
-                            <Toolbar
-                                onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                                onOpenAiDock={() => setBottomBarMode('ai')}
-                            />
                         ) : (
-                            <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} />
+                            <div className="pointer-events-auto">
+                                <div className={bottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
+                                    <Toolbar
+                                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                                        onOpenAiDock={() => setBottomBarMode('ai')}
+                                    />
+                                </div>
+                                <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
+                                    <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} />
+                                </div>
+                            </div>
                         )}
                     </UILayer.BottomBar>
                 )}

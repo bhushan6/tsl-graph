@@ -1,16 +1,38 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Send, Loader2, Sparkles } from 'lucide-react';
+import { Send, Loader2, Sparkles, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  useComboboxAnchor,
+} from '@/components/ui/combobox';
+import { Input as TextInput } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { useChat } from '@ai-sdk/react';
 import { runToolCall } from '@/lib/ai/tool-runner';
 import type { ToolName, ToolResult } from '@/lib/ai/types';
+import { getToolLabel } from '@/lib/ai/tool-labels';
 import { DefaultChatTransport } from 'ai';
 import { logTrace, setTraceContext } from '@/lib/ai/trace';
+import {
+  clearSettings,
+  getDefaultModel,
+  getSettings,
+  saveSettings,
+  type AIProvider,
+  type UserAISettings,
+} from '@/lib/ai/user-ai-settings';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -34,7 +56,10 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
   const chatId = useMemo(() => makeId(), []);
 
   const [input, setInput] = useState('');
+  const [settings, setSettings] = useState<UserAISettings>(() => getSettings());
+  const [showSettings, setShowSettings] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const modelAnchor = useComboboxAnchor();
   const debug = process.env.NEXT_PUBLIC_AI_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
   const log = (...args: unknown[]) => {
     if (debug) console.log('[AI Chat]', ...args);
@@ -44,7 +69,37 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
   const lastAutoSendSignatureRef = useRef<string | null>(null);
   const pendingPreviewStorageIdsRef = useRef<string[]>([]);
   const deletePreviewImage = useMutation(api.ai.deletePreviewImage);
-  const transport = useMemo(() => new DefaultChatTransport({ api: '/api/ai', body: { traceId, chatId } }), [traceId, chatId]);
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/ai',
+        prepareSendMessagesRequest: (options) => {
+          const current = getSettings();
+          const baseHeaders =
+            options.headers instanceof Headers
+              ? Object.fromEntries(options.headers.entries())
+              : (options.headers ?? {});
+          const apiKey = current.apiKey.trim();
+          return {
+            headers: apiKey
+              ? { ...baseHeaders, Authorization: `Bearer ${apiKey}` }
+              : baseHeaders,
+            body: {
+              ...options.body,
+              id: options.id,
+              messages: options.messages,
+              trigger: options.trigger,
+              messageId: options.messageId,
+              traceId,
+              chatId,
+              provider: current.provider,
+              model: current.model,
+            },
+          };
+        },
+      }),
+    [traceId, chatId]
+  );
 
   const cleanupPreviewImages = useCallback(async () => {
     const ids = pendingPreviewStorageIdsRef.current;
@@ -141,7 +196,36 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
     setTraceContext({ traceId, chatId });
   }, [traceId, chatId]);
 
+  useEffect(() => {
+    saveSettings(settings);
+  }, [settings]);
+
   const isRunning = status === 'submitted' || status === 'streaming';
+  const apiKeyMissing = settings.apiKey.trim().length === 0;
+  const modelOptions: Record<AIProvider, string[]> = {
+    openai: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o'],
+    anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
+    google: ['gemini-1.5-pro', 'gemini-1.5-flash'],
+    gateway: [
+      'openai/gpt-4.1',
+      'openai/gpt-4.1-mini',
+      'openai/gpt-4o',
+      'anthropic/claude-3-5-sonnet-latest',
+      'anthropic/claude-3-5-haiku-latest',
+      'google/gemini-1.5-pro',
+      'google/gemini-1.5-flash',
+    ],
+  };
+  const availableModels = modelOptions[settings.provider];
+  const modelItems = availableModels.includes(settings.model)
+    ? availableModels
+    : [settings.model, ...availableModels].filter(Boolean);
+
+  useEffect(() => {
+    if (apiKeyMissing) {
+      setShowSettings(true);
+    }
+  }, [apiKeyMissing]);
 
   const displayMessages = useMemo(
     () =>
@@ -162,7 +246,12 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
   );
 
   const handleSend = async () => {
-    if (!input.trim() || isRunning) return;
+    if (!input.trim() || isRunning || apiKeyMissing) {
+      if (apiKeyMissing) {
+        setShowSettings(true);
+      }
+      return;
+    }
     const nextInput = input.trim();
     setInput('');
     setLastToolResults([]);
@@ -174,6 +263,20 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
     await sendMessage({ text: nextInput });
   };
 
+  const handleProviderChange = (provider: AIProvider) => {
+    setSettings((prev) => {
+      const nextDefault = getDefaultModel(provider);
+      const nextModel = modelOptions[provider].includes(prev.model)
+        ? prev.model
+        : nextDefault;
+      return {
+        ...prev,
+        provider,
+        model: nextModel,
+      };
+    });
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col">
@@ -181,6 +284,108 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
             AI Chat
+            <div className="ml-auto flex items-center gap-2">
+              <div className="min-w-[180px]">
+              <Combobox
+                items={modelItems}
+                value={settings.model}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  setSettings((prev) => ({ ...prev, model: value as string }));
+                }}
+                itemToStringLabel={(value) => String(value)}
+                itemToStringValue={(value) => String(value)}
+              >
+                <div ref={modelAnchor} className="w-full">
+                  <ComboboxInput
+                    placeholder="Select model"
+                    className="h-7 bg-transparent border border-border/60 rounded-md text-[11px] [&_[data-slot=input-group-control]]:h-7 [&_[data-slot=input-group-control]]:text-[11px] [&_[data-slot=input-group-control]]:px-2 [&_[data-slot=input-group-control]]:py-0"
+                    showClear={false}
+                  />
+                </div>
+                <ComboboxContent anchor={modelAnchor} align="end" sideOffset={4}>
+                  <ComboboxEmpty>No models found.</ComboboxEmpty>
+                  <ComboboxList>
+                    {(item) => (
+                        <ComboboxItem key={String(item)} value={item} className="text-[11px]">
+                          {String(item)}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </div>
+              <Popover open={showSettings} onOpenChange={setShowSettings}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                  >
+                    <KeyRound className="h-3.5 w-3.5 mr-1" />
+                    Settings
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">AI Setup</div>
+                    {settings.apiKey.trim().length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          clearSettings();
+                          setSettings((prev) => ({
+                            ...prev,
+                            apiKey: '',
+                          }));
+                        }}
+                      >
+                        Clear key
+                      </Button>
+                    )}
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <div className="grid gap-1">
+                      <Label className="text-[11px] text-muted-foreground">Provider</Label>
+                      <Select
+                        value={settings.provider}
+                        onValueChange={(value) => handleProviderChange(value as AIProvider)}
+                      >
+                        <SelectTrigger size="sm" className="w-full">
+                          <SelectValue placeholder="Provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="openai">OpenAI</SelectItem>
+                          <SelectItem value="anthropic">Anthropic</SelectItem>
+                          <SelectItem value="google">Google</SelectItem>
+                          <SelectItem value="gateway">Vercel Gateway</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-[11px] text-muted-foreground">API Key</Label>
+                      <TextInput
+                        type="password"
+                        value={settings.apiKey}
+                        onChange={(e) =>
+                          setSettings((prev) => ({ ...prev, apiKey: e.target.value }))
+                        }
+                        placeholder="Paste your provider API key"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Keys are stored locally in your browser (localStorage). Avoid using
+                      untrusted scripts or shared devices.
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </SheetTitle>
           <SheetDescription>
             Ask questions about shaders or describe what you want to build.
@@ -216,9 +421,11 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
                 <div className="rounded-lg border border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground">
                   <div className="font-semibold text-foreground mb-1">Applied changes</div>
                   <div className="flex flex-wrap gap-2">
-                    {Array.from(new Set(lastToolResults.map((r) => r.toolName))).map((name) => (
-                      <span key={name} className="rounded-full bg-muted px-2 py-0.5">
-                        {name}
+                    {Array.from(
+                      new Set(lastToolResults.map((r) => getToolLabel(r.toolName)))
+                    ).map((label) => (
+                      <span key={label} className="rounded-full bg-muted px-2 py-0.5">
+                        {label}
                       </span>
                     ))}
                   </div>
@@ -228,6 +435,11 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
           </ScrollArea>
 
           <div className="border-t border-border p-4 space-y-3 shrink-0">
+            {apiKeyMissing && (
+              <div className="text-xs text-amber-600">
+                Add an API key from Settings to enable AI chat.
+              </div>
+            )}
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -241,7 +453,7 @@ export function AiChatPanel({ open, onOpenChange }: AiChatPanelProps) {
               }}
             />
             <div className="flex items-center justify-end">
-              <Button onClick={handleSend} disabled={isRunning} className="gap-2">
+              <Button onClick={handleSend} disabled={isRunning || apiKeyMissing} className="gap-2">
                 {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Send
               </Button>

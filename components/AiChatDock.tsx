@@ -1,32 +1,72 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Send, Loader2, Sparkles, SlidersHorizontal } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { ChevronDown, ChevronUp, KeyRound, MessageSquare, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  useComboboxAnchor,
+} from '@/components/ui/combobox';
+import { Input as TextInput } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from '@/components/ai-elements/message';
+import {
+  Input as PromptInput,
+  PromptInputTextarea,
+  PromptInputSubmit,
+} from '@/components/ai-elements/prompt-input';
 import { useChat } from '@ai-sdk/react';
 import { runToolCall } from '@/lib/ai/tool-runner';
 import type { ToolName, ToolResult } from '@/lib/ai/types';
+import { getToolLabel } from '@/lib/ai/tool-labels';
 import { DefaultChatTransport } from 'ai';
 import { logTrace, setTraceContext } from '@/lib/ai/trace';
+import {
+  clearSettings,
+  getDefaultModel,
+  getSettings,
+  saveSettings,
+  type AIProvider,
+  type UserAISettings,
+} from '@/lib/ai/user-ai-settings';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-
+const makeId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+};
 export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
-  const makeId = () => {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return crypto.randomUUID();
-    }
-    return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  };
+
 
   const traceId = useMemo(() => makeId(), []);
   const chatId = useMemo(() => makeId(), []);
 
   const [input, setInput] = useState('');
+  const [settings, setSettings] = useState<UserAISettings>(() => getSettings());
+  const [showSettings, setShowSettings] = useState(false);
+  const [messagesCollapsed, setMessagesCollapsed] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const modelAnchor = useComboboxAnchor();
   const debug = process.env.NEXT_PUBLIC_AI_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
   const log = (...args: unknown[]) => {
     if (debug) console.log('[AI Chat]', ...args);
@@ -37,7 +77,37 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
   const pendingPreviewStorageIdsRef = useRef<string[]>([]);
   const deletePreviewImage = useMutation(api.ai.deletePreviewImage);
 
-  const transport = useMemo(() => new DefaultChatTransport({ api: '/api/ai', body: { traceId, chatId } }), [traceId, chatId]);
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/ai',
+        prepareSendMessagesRequest: (options) => {
+          const current = getSettings();
+          const baseHeaders =
+            options.headers instanceof Headers
+              ? Object.fromEntries(options.headers.entries())
+              : (options.headers ?? {});
+          const apiKey = current.apiKey.trim();
+          return {
+            headers: apiKey
+              ? { ...baseHeaders, Authorization: `Bearer ${apiKey}` }
+              : baseHeaders,
+            body: {
+              ...options.body,
+              id: options.id,
+              messages: options.messages,
+              trigger: options.trigger,
+              messageId: options.messageId,
+              traceId,
+              chatId,
+              provider: current.provider,
+              model: current.model,
+            },
+          };
+        },
+      }),
+    [traceId, chatId]
+  );
 
   const cleanupPreviewImages = useCallback(async () => {
     const ids = pendingPreviewStorageIdsRef.current;
@@ -136,6 +206,41 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
   }, [traceId, chatId]);
 
   const isRunning = status === 'submitted' || status === 'streaming';
+  const promptStatus =
+    status === 'streaming'
+      ? 'streaming'
+      : status === 'submitted'
+        ? 'submitted'
+        : 'ready';
+  const apiKeyMissing = settings.apiKey.trim().length === 0;
+  const modelOptions: Record<AIProvider, string[]> = {
+    openai: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o'],
+    anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
+    google: ['gemini-1.5-pro', 'gemini-1.5-flash'],
+    gateway: [
+      'openai/gpt-4.1',
+      'openai/gpt-4.1-mini',
+      'openai/gpt-4o',
+      'anthropic/claude-3-5-sonnet-latest',
+      'anthropic/claude-3-5-haiku-latest',
+      'google/gemini-1.5-pro',
+      'google/gemini-1.5-flash',
+    ],
+  };
+  const availableModels = modelOptions[settings.provider];
+  const modelItems = availableModels.includes(settings.model)
+    ? availableModels
+    : [settings.model, ...availableModels].filter(Boolean);
+
+  useEffect(() => {
+    saveSettings(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    if (apiKeyMissing) {
+      setShowSettings(true);
+    }
+  }, [apiKeyMissing]);
 
   const displayMessages = useMemo(
     () =>
@@ -156,7 +261,12 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
   );
 
   const handleSend = async () => {
-    if (!input.trim() || isRunning) return;
+    if (!input.trim() || isRunning || apiKeyMissing) {
+      if (apiKeyMissing) {
+        setShowSettings(true);
+      }
+      return;
+    }
     const nextInput = input.trim();
     setInput('');
     setLastToolResults([]);
@@ -168,83 +278,240 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
     await sendMessage({ text: nextInput });
   };
 
+  const handleProviderChange = (provider: AIProvider) => {
+    setSettings((prev) => {
+      const nextDefault = getDefaultModel(provider);
+      const nextModel = modelOptions[provider].includes(prev.model)
+        ? prev.model
+        : nextDefault;
+      return {
+        ...prev,
+        provider,
+        model: nextModel,
+      };
+    });
+  };
+
   return (
     <div className="pointer-events-auto flex flex-col items-center gap-2">
-      <div className="w-[min(720px,calc(100vw-2rem))] h-64 overflow-hidden rounded-xl border border-border bg-card/95 shadow-lg backdrop-blur-sm flex flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-xs font-semibold text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5" />
-          AI Assistant
-        </div>
-        <ScrollArea className="flex-1 min-h-0 px-4 py-3">
-          <div className="space-y-3">
-            {displayMessages.length === 0 && !lastError && (
-              <div className="text-sm text-muted-foreground">
-                Try: &quot;Create a yellow-blue gradient&quot; or &quot;Visualize UV&quot;.
-              </div>
-            )}
-            {lastError && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {lastError}
-              </div>
-            )}
-            {displayMessages.map((message) => (
-              <div
-                key={message.id}
-                className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${message.role === 'user'
-                  ? 'bg-primary text-primary-foreground ml-auto'
-                  : 'bg-muted text-foreground'
-                  }`}
-              >
-                {message.text}
-              </div>
-            ))}
-
-            {lastToolResults.length > 0 && (
-              <div className="rounded-lg border border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-                <div className="font-semibold text-foreground mb-1">Applied changes</div>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(new Set(lastToolResults.map((r) => r.toolName))).map((name) => (
-                    <span key={name} className="rounded-full bg-muted px-2 py-0.5">
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+      <div className="w-[min(720px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-card/95 shadow-lg backdrop-blur-sm flex flex-col">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs font-semibold text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI Assistant
           </div>
-        </ScrollArea>
-      </div>
-
-      <div className="w-[min(720px,calc(100vw-2rem))] rounded-xl border border-border bg-card/95 shadow-lg backdrop-blur-sm px-3 py-2">
-        <div className="flex items-center gap-2">
-          {onOpenToolbar && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Model
+              </span>
+              <div className="min-w-[180px]">
+                <Combobox
+                  items={modelItems}
+                  value={settings.model}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setSettings((prev) => ({ ...prev, model: value as string }));
+                  }}
+                  itemToStringLabel={(value) => String(value)}
+                  itemToStringValue={(value) => String(value)}
+                >
+                  <div ref={modelAnchor} className="w-full">
+                    <ComboboxInput
+                      placeholder="Select model"
+                      className="h-7 bg-transparent border border-border/60 rounded-md text-[11px] [&_[data-slot=input-group-control]]:h-7 [&_[data-slot=input-group-control]]:text-[11px] [&_[data-slot=input-group-control]]:px-2 [&_[data-slot=input-group-control]]:py-0"
+                      showClear={false}
+                    />
+                  </div>
+                  <ComboboxContent anchor={modelAnchor} align="end" sideOffset={4}>
+                    <ComboboxEmpty>No models found.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(item) => (
+                        <ComboboxItem key={String(item)} value={item} className="text-[11px]">
+                          {String(item)}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </div>
+            </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              onClick={onOpenToolbar}
-              className="h-9 w-9"
-              title="Show Toolbar"
+              onClick={() => setMessagesCollapsed((prev) => !prev)}
+              className="h-8 w-8"
+              title={messagesCollapsed ? 'Expand Messages' : 'Collapse Messages'}
             >
-              <SlidersHorizontal className="w-4 h-4" />
+              {messagesCollapsed ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronUp className="w-4 h-4" />
+              )}
             </Button>
+            <Popover open={showSettings} onOpenChange={setShowSettings}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="AI Settings"
+                >
+                  <KeyRound className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">AI Setup</div>
+                  {settings.apiKey.trim().length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        clearSettings();
+                        setSettings((prev) => ({
+                          ...prev,
+                          apiKey: '',
+                        }));
+                      }}
+                    >
+                      Clear key
+                    </Button>
+                  )}
+                </div>
+                <div className="mt-3 grid gap-3">
+                  <div className="grid gap-1">
+                    <Label className="text-[11px] text-muted-foreground">Provider</Label>
+                    <Select
+                      value={settings.provider}
+                      onValueChange={(value) => handleProviderChange(value as AIProvider)}
+                    >
+                      <SelectTrigger size="sm" className="w-full">
+                        <SelectValue placeholder="Provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="anthropic">Anthropic</SelectItem>
+                        <SelectItem value="google">Google</SelectItem>
+                        <SelectItem value="gateway">Vercel Gateway</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-[11px] text-muted-foreground">API Key</Label>
+                    <TextInput
+                      type="password"
+                      value={settings.apiKey}
+                      onChange={(e) =>
+                        setSettings((prev) => ({ ...prev, apiKey: e.target.value }))
+                      }
+                      placeholder="Paste your provider API key"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Keys are stored locally in your browser (localStorage). Avoid using
+                    untrusted scripts or shared devices.
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+            {onOpenToolbar && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onOpenToolbar}
+                className="h-8 w-8"
+                title="Minimize Chat"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {!messagesCollapsed && (
+          <div className="h-64">
+            <Conversation className="h-full">
+              <ConversationContent>
+                {displayMessages.length === 0 && !lastError && (
+                  <ConversationEmptyState
+                    icon={<MessageSquare className="h-8 w-8" />}
+                    title="Start a conversation"
+                    description="Describe what you want to build."
+                  />
+                )}
+                {lastError && (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {lastError}
+                  </div>
+                )}
+                {displayMessages.map((message) => (
+                  <Message from={message.role} key={message.id}>
+                    <MessageContent>
+                      <MessageResponse>{message.text}</MessageResponse>
+                    </MessageContent>
+                  </Message>
+                ))}
+
+                {lastToolResults.length > 0 && (
+                  <div className="rounded-lg border border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="font-semibold text-foreground mb-1">
+                      Applied changes
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(
+                        new Set(lastToolResults.map((r) => getToolLabel(r.toolName)))
+                      ).map((label) => (
+                        <span key={label} className="rounded-full bg-muted px-2 py-0.5">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          </div>
+        )}
+
+        <div className={messagesCollapsed ? 'px-3 py-2' : 'border-t border-border px-3 py-2'}>
+          {apiKeyMissing && (
+            <div className="mb-2 text-xs text-amber-600">
+              Add an API key from the key icon to enable AI chat.
+            </div>
           )}
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe what you want to build..."
-            className="flex-1 h-10 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
+          <PromptInput
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSend();
             }}
-          />
-          <Button onClick={handleSend} disabled={isRunning} size="sm" className="gap-2">
-            {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Send
-          </Button>
+            className="relative"
+          >
+            <PromptInputTextarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Describe what you want to build..."
+              className="pr-12"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+            <PromptInputSubmit
+              status={promptStatus}
+              disabled={!input.trim() || isRunning || apiKeyMissing}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2"
+            />
+          </PromptInput>
         </div>
       </div>
     </div>

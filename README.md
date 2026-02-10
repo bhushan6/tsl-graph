@@ -18,10 +18,15 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## AI Chat
 
-Set the following environment variables to enable the AI chat panel:
+AI chat uses a bring-your-own-key flow. Users enter their own provider API key
+locally in the AI chat UI, and the key is stored in the browser (localStorage).
+The server does not persist user keys.
 
-- `AI_GATEWAY_API_KEY` (required)
-- `AI_MODEL` (optional, defaults to `google/gemini-3-pro-preview`)
+Supported providers:
+- OpenAI
+- Anthropic
+- Google (Gemini)
+- Vercel AI Gateway
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

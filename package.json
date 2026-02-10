@@ -10,6 +10,9 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.41",
+    "@ai-sdk/google": "^3.0.23",
+    "@ai-sdk/openai": "^3.0.26",
     "@ai-sdk/react": "^2.0.128",
     "@base-ui/react": "^1.1.0",
     "@convex-dev/better-auth": "^0.10.10",

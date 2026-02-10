@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createGateway, streamText, convertToModelMessages } from 'ai';
-import { fetchAuthQuery } from '@/lib/auth-server';
-import { api } from '@/convex/_generated/api';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { TOOL_SET } from '@/lib/ai/tool-schema';
 import { appendTraceEvent } from '@/lib/ai/trace-store';
 
-const DEFAULT_MODEL = 'openai/gpt-4.1';
+const DEFAULT_PROVIDER = 'openai';
+const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
+  openai: 'gpt-4.1',
+  anthropic: 'claude-3-5-sonnet-latest',
+  google: 'gemini-1.5-pro',
+  gateway: 'openai/gpt-4.1',
+};
 const SYSTEM_PROMPT = [
   'You are an assistant for a shader node editor.',
   'Use tools to read the graph and make changes only when the user asks.',
@@ -31,27 +38,31 @@ const log = (...args: unknown[]) => {
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.AI_GATEWAY_API_KEY;
-    if (!apiKey) {
-      log('missing api key');
-      return NextResponse.json({ error: 'Missing AI_GATEWAY_API_KEY' }, { status: 500 });
-    }
-
-    const user = await fetchAuthQuery(api.auth.getCurrentUser, {});
-    if (!user) {
-      log('unauthorized');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authHeader = req.headers.get('authorization') ?? '';
+    const userKey = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : authHeader.trim();
+    if (!userKey) {
+      log('missing user api key');
+      return NextResponse.json({ error: 'Missing user API key' }, { status: 400 });
     }
 
     const body = await req.json().catch(() => ({}));
     const messages = Array.isArray(body?.messages) ? body.messages : [];
     const traceId = typeof body?.traceId === 'string' ? body.traceId : 'unknown';
     const chatId = typeof body?.chatId === 'string' ? body.chatId : undefined;
-    const model = typeof body?.model === 'string' && body.model.trim().length > 0
+    const provider = typeof body?.provider === 'string' ? body.provider.toLowerCase() : DEFAULT_PROVIDER;
+    const providerKey = provider in DEFAULT_MODEL_BY_PROVIDER ? provider : DEFAULT_PROVIDER;
+    const rawModel = typeof body?.model === 'string' && body.model.trim().length > 0
       ? body.model
-      : (process.env.AI_MODEL || DEFAULT_MODEL);
+      : DEFAULT_MODEL_BY_PROVIDER[providerKey];
+    const model = providerKey === 'gateway'
+      ? (rawModel.includes('/') ? rawModel : `openai/${rawModel}`)
+      : rawModel.startsWith(`${providerKey}/`)
+        ? rawModel.slice(providerKey.length + 1)
+        : rawModel;
 
-    log('request', { messageCount: messages.length, model, tools: Object.keys(TOOL_SET), traceId, chatId });
+    log('request', { messageCount: messages.length, model, provider: providerKey, tools: Object.keys(TOOL_SET), traceId, chatId });
     void appendTraceEvent({
       ts: new Date().toISOString(),
       traceId,
@@ -61,13 +72,21 @@ export async function POST(req: Request) {
       payload: {
         messageCount: messages.length,
         model,
+        provider: providerKey,
         tools: Object.keys(TOOL_SET),
       },
     });
 
-    const gateway = createGateway({ apiKey });
+    const modelProvider =
+      providerKey === 'gateway'
+        ? createGateway({ apiKey: userKey })(model)
+        : providerKey === 'anthropic'
+          ? createAnthropic({ apiKey: userKey })(model)
+          : providerKey === 'google'
+            ? createGoogleGenerativeAI({ apiKey: userKey })(model)
+            : createOpenAI({ apiKey: userKey })(model);
     const result = streamText({
-      model: gateway(model),
+      model: modelProvider,
       messages: await convertToModelMessages(messages, { tools: TOOL_SET }),
       system: SYSTEM_PROMPT,
       tools: TOOL_SET,
