@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface ConversationContextValue {
-  scrollRef: React.RefObject<HTMLDivElement>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
   isAtBottom: boolean;
   scrollToBottom: (behavior?: ScrollBehavior) => void;
 }
