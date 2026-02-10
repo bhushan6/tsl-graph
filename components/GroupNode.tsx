@@ -13,8 +13,6 @@ const LOOP_MODE_OPTIONS = [
     { label: 'Condition', value: 'condition' },
 ];
 
-type LoopMode = typeof LOOP_MODE_OPTIONS[number]['value'];
-
 function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setLoopMode = useEditorStore((s) => s.setLoopMode);
@@ -144,7 +142,7 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
                         {isLoop && (
                             <select
                                 value={loopMode}
-                                onChange={(e) => setLoopMode(id, e.target.value as LoopMode)}
+                                onChange={(e) => setLoopMode(id, e.target.value)}
                                 className="h-6 px-2 text-[10px] bg-background/80 border border-border rounded-md text-foreground/80 outline-none focus:ring-1 focus:ring-primary"
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onClick={(e) => e.stopPropagation()}

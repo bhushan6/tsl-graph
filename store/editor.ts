@@ -356,7 +356,7 @@ interface EditorState {
     groupNodes: () => void;
     ungroupNodes: () => void;
     createLoopGroup: () => void;
-    setLoopMode: (loopId: string, mode: LoopMode) => void;
+    setLoopMode: (loopId: string, mode: string) => void;
     removeNodesFromGroup: (nodeIds: string[]) => void;
     dropNodesIntoGroup: (nodeIds: string[], groupId: string, nodesSnapshot?: Node<TSLNodeData>[]) => void;
 

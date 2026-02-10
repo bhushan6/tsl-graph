@@ -45,8 +45,6 @@ const LOOP_MODE_OPTIONS = [
     { label: 'Condition', value: 'condition' },
 ];
 
-type LoopMode = typeof LOOP_MODE_OPTIONS[number]['value'];
-
 const LOOP_TYPE_OPTIONS = [
     { label: 'Int', value: 'int' },
     { label: 'Float', value: 'float' },
@@ -337,7 +335,7 @@ function LoopGroupPanel({ node }: { node: AppNode }) {
                     </label>
                     <select
                         value={loopMode}
-                        onChange={(e) => setLoopMode(node.id, e.target.value as LoopMode)}
+                        onChange={(e) => setLoopMode(node.id, e.target.value)}
                         className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
                     >
                         {LOOP_MODE_OPTIONS.map((opt) => (
