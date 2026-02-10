@@ -2,7 +2,9 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { Copy, Check } from 'lucide-react';
-import { Highlight, themes } from 'prism-react-renderer';
+import CodeMirror from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
 import { compileGraph, getRequiredImports } from '@/lib/compiler';
@@ -27,7 +29,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
 
-    const codeTheme = resolvedTheme === 'dark' ? themes.oneDark : themes.oneLight;
+    const extensions = useMemo(() => [javascript()], []);
 
     const compiledCode = useMemo(() => {
         return compileGraph(nodes, edges, subgraphs, codeNodes);
@@ -85,26 +87,20 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     </div>
 
                     {/* Code content with syntax highlighting */}
-                    <Highlight
-                        theme={codeTheme}
-                        code={compiledCode}
-                        language="tsx"
-                    >
-                        {({ style, tokens, getLineProps, getTokenProps }) => (
-                            <pre
-                                className="flex-1 px-4 py-3 overflow-auto text-sm font-mono !bg-transparent"
-                                style={{ ...style, background: 'transparent' }}
-                            >
-                                {tokens.map((line, i) => (
-                                    <div key={i} {...getLineProps({ line })}>
-                                        {line.map((token, key) => (
-                                            <span key={key} {...getTokenProps({ token })} />
-                                        ))}
-                                    </div>
-                                ))}
-                            </pre>
-                        )}
-                    </Highlight>
+                    <CodeMirror
+                        value={compiledCode}
+                        extensions={extensions}
+                        theme={resolvedTheme === 'dark' ? oneDark : undefined}
+                        editable={false}
+                        readOnly={true}
+                        basicSetup={{
+                            lineNumbers: true,
+                            foldGutter: false,
+                            highlightActiveLine: false,
+                            autocompletion: false,
+                        }}
+                        className="flex-1 overflow-auto text-sm"
+                    />
                 </div>
             </DialogContent>
         </Dialog>
