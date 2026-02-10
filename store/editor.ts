@@ -2232,6 +2232,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const selectedNodes = nodes.filter(n => expandedNodeIds.includes(n.id));
         if (selectedNodes.length === 0) return;
 
+        // Check if any selected node is a material node
+        const hasMaterialNode = selectedNodes.some(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
+        if (hasMaterialNode) {
+            toast.error('Cannot create a loop with a Material node.');
+            return;
+        }
+
         // 4. Compute selected roots (avoid moving children if parent selected)
         const selectedRoots = selectedNodes.filter(node => {
             if (!node.parentId) return true;

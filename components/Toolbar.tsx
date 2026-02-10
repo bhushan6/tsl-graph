@@ -10,6 +10,7 @@ import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
 import { detectConvertibleChain } from '@/lib/multi-op-convert';
+import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
@@ -99,6 +100,12 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
             setIsProcessing(false);
         }
     }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing]);
+
+    // Check if any selected node is a material node
+    const isMaterialSelected = selectedNodeIds.some(id => {
+        const node = nodes.find(n => n.id === id);
+        return node && (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+    });
 
     // Subgraph mode toolbar
     if (editorMode === 'subgraph') {
@@ -327,7 +334,7 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                                 size="icon"
                                 onClick={createLoopGroup}
                                 className="h-8 w-8"
-                                disabled={selectedNodeIds.length < 1}
+                                disabled={selectedNodeIds.length < 1 || isMaterialSelected}
                             >
                                 <Repeat className="w-4 h-4" />
                             </Button>
