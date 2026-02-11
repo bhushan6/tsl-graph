@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -14,9 +14,10 @@ import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
+    onOpenAiDock?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
+export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
     const {
         nodes,
         edges,
@@ -446,6 +447,25 @@ export function Toolbar({ onOpenCodePanel }: ToolbarProps) {
                 </TooltipTrigger>
                 <TooltipContent>Debug Mode {debugMode ? '(On)' : '(Off)'}</TooltipContent>
             </Tooltip>
+
+            {onOpenAiDock && (
+                <>
+                    <div className="w-px h-4 bg-border" />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onOpenAiDock}
+                                className="h-8 w-8"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>AI Assistant</TooltipContent>
+                    </Tooltip>
+                </>
+            )}
 
             {onOpenCodePanel && (
                 <>

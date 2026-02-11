@@ -291,6 +291,28 @@ interface EditorState {
     previewSettings: PreviewSettings;
     updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
 
+    // Preview snapshot (used for AI visual verification)
+    previewSnapshotProvider: ((
+        options?: { format?: 'png' | 'jpeg'; quality?: number }
+    ) => Promise<{
+        imageUrl: string;
+        storageId: string;
+        width: number;
+        height: number;
+        format: string;
+    }>) | null;
+    setPreviewSnapshotProvider: (
+        provider: ((
+            options?: { format?: 'png' | 'jpeg'; quality?: number }
+        ) => Promise<{
+            imageUrl: string;
+            storageId: string;
+            width: number;
+            height: number;
+            format: string;
+        }>) | null
+    ) => void;
+
     // History state
     history: HistoryState;
     isUndoRedoInProgress: boolean;
@@ -455,6 +477,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ previewSettings: { ...get().previewSettings, ...updates } });
         get().markDirty();
     },
+    previewSnapshotProvider: null,
+    setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
 
     // Subgraph state initialization
     subgraphs: {},

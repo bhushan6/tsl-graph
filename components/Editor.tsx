@@ -30,6 +30,7 @@ import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { UILayer } from './UILayer';
 import { Preview } from './Preview';
 import { Toolbar } from './Toolbar';
+import { AiChatDock } from './AiChatDock';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
 import { Button } from '@/components/ui/button';
@@ -82,6 +83,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
+    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
@@ -533,9 +535,23 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
                 {!isReadOnly && (
                     <UILayer.BottomBar>
-                        <Toolbar
-                            onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                        />
+                        {editorMode === 'subgraph' ? (
+                            <Toolbar
+                                onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                            />
+                        ) : (
+                            <div className="pointer-events-auto">
+                                <div className={bottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
+                                    <Toolbar
+                                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                                        onOpenAiDock={() => setBottomBarMode('ai')}
+                                    />
+                                </div>
+                                <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
+                                    <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} />
+                                </div>
+                            </div>
+                        )}
                     </UILayer.BottomBar>
                 )}
             </UILayer >
