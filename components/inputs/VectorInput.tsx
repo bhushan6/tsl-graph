@@ -1,9 +1,8 @@
 'use client';
 
 import { memo, useEffect, useState, useCallback, useRef } from 'react';
-import { cn } from '@/lib/utils';
-import { SidebarInput } from '@/components/ui/sidebar';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
+import { NumericScrubber } from '../ui/number-scrubber';
 
 interface VectorInputProps {
     value: number | readonly number[]; // Expecting number[] or number
@@ -51,15 +50,16 @@ function VectorInputComponent({ value, onChange, size, labels, immediate = false
         <div className="flex gap-2 w-full">
             {Array.from({ length: size }).map((_, i) => (
                 <div key={i} className="flex-1 min-w-0 relative group">
+                    <div className="text-[10px] font-bold text-muted-foreground pointer-events-none select-none group-focus-within:text-primary transition-colors">
+                        {currentLabels[i]}
+                    </div>
                     <NumberInput
                         value={safeValue[i]}
                         onChange={(v) => handleChange(i, v)}
                         immediate={immediate}
                         className="pl-5 pr-2"
+
                     />
-                    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none group-focus-within:text-primary transition-colors">
-                        {currentLabels[i]}
-                    </div>
                 </div>
             ))}
         </div>
@@ -85,42 +85,29 @@ function NumberInput({
     }, [value]);
 
     return (
-        <SidebarInput
-            type="text"
-            inputMode="decimal"
-            value={localValue}
-            onChange={(e) => {
-                const inputValue = e.target.value;
-                // Allow empty, minus sign, or valid number patterns (including negative)
-                if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
-                    setLocalValue(inputValue);
-                    return;
-                }
-                // Check if it's a valid number pattern
-                if (/^-?\d*\.?\d*$/.test(inputValue)) {
-                    setLocalValue(inputValue);
-                    const f = parseFloat(inputValue);
-                    if (!isNaN(f)) {
-                        if (immediate) {
-                            onChange(f);
-                        } else {
-                            debouncedOnChange(f);
-                        }
+        <>
+            <NumericScrubber
+                value={Number(localValue)}
+                onChange={(v) => {
+                    const inputValue = v;
+                    if (immediate) {
+                        onChange(inputValue);
+                    } else {
+                        debouncedOnChange(inputValue);
                     }
-                }
-            }}
-            onBlur={() => {
-                // On blur, normalize the value
-                const f = parseFloat(localValue);
-                const normalized = isNaN(f) ? 0 : f;
-                setLocalValue(String(normalized));
-                onChange(normalized);
-            }}
-            className={cn(
-                "h-7 text-xs px-2 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                className
-            )}
-        />
+                }}
+                onBlur={() => {
+                    // On blur, normalize the value
+                    const f = parseFloat(localValue);
+                    const normalized = isNaN(f) ? 0 : f;
+                    setLocalValue(String(normalized));
+                    onChange(normalized);
+                }}
+                step={0.001}
+                min={-Infinity}
+                className="h-7 text-xs font-mono w-full"
+            />
+        </>
     );
 }
 

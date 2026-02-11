@@ -24,6 +24,7 @@ import {
     SidebarGroupContent,
     SidebarInput,
 } from '@/components/ui/sidebar';
+import { NumericScrubber } from './ui/number-scrubber';
 
 // Type options for port type selector
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -231,8 +232,6 @@ function SubgraphInstancePanel({ subgraph, onEnterEditor }: SubgraphInstancePane
         </div>
     );
 }
-
-
 
 function CodeNodeInstancePanel({
     codeNode,
@@ -675,7 +674,7 @@ function PropertiesPanelContent() {
             <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">{def.label}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {node.data.localName || node.id}
+                    {node.data.localName || node.type}
                 </p>
             </div>
 
@@ -770,6 +769,7 @@ interface PropertyInputProps {
 }
 
 function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId, immediate = false }: PropertyInputProps) {
+
     if (options && options.length > 0) {
         return (
             <select
@@ -955,8 +955,8 @@ function NumberInput({
         setLocalValue(String(value));
     }, [value]);
 
-    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const inputValue = e.target.value;
+    const handleChange = useCallback((e: number) => {
+        const inputValue = String(e);
         // Allow empty, minus sign, or valid number patterns (including negative)
         if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
             setLocalValue(inputValue);
@@ -985,13 +985,13 @@ function NumberInput({
     }, [localValue, onChange]);
 
     return (
-        <SidebarInput
-            type="text"
-            inputMode="decimal"
-            value={localValue}
+        <NumericScrubber
+            value={Number(localValue)}
             onChange={handleChange}
             onBlur={handleBlur}
-            className="h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs"
+            step={step}
+            min={-Infinity}
+            className="h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs"
         />
     );
 }

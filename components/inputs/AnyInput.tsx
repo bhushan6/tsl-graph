@@ -8,6 +8,7 @@ import { SidebarInput } from '@/components/ui/sidebar';
 import { Label } from '@/components/ui/label';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import { TSLValueType } from '@/lib/types';
+import { NumericScrubber } from '../ui/number-scrubber';
 
 interface AnyInputProps {
     value: TSLValueType;
@@ -187,6 +188,7 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
                         value={Number(value ?? 0)}
                         onChange={onChange}
                         immediate={immediate}
+                        step={1}
                     />
                 );
         }
@@ -224,10 +226,12 @@ function DebouncedFloatInput({
     value,
     onChange,
     immediate = false,
+    step = 0.001,
 }: {
     value: number;
     onChange: (v: TSLValueType) => void;
     immediate?: boolean;
+    step?: number;
 }) {
     const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
@@ -236,8 +240,8 @@ function DebouncedFloatInput({
         setLocalValue(String(value));
     }, [value]);
 
-    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const inputValue = e.target.value;
+    const handleChange = useCallback((v: number) => {
+        const inputValue = String(v);
         // Allow empty, minus sign, or valid number patterns (including negative)
         if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
             setLocalValue(inputValue);
@@ -266,13 +270,14 @@ function DebouncedFloatInput({
     }, [localValue, onChange]);
 
     return (
-        <SidebarInput
-            type="text"
-            inputMode="decimal"
-            value={localValue}
-            onChange={handleChange}
+        <NumericScrubber
+            value={Number(localValue)}
+            onChange={(v) => {
+                handleChange(v);
+            }}
+            step={step}
             onBlur={handleBlur}
-            className="h-7 text-xs font-mono"
+            className="h-7 text-xs font-mono w-full"
         />
     );
 }
