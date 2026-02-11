@@ -548,7 +548,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                                     />
                                 </div>
                                 <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
-                                    <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} />
+                                    <AiChatDock isOpen={bottomBarMode === 'ai'} onOpenToolbar={() => setBottomBarMode('toolbar')} />
                                 </div>
                             </div>
                         )}
