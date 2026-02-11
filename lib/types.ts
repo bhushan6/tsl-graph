@@ -28,6 +28,7 @@ export interface TSLNodeData extends Record<string, unknown> {
     type: NodeType;
     values: Record<string, TSLValueType>;
     connected: Record<string, boolean>;
+    activeInputs?: string[];
     localName?: string;
     operations?: MultiOp[];
     // Dynamic ports for subgraph anchor nodes

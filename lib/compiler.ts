@@ -5,6 +5,7 @@ import { MATERIAL_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
 import { formatUniformValueExpression, getUniformKindFromNode } from './uniform-utils';
+import { getMaterialActiveInputsSet } from './material-inputs';
 
 interface CompiledNode {
     id: string;
@@ -1347,6 +1348,11 @@ export function compileGraph(
                 'transmissionNode', 'thicknessNode',
             ]);
 
+            const connectedHandles = edges
+                .filter((e) => e.target === materialNode.id)
+                .map((e) => e.targetHandle);
+            const activeInputs = getMaterialActiveInputsSet(materialNode.data, materialDef, connectedHandles);
+
             const inputKeys = Object.keys(materialDef.inputs ?? {});
             for (const key of inputKeys) {
                 const inputDef = materialDef.inputs![key];
@@ -1357,6 +1363,9 @@ export function compileGraph(
                     lines.push(`material.${key} = ${varName};`);
                     continue;
                 }
+
+                // Skip inactive inputs (only compile active ones)
+                if (!activeInputs.has(key)) continue;
 
                 // 2. Use local value (properties panel)
                 // Skip connection-only inputs that aren't connected

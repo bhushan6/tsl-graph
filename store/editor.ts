@@ -17,6 +17,8 @@ import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
+import { registry } from '@/lib/registry';
+import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
 import { coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
@@ -351,6 +353,7 @@ interface EditorState {
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
+    setNodeActiveInput: (nodeId: string, inputKey: string, isActive: boolean) => void;
     setUniformType: (nodeId: string, newKind: UniformKind) => void;
     addMultiOp: (nodeId: string, op?: MultiOpType) => void;
     updateMultiOp: (nodeId: string, opId: string, op: MultiOpType) => void;
@@ -784,7 +787,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // Snapshot before connecting
         get().takeSnapshot();
 
-        const { edges } = get();
+        const { edges, nodes } = get();
 
         // Remove any existing connection to the same target handle
         // (inputs can only have one connection, so replace the old one)
@@ -797,8 +800,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         );
 
 
+        let nextNodes = nodes;
+        const targetId = connection.target;
+        const targetHandle = connection.targetHandle ?? null;
+        if (targetId && targetHandle) {
+            const targetNode = nodes.find((n) => n.id === targetId);
+            const isMaterialNode = !!targetNode && (MATERIAL_NODE_TYPES as readonly string[]).includes(targetNode.data.type);
+            if (targetNode && isMaterialNode) {
+                const def = registry.get(targetNode.data.type);
+                const current = new Set(getMaterialStoredActiveInputs(targetNode.data, def));
+                if (!current.has(targetHandle)) {
+                    current.add(targetHandle);
+                    nextNodes = nodes.map((node) => {
+                        if (node.id !== targetId) return node;
+                        return {
+                            ...node,
+                            data: {
+                                ...node.data,
+                                activeInputs: Array.from(current),
+                            },
+                        };
+                    });
+                }
+            }
+        }
+
         set({
             edges: addEdge(connection, filteredEdges),
+            nodes: nextNodes,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
 
@@ -896,6 +925,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({
             nodes: updatedNodes,
             graphStructureVersion: isUniformValueUpdate ? get().graphStructureVersion : get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    setNodeActiveInput: (nodeId, inputKey, isActive) => {
+        get().takeSnapshot();
+        const prevNodes = get().nodes;
+
+        const updatedNodes = prevNodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            const def = registry.get(node.data.type);
+            const current = new Set(getMaterialStoredActiveInputs(node.data, def));
+            if (isActive) {
+                current.add(inputKey);
+            } else {
+                current.delete(inputKey);
+            }
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    activeInputs: Array.from(current),
+                },
+            };
+        });
+
+        set({
+            nodes: updatedNodes,
+            graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
     },

@@ -7,6 +7,7 @@ export const meshStandardMaterial = {
     type: 'material/standard',
     label: 'MeshStandardMaterial',
     category: 'Material',
+    defaultActiveInputs: ['colorNode', 'positionNode'],
     inputs: {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
         normalNode: { label: 'Normal', type: 'vec3', connectionOnly: true },
@@ -54,6 +55,7 @@ export const nodeMaterial = {
     type: 'material/node',
     label: 'NodeMaterial',
     category: 'Material',
+    defaultActiveInputs: ['fragmentNode', 'vertexNode'],
     inputs: {
         fragmentNode: { label: 'Fragment', type: 'vec4', connectionOnly: true },
         vertexNode: { label: 'Vertex', type: 'vec3', connectionOnly: true },
@@ -66,6 +68,7 @@ export const meshBasicMaterial = {
     type: 'material/basic',
     label: 'MeshBasicMaterial',
     category: 'Material',
+    defaultActiveInputs: ['colorNode', 'positionNode'],
     inputs: {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
@@ -108,6 +111,7 @@ export const meshPhysicalMaterial = {
     type: 'material/physical',
     label: 'MeshPhysicalMaterial',
     category: 'Material',
+    defaultActiveInputs: ['colorNode', 'positionNode'],
     inputs: {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
         normalNode: { label: 'Normal', type: 'vec3', connectionOnly: true },
@@ -163,6 +167,7 @@ export const meshPhongMaterial = {
     type: 'material/phong',
     label: 'MeshPhongMaterial',
     category: 'Material',
+    defaultActiveInputs: ['colorNode', 'positionNode'],
     inputs: {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
         normalNode: { label: 'Normal', type: 'vec3', connectionOnly: true },
@@ -209,6 +214,7 @@ export const spriteNodeMaterial = {
     type: 'material/sprite',
     label: 'SpriteNodeMaterial',
     category: 'Material',
+    defaultActiveInputs: ['colorNode', 'positionNode'],
     inputs: {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },

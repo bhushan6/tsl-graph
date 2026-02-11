@@ -492,6 +492,30 @@ describe('compileGraph', () => {
             expect(code).toContain('material.colorNode = _node0;');
         });
 
+        it('should compile only active material inputs when unconnected', () => {
+            const nodes = [
+                createNode('mat', 'material/standard', { activeInputs: ['colorNode'] })
+            ];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('material.colorNode =');
+            expect(code).not.toContain('material.roughnessNode');
+            expect(code).not.toContain('material.side');
+        });
+
+        it('should still compile connected material inputs even if inactive', () => {
+            const nodes = [
+                createNode('add1', 'math/add', { values: { a: 1, b: 2 } }),
+                createNode('mat', 'material/standard', { activeInputs: [] })
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'add1', sourceHandle: 'out', target: 'mat', targetHandle: 'roughnessNode' }
+            ];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('material.roughnessNode = _node0;');
+        });
+
         it('should handle swizzle outputs (component access)', () => {
             const nodes = [
                 createNode('v1', 'const/vec3', { values: { x: 1, y: 2, z: 3 } }),
