@@ -188,7 +188,7 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
                         value={Number(value ?? 0)}
                         onChange={onChange}
                         immediate={immediate}
-                        step={1}
+                        step={0.001}
                     />
                 );
         }
