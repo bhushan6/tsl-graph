@@ -358,6 +358,7 @@ interface EditorState {
     deleteNode: (nodeId: string) => void;
     setSelectedNode: (nodeId: string | null) => void;
     setSelectedNodes: (nodeIds: string[]) => void;
+    selectSingleNode: (nodeId: string | null) => void;
     getSelectedNode: () => Node<TSLNodeData> | undefined;
     getSelectedNodes: () => Node<TSLNodeData>[];
 
@@ -1093,6 +1094,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeIds: nodeIds,
             // Also update single selection to first node if any
             selectedNodeId: nodeIds.length === 1 ? nodeIds[0] : (nodeIds.length > 1 ? null : get().selectedNodeId),
+        });
+    },
+
+    selectSingleNode: (nodeId) => {
+        const nodes = get().nodes;
+        const hasTarget = !!nodeId && nodes.some((node) => node.id === nodeId);
+        const nextId = hasTarget ? nodeId : null;
+        const nextIds = nextId ? [nextId] : [];
+
+        set({
+            nodes: nodes.map((node) => ({
+                ...node,
+                selected: nextId ? node.id === nextId : false,
+            })),
+            selectedNodeId: nextId,
+            selectedNodeIds: nextIds,
         });
     },
 
