@@ -1,12 +1,12 @@
 'use client';
 
-import { memo, useState, useCallback, useEffect } from 'react';
+import { memo, useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
-import { cn } from '@/lib/utils';
+import { cn, getAbsolutePosition } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { HexColorPicker } from 'react-colorful';
-import { useEdges } from '@xyflow/react';
+import { useEdges, useReactFlow } from '@xyflow/react';
 import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
@@ -25,6 +25,13 @@ import {
     SidebarInput,
 } from '@/components/ui/sidebar';
 import { NumericScrubber } from './ui/number-scrubber';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from '@/components/ui/accordion';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Type options for port type selector
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -538,6 +545,142 @@ function getDefaultForType(type: string): TSLValueType {
     }
 }
 
+function getNodeDimensions(node: AppNode): { width: number; height: number } {
+    const anyNode = node as AppNode & {
+        width?: number;
+        height?: number;
+        measured?: { width?: number; height?: number };
+        style?: { width?: number | string; height?: number | string };
+    };
+
+    const rawWidth = anyNode.width ?? anyNode.measured?.width ?? anyNode.style?.width;
+    const rawHeight = anyNode.height ?? anyNode.measured?.height ?? anyNode.style?.height;
+
+    const width = typeof rawWidth === 'number' ? rawWidth : 0;
+    const height = typeof rawHeight === 'number' ? rawHeight : 0;
+
+    return { width, height };
+}
+
+function UniformListItem({ node }: { node: AppNode }) {
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setUniformType = useEditorStore((s) => s.setUniformType);
+    const selectSingleNode = useEditorStore((s) => s.selectSingleNode);
+    const nodes = useEditorStore((s) => s.nodes);
+    const { setCenter, getZoom } = useReactFlow<AppNode>();
+
+    const uniformKind = getUniformKindFromNode(node);
+    const uniformValue = useNodeInputValue(node.id, 'value', getUniformDefaultValue(uniformKind));
+    const displayName = node.data.values.localName || node.id;
+
+    const handleSelect = useCallback(() => {
+        selectSingleNode(node.id);
+        const absPosition = getAbsolutePosition(node, nodes);
+        const { width, height } = getNodeDimensions(node);
+        setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
+            zoom: getZoom(),
+            duration: 300,
+        });
+    }, [node, nodes, selectSingleNode, setCenter, getZoom]);
+
+    // console.log({ node });
+
+
+    return (
+        <AccordionItem value={node.id} className="w-[100%]">
+            <AccordionTrigger className="py-2" onClick={handleSelect}>
+                <div className="flex flex-1 items-start justify-between gap-3">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-medium text-sidebar-foreground">
+                            {String(displayName)}
+                        </span>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                        {uniformKind}
+                    </span>
+                </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-2">
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Type
+                        </label>
+                        <select
+                            value={uniformKind}
+                            onChange={(e) => setUniformType(node.id, e.target.value as UniformKind)}
+                            className="h-8 mx-1 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-[97%] outline-none focus:ring-2 focus:ring-sidebar-ring"
+                        >
+                            {UNIFORM_KINDS.map((kind) => (
+                                <option key={kind} value={kind}>
+                                    {kind}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Value
+                        </label>
+                        <PropertyInput
+                            type={uniformKind}
+                            value={uniformValue}
+                            onChange={(v) => updateNodeValue(node.id, 'value', v)}
+                            nodeId={node.id}
+                            propertyName="value"
+                            immediate={true}
+                        />
+                    </div>
+                </div>
+            </AccordionContent>
+        </AccordionItem>
+    );
+}
+
+function UniformsPanelContent() {
+    const nodes = useEditorStore((s) => s.nodes);
+    const uniforms = useMemo(
+        () =>
+            nodes
+                .filter((n) => n.data.type === 'const/uniform')
+                .sort((a, b) => {
+                    const nameA = (a.data.localName || a.id).toLowerCase();
+                    const nameB = (b.data.localName || b.id).toLowerCase();
+                    return nameA.localeCompare(nameB);
+                }),
+        [nodes]
+    );
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm">Uniforms</h3>
+                    <span className="text-xs text-muted-foreground">{uniforms.length}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Edit uniforms without hunting nodes
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3">
+                {uniforms.length === 0 ? (
+                    <p className="text-sm text-muted-foreground px-1 py-2">
+                        No uniforms in this graph.
+                    </p>
+                ) : (
+                    <Accordion type="single" collapsible className="">
+                        {uniforms.map((node) => (
+                            <UniformListItem key={node.id} node={node} />
+                        ))}
+                    </Accordion>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
@@ -1001,13 +1144,6 @@ function NumberInput({
 }
 
 function PropertiesPanelComponent() {
-    const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
-
-    // Hide panel when no node is selected
-    if (!selectedNodeId) {
-        return null;
-    }
-
     return (
         <div
             className={cn(
@@ -1016,7 +1152,18 @@ function PropertiesPanelComponent() {
                 'flex flex-col overflow-hidden'
             )}
         >
-            <PropertiesPanelContent />
+            <Tabs defaultValue="properties" className="flex flex-col h-full">
+                <TabsList className="mx-2 mt-3 mb-2 w-[calc(100%-1rem)]">
+                    <TabsTrigger value="properties">Properties</TabsTrigger>
+                    <TabsTrigger value="uniforms">Uniforms</TabsTrigger>
+                </TabsList>
+                <TabsContent value="properties" className="flex-1 min-h-0">
+                    <PropertiesPanelContent />
+                </TabsContent>
+                <TabsContent value="uniforms" className="flex-1 min-h-0">
+                    <UniformsPanelContent />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
