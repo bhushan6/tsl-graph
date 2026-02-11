@@ -62,3 +62,7 @@ export const getGroupedCompatibleNodes = <T extends { category: string }>(nodes:
     }
     return grouped;
 };
+
+export const getAllNodes = (): NodeDef[] => {
+    return registry.all();
+};

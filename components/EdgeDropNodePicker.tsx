@@ -3,8 +3,7 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes } from '@/lib/node-picker-utils';
-import { useEditorStore } from '@/store/editor';
+import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, getAllNodes } from '@/lib/node-picker-utils';
 import { NodeType, NodeDef, TSLType } from '@/lib/types';
 import { Code, Layers } from 'lucide-react';
 import {
@@ -19,7 +18,7 @@ import {
 interface EdgeDropNodePickerProps {
     position: { x: number; y: number };
     sourceDataType: TSLType | '';
-    handleDirection: 'input' | 'output';
+    handleDirection: 'input' | 'output' | null;
     onNodeSelect: (nodeType: NodeType) => void;
     onClose: () => void;
 }
@@ -63,53 +62,29 @@ export function EdgeDropNodePicker({
         };
     }, [onClose]);
 
-    // Get store state for filtering
-    const nodes = useEditorStore((s) => s.nodes);
-    const editorMode = useEditorStore((s) => s.editorMode);
-
     // Fetch user's code node templates from server (cached by Convex)
     const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
     // Fetch user's subgraph templates from server (cached by Convex)
     const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
 
-    // Check which anchor nodes are present in the current graph
-    const hasInputAnchor = useMemo(() =>
-        nodes.some(n => n.data.type === 'subgraph/input'), [nodes]);
-    const hasOutputAnchor = useMemo(() =>
-        nodes.some(n => n.data.type === 'subgraph/output'), [nodes]);
-
-    const ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'];
-
     // Get compatible nodes
     const compatibleNodes = useMemo(() => {
-        const nodes = handleDirection === 'output'
-            ? getCompatibleNodes(sourceDataType)
-            : getNodesWithOutputType(sourceDataType);
+        if (!sourceDataType && !handleDirection) {
+            return getAllNodes();
+        }
+        if (!sourceDataType) {
+            return handleDirection === 'output'
+                ? getCompatibleNodes(sourceDataType as string)
+                : getNodesWithOutputType(sourceDataType as string);
+        } else {
+            // Case where sourceDataType is provided
+            return handleDirection === 'output'
+                ? getCompatibleNodes(sourceDataType)
+                : getNodesWithOutputType(sourceDataType);
+        }
+    }, [sourceDataType, handleDirection])
 
-        // Filter out anchor nodes
-        return nodes.filter(node => {
-            // Hide loop nodes (created only via toolbar action)
-            if (node.type === 'loop' || node.type.startsWith('loop/')) {
-                return false;
-            }
-            const isAnchorNode = ANCHOR_NODE_TYPES.includes(node.type);
 
-            if (isAnchorNode) {
-                // In main editor: never show anchor nodes
-                if (editorMode === 'main') return false;
-
-                // In subgraph edit mode: only show if that anchor is missing
-                if (node.type === 'subgraph/input' && hasInputAnchor) return false;
-                if (node.type === 'subgraph/output' && hasOutputAnchor) return false;
-            }
-
-            if (editorMode === 'subgraph' && node.type === 'const/uniform') {
-                return false;
-            }
-
-            return true;
-        });
-    }, [sourceDataType, handleDirection, editorMode, hasInputAnchor, hasOutputAnchor, nodes]); // nodes dependency for memo safety though logic uses filtered booleans
 
     // Build code nodes from templates (fetched from server, cached by Convex)
     const compatibleCodeNodes = useMemo((): CodeNodeDef[] => {

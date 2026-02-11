@@ -132,7 +132,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
             const { nodes } = useEditorStore.getState();
 
-            if (isMaterialNode) {
+            if (isMaterialNode && sourceNodeId) {
                 const existingMaterial = nodes.find(n =>
                     (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
                 );
@@ -318,7 +318,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 return null;
             };
 
-            const blockGroupNesting = !!sourceNode && isLoopBoundaryHandle(sourceNode, handleDirection, sourceHandleId);
+            const blockGroupNesting = !!sourceNode && !!handleDirection && isLoopBoundaryHandle(sourceNode, handleDirection, sourceHandleId);
             let parentGroupId: string | null = blockGroupNesting ? null : getGroupAncestorId(sourceNode);
 
             if (!parentGroupId && !blockGroupNesting) {
@@ -418,7 +418,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 }
             }
 
-            if (targetHandleId) {
+            if (targetHandleId && sourceNodeId && sourceHandleId && handleDirection) {
                 const newEdge: Edge = handleDirection === 'output'
                     ? {
                         id: `edge-${sourceNodeId}-${sourceHandleId}-${newNodeId}-${targetHandleId}`,

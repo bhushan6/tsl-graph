@@ -481,6 +481,19 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     onNodeDrag={onNodeDrag}
                     onNodeDragStop={onNodeDragStop}
                     onSelectionChange={onSelectionChange}
+                    onPaneContextMenu={(event) => {
+                        event.preventDefault();
+                        const { clientX, clientY } = event;
+                        const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
+                        openEdgeDropPicker({
+                            screenPosition: { x: clientX, y: clientY },
+                            flowPosition,
+                            sourceDataType: '',
+                            sourceNodeId: null,
+                            sourceHandleId: null,
+                            handleDirection: null,
+                        });
+                    }}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
                     isValidConnection={isValidConnection}

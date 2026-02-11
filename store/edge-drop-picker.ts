@@ -6,9 +6,9 @@ type EdgeDropPickerState = {
     screenPosition: { x: number; y: number };
     flowPosition: { x: number; y: number };
     sourceDataType: TSLType | '';
-    sourceNodeId: string;
-    sourceHandleId: string;
-    handleDirection: 'input' | 'output';
+    sourceNodeId: string | null;
+    sourceHandleId: string | null;
+    handleDirection: 'input' | 'output' | null;
 };
 
 type EdgeDropPickerActions = {
@@ -21,9 +21,9 @@ const initialState: EdgeDropPickerState = {
     screenPosition: { x: 0, y: 0 },
     flowPosition: { x: 0, y: 0 },
     sourceDataType: '',
-    sourceNodeId: '',
-    sourceHandleId: '',
-    handleDirection: 'output',
+    sourceNodeId: null,
+    sourceHandleId: null,
+    handleDirection: null,
 };
 
 export const useEdgeDropPickerStore = create<EdgeDropPickerState & EdgeDropPickerActions>((set) => ({
