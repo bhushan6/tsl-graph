@@ -10,7 +10,7 @@ import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
 import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
-import { NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
+import { CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 import { getAbsolutePosition } from "@/lib/utils";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
@@ -44,6 +44,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 code: string;
                 inputs: SubgraphPort[];
                 output: SubgraphPort;
+                language?: CodeNodeLanguage;
             } | null = null;
             let codeTemplateId: string | undefined;
             let codeTemplateVersion: number | undefined;
@@ -56,6 +57,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         id: string;
                         name: string;
                         code: string;
+                        language?: CodeNodeLanguage;
                         inputs: Array<{ id: string; label: string; type: string }>;
                         output: { id: string; label: string; type: string };
                     };
@@ -63,6 +65,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         id: data.id,
                         name: data.name || template.name,
                         code: data.code,
+                        language: data.language ?? 'tsl',
                         inputs: data.inputs.map(inp => ({ id: inp.id, label: inp.label, type: inp.type as SubgraphPort['type'] })),
                         output: { id: data.output.id, label: data.output.label, type: data.output.type as SubgraphPort['type'] },
                     };
@@ -192,6 +195,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     name: codeTemplateData.name,
                     templateId: codeTemplateId,
                     templateVersion: codeTemplateVersion,
+                    language: codeTemplateData.language ?? 'tsl',
                     code: codeTemplateData.code,
                     inputs: codeTemplateData.inputs,
                     output: codeTemplateData.output,

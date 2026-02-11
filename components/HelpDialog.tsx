@@ -373,6 +373,17 @@ export function HelpDialog() {
   return color * sin(time);
 })`}
                                                 </pre>
+                                                <p className="text-xs text-muted-foreground mt-3">
+                                                    Prefer WGSL? Switch the language selector to <strong>WGSL</strong> and write a raw function:
+                                                </p>
+                                                <pre className="text-xs font-mono text-muted-foreground bg-muted p-2 rounded mt-2">
+                                                    {`fn colorFn(baseColor: vec4f, uv: vec2f) -> vec4f {
+  let red = (uv.x + 2.3) * 0.3;
+  let green = (uv.y + 1.7) / 8.2;
+  let blue = (uv.x + uv.y) % 10.0;
+  return mix(baseColor, vec4f(red, green, blue, 1.0), uv.x);
+}`}
+                                                </pre>
                                             </div>
                                             <div className="border rounded-lg p-3 bg-card/50">
                                                 <h4 className="font-medium text-primary mb-1">Configuring Types</h4>

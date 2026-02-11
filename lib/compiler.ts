@@ -17,6 +17,14 @@ export interface CompileOptions {
     uniformMode?: 'inline' | 'runtime';
 }
 
+function wrapWgslTemplateLiteral(code: string): string {
+    const escaped = code
+        .replace(/\\/g, '\\\\')
+        .replace(/`/g, '\\`')
+        .replace(/\$\{/g, '\\${');
+    return `\`${escaped}\``;
+}
+
 // Component swizzle mapping for code generation
 const COMPONENT_SWIZZLES: Record<string, string> = {
     'x': 'x',
@@ -400,28 +408,42 @@ function compileSubgraphDefinition(
 
                 // Collect arguments based on code node inputs
                 const args: string[] = [];
+                const argEntries: Array<{ name: string; value: string }> = [];
                 for (const inputPort of codeNode.inputs) {
                     const edge = internalEdges.find(e => e.target === node.id && e.targetHandle === inputPort.id);
                     if (edge) {
                         if (edge.source === 'subgraph-input' && argsMap && edge.sourceHandle) {
-                            args.push(argsMap[edge.sourceHandle] || getTSLDefaultForType(inputPort.type));
+                            const value = argsMap[edge.sourceHandle] || getTSLDefaultForType(inputPort.type);
+                            args.push(value);
+                            argEntries.push({ name: inputPort.label, value });
                         } else {
                             const upstream = compiledNodes.get(edge.source);
                             if (upstream) {
                                 const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
-                                args.push(`${upstream.varName}${swizzle}`);
+                                const value = `${upstream.varName}${swizzle}`;
+                                args.push(value);
+                                argEntries.push({ name: inputPort.label, value });
                             } else {
-                                args.push(getTSLDefaultForType(inputPort.type));
+                                const value = getTSLDefaultForType(inputPort.type);
+                                args.push(value);
+                                argEntries.push({ name: inputPort.label, value });
                             }
                         }
                     } else {
                         // Not connected - use node value if available, otherwise type default
                         const nodeValue = node.data.values?.[inputPort.id];
-                        args.push(getTSLDefaultForType(inputPort.type, nodeValue));
+                        const value = getTSLDefaultForType(inputPort.type, nodeValue);
+                        args.push(value);
+                        argEntries.push({ name: inputPort.label, value });
                     }
                 }
 
-                lines.push(`    const ${displayName} = ${funcName}(${args.join(', ')});`);
+                if ((codeNode.language ?? 'tsl') === 'wgsl') {
+                    const argsObject = `{ ${argEntries.map(arg => `${arg.name}: ${arg.value}`).join(', ')} }`;
+                    lines.push(`    const ${displayName} = ${funcName}(${argsObject});`);
+                } else {
+                    lines.push(`    const ${displayName} = ${funcName}(${args.join(', ')});`);
+                }
 
                 // Code nodes always have single output
                 compiledNodes.set(nodeId, {
@@ -673,8 +695,12 @@ export function compileGraph(
         for (const [codeNodeId, funcName] of usedCodeNodes) {
             const codeNode = codeNodes![codeNodeId];
             lines.push(`// Code Node: ${codeNode.name}`);
-            // Code nodes already contain the full Fn definition, just assign to variable
-            lines.push(`const ${funcName} = ${codeNode.code}`);
+            if ((codeNode.language ?? 'tsl') === 'wgsl') {
+                lines.push(`const ${funcName} = wgslFn(${wrapWgslTemplateLiteral(codeNode.code)});`);
+            } else {
+                // Code nodes already contain the full Fn definition, just assign to variable
+                lines.push(`const ${funcName} = ${codeNode.code}`);
+            }
             lines.push('');
         }
     }
@@ -788,7 +814,7 @@ export function compileGraph(
     const usedNames = new Set<string>();
     let nodeIndex = 0;
 
-    const compileSingleNode = (node: Node<TSLNodeData>, targetLines: string[], edgesForInputs: Edge[]) => {
+    const compileSingleNode = (node: Node<TSLNodeData>, targetLines: string[], edgesForInputs: Edge[], inFn: boolean = false) => {
         // Handle Uniform node (single node with type selector)
         if (node.data.type === 'const/uniform') {
             const localName = node.data.localName || (node.data.values?.localName as string | undefined);
@@ -890,23 +916,35 @@ export function compileGraph(
                 nodeIndex++;
 
                 const args: string[] = [];
+                const argEntries: Array<{ name: string; value: string }> = [];
                 for (const inputPort of codeNode.inputs) {
                     const edge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === inputPort.id);
                     if (edge) {
                         const upstream = compiledNodes.get(edge.source);
                         if (upstream) {
                             const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
-                            args.push(`${upstream.varName}${swizzle}`);
+                            const value = `${upstream.varName}${swizzle}`;
+                            args.push(value);
+                            argEntries.push({ name: inputPort.label, value });
                         } else {
-                            args.push(getTSLDefaultForType(inputPort.type));
+                            const value = getTSLDefaultForType(inputPort.type);
+                            args.push(value);
+                            argEntries.push({ name: inputPort.label, value });
                         }
                     } else {
                         const nodeValue = node.data.values?.[inputPort.id];
-                        args.push(getTSLDefaultForType(inputPort.type, nodeValue));
+                        const value = getTSLDefaultForType(inputPort.type, nodeValue);
+                        args.push(value);
+                        argEntries.push({ name: inputPort.label, value });
                     }
                 }
 
-                targetLines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
+                if ((codeNode.language ?? 'tsl') === 'wgsl') {
+                    const argsObject = `{ ${argEntries.map(arg => `${arg.name}: ${arg.value}`).join(', ')} }`;
+                    targetLines.push(`const ${displayName} = ${funcName}(${argsObject});`);
+                } else {
+                    targetLines.push(`const ${displayName} = ${funcName}(${args.join(', ')});`);
+                }
 
                 compiledNodes.set(node.id, {
                     id: node.id,
@@ -950,13 +988,45 @@ export function compileGraph(
             const valueExpr = getInputValue(node, 'value', edgesForInputs, compiledNodes, { type: 'any', default: 0 });
 
             if (targetExpr) {
-                targetLines.push(`${targetExpr}.${assignMethod}(${valueExpr});`);
-                compiledNodes.set(node.id, {
-                    id: node.id,
-                    varName: targetExpr,
-                    code: `/* ${assignMethod} */`,
-                    singleOutput: true,
-                });
+                if (inFn) {
+                    targetLines.push(`${targetExpr}.${assignMethod}(${valueExpr});`);
+                    compiledNodes.set(node.id, {
+                        id: node.id,
+                        varName: targetExpr,
+                        code: `/* ${assignMethod} */`,
+                        singleOutput: true,
+                    });
+                } else {
+                    const assignBase = `_assign_${nodeIndex}`;
+                    let assignFnName = assignBase;
+                    let assignSuffix = 1;
+                    while (usedNames.has(assignFnName)) {
+                        assignFnName = `${assignBase}_${assignSuffix++}`;
+                    }
+                    usedNames.add(assignFnName);
+
+                    const baseName = `_node${nodeIndex}`;
+                    let displayName = baseName;
+                    let nodeSuffix = 1;
+                    while (usedNames.has(displayName)) {
+                        displayName = `${baseName}_${nodeSuffix++}`;
+                    }
+                    usedNames.add(displayName);
+                    nodeIndex++;
+
+                    targetLines.push(`const ${assignFnName} = Fn(() => {`);
+                    targetLines.push(`    ${targetExpr}.${assignMethod}(${valueExpr});`);
+                    targetLines.push(`    return ${targetExpr};`);
+                    targetLines.push(`});`);
+                    targetLines.push(`const ${displayName} = ${assignFnName}();`);
+
+                    compiledNodes.set(node.id, {
+                        id: node.id,
+                        varName: displayName,
+                        code: `/* ${assignMethod} */`,
+                        singleOutput: true,
+                    });
+                }
             } else {
                 const localName = node.data.localName || (node.data.values?.localName as string | undefined);
                 const baseName = localName
@@ -1217,7 +1287,7 @@ export function compileGraph(
         for (const nodeId of bodySorted) {
             const node = nodesById.get(nodeId);
             if (!node) continue;
-            compileSingleNode(node, innerLines, edges);
+            compileSingleNode(node, innerLines, edges, true);
         }
 
         if (outputNode) {
@@ -1344,7 +1414,8 @@ export function compileGraph(
  */
 export function getRequiredImports(
     nodes: Node<TSLNodeData>[],
-    subgraphs?: Record<string, SubgraphDefinition>
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>
 ): string[] {
     const imports = new Set<string>();
 
@@ -1388,6 +1459,11 @@ export function getRequiredImports(
             } else if (node.data.type === 'math/multiOp') {
                 const ops = getMultiOpOperations(node);
                 addMultiOpImports(ops);
+            } else if (node.data.type.startsWith('code/')) {
+                const codeNode = codeNodes?.[node.data.type];
+                if ((codeNode?.language ?? 'tsl') === 'wgsl') {
+                    imports.add('wgslFn');
+                }
             } else {
                 const def = registry.get(node.data.type);
                 if (def && !def.tsl.startsWith('__')) imports.add(def.tsl);
@@ -1427,9 +1503,18 @@ export function getRequiredImports(
             continue;
         }
 
+        // Assign nodes require Fn wrapper in main graph
+        if (ASSIGN_NODE_METHODS[node.data.type]) {
+            imports.add('Fn');
+        }
+
         // Handle Code Nodes - they use Fn
         if (node.data.type.startsWith('code/')) {
             hasSubgraphs = true;
+            const codeNode = codeNodes?.[node.data.type];
+            if ((codeNode?.language ?? 'tsl') === 'wgsl') {
+                imports.add('wgslFn');
+            }
             continue;
         }
 

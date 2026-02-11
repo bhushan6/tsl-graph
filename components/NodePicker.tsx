@@ -218,6 +218,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                 id: instanceId,
                 templateId: template._id,
                 templateVersion: template.version,
+                language: template.data.language ?? 'tsl',
                 code: template.data.code || '',
                 inputs: template.data.inputs || [],
                 output: template.data.output,

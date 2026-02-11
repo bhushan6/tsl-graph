@@ -111,7 +111,7 @@ Sometimes a visual graph is too messy for simple math. Code Nodes let you write 
 ### **1. Creation & Input Detection**
 Click **"Create from Code..."** in the Node Picker. The editor creates inputs based on your code structure.
 
-*   **Writing Code**: Wrap your logic in `Fn(([args]) => { ... })`.
+*   **Writing Code (TSL)**: Wrap your logic in `Fn(([args]) => { ... })`.
     *   **Note**: Arguments must be passed as an **array**: `([color, time])`.
     ```javascript
     Fn(([color, time]) => {
@@ -119,7 +119,17 @@ Click **"Create from Code..."** in the Node Picker. The editor creates inputs ba
       return color * sin(time);
     })
     ```
+*   **Writing Code (WGSL)**: Choose **WGSL** in the language selector and write a raw WGSL function.
+    ```wgsl
+    fn colorFn(baseColor: vec4f, uv: vec2f) -> vec4f {
+      let red   = (uv.x + 2.3) * 0.3;
+      let green = (uv.y + 1.7) / 8.2;
+      let blue  = (uv.x + uv.y) % 10.0;
+      return mix(baseColor, vec4f(red, green, blue, 1.0), uv.x);
+    }
+    ```
 *   **Configuring Types**: Once you type valid code, an **"Input Types"** section appears below. You can assign explicit types (e.g., `Color`, `Float`, `Vec3`) to your inputs to ensure they connect correctly.
+    *   For WGSL, the **output type** is inferred from the function return type (falls back to `Any` if unknown).
 
 ### **2. Coding Environment**
 You can write any standard **JavaScript** logic and use any **TSL function** available in **three.js**.

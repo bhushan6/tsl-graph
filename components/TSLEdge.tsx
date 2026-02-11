@@ -46,6 +46,10 @@ const TSLEdge = ({
         sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId
             ? sourceDefination.outputs[sourceHandleId]?.type ?? null
             : null;
+        if (!sourceDataType && sourceHandleId && sourceNode?.data.dynamicPorts) {
+            const dynamicPort = sourceNode.data.dynamicPorts.find((port) => port.id === sourceHandleId);
+            sourceDataType = (dynamicPort?.type as TSLType) ?? null;
+        }
     }
 
 
@@ -66,6 +70,10 @@ const TSLEdge = ({
         targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId
             ? targetDefination.inputs[targetHandleId]?.type ?? null
             : null;
+        if (!targetDataType && targetHandleId && targetNode?.data.dynamicPorts) {
+            const dynamicPort = targetNode.data.dynamicPorts.find((port) => port.id === targetHandleId);
+            targetDataType = (dynamicPort?.type as TSLType) ?? null;
+        }
     }
 
 

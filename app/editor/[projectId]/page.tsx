@@ -102,6 +102,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                     data: {
                         id: codeNode.id,
                         name: codeNode.name,
+                        language: codeNode.language ?? 'tsl',
                         code: codeNode.code,
                         inputs: codeNode.inputs,
                         output: codeNode.output,
@@ -117,6 +118,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                     data: {
                         id: codeNode.id,
                         name: codeNode.name,
+                        language: codeNode.language ?? 'tsl',
                         code: codeNode.code,
                         inputs: codeNode.inputs,
                         output: codeNode.output,

@@ -90,14 +90,35 @@ export function EdgeDropNodePicker({
     const compatibleCodeNodes = useMemo((): CodeNodeDef[] => {
         if (!userCodeNodeTemplates) return [];
 
-        // Code nodes always have 'any' type for inputs/output, so they're compatible with everything
-        return userCodeNodeTemplates.map(template => {
-            const data = template.data as {
-                id: string;
-                inputs: Array<{ id: string; label: string; type: string }>;
-                output: { label: string; type: string };
-            };
-            return {
+        const isCompatibleType = (a: string, b: string) => {
+            if (a === 'any' || b === 'any') return true;
+            return a === b;
+        };
+
+        const shouldIncludeTemplate = (data: {
+            inputs: Array<{ id: string; label: string; type: string }>;
+            output: { label: string; type: string };
+        }) => {
+            if (!sourceDataType || !handleDirection) return true;
+            if (handleDirection === 'output') {
+                return data.inputs.some(inp => isCompatibleType(inp.type, sourceDataType));
+            }
+            return isCompatibleType(data.output.type, sourceDataType);
+        };
+
+        // Code nodes can carry authored types for inputs/outputs
+        return userCodeNodeTemplates
+            .map(template => {
+                const data = template.data as {
+                    id: string;
+                    language?: string;
+                    inputs: Array<{ id: string; label: string; type: string }>;
+                    output: { label: string; type: string };
+                };
+                return { template, data };
+            })
+            .filter(({ data }) => shouldIncludeTemplate(data))
+            .map(({ template, data }) => ({
                 type: `code/${template._id}` as NodeType,
                 label: template.name,
                 category: 'Custom' as const,
@@ -108,9 +129,8 @@ export function EdgeDropNodePicker({
                 }, {} as Record<string, { label: string; type: TSLType }>),
                 outputs: { out: { label: data.output.label, type: data.output.type as TSLType } },
                 tsl: data.id, // Use the code node ID as TSL reference
-            };
-        });
-    }, [userCodeNodeTemplates]);
+            }));
+    }, [userCodeNodeTemplates, sourceDataType, handleDirection]);
 
     // Build subgraph nodes from templates (fetched from server, cached by Convex)
     const compatibleSubgraphNodes = useMemo((): SubgraphNodeDef[] => {

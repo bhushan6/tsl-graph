@@ -16,8 +16,8 @@ export const TYPE_COLORS: Partial<Record<TSLType, string>> = {
     uint: '#06b6d4',    // cyan
     bool: '#f97316',    // orange
     vec2: '#22c55e',    // green
-    vec3: '#22c55e',
-    vec4: '#22c55e',
+    vec3: '#14b8a6',    // teal
+    vec4: '#84cc16',    // lime
     ivec2: '#3b82f6',
     ivec3: '#3b82f6',
     ivec4: '#3b82f6',
