@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useEditorStore } from '@/store/editor';
 import { parseCodeNodeCode } from '@/lib/code-parser';
-import { SubgraphPort, TSLType } from '@/lib/types';
+import { CodeNodeLanguage, SubgraphPort, TSLType } from '@/lib/types';
 import { toast } from 'sonner';
 
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -41,13 +41,21 @@ interface CodeNodeDialogProps {
     nodeId?: string;
     initialName?: string;
     initialCode?: string;
+    initialLanguage?: CodeNodeLanguage;
 }
 
-const PLACEHOLDER_CODE = `Fn(([a, b]) => {
+const PLACEHOLDER_TSL_CODE = `Fn(([a, b]) => {
     // Your TSL code here
     const result = a.add(b);
     return result;
 })`;
+
+const PLACEHOLDER_WGSL_CODE = `fn colorFn(baseColor: vec4f, uv: vec2f) -> vec4f {
+  let red = (uv.x + 2.3) * 0.3;
+  let green = (uv.y + 1.7) / 8.2;
+  let blue = (uv.x + uv.y) % 10.0;
+  return mix(baseColor, vec4f(red, green, blue, 1.0), uv.x);
+}`;
 
 export function CodeNodeDialog({
     open,
@@ -55,12 +63,14 @@ export function CodeNodeDialog({
     mode = 'create',
     nodeId,
     initialName = '',
-    initialCode = ''
+    initialCode = '',
+    initialLanguage = 'tsl'
 }: CodeNodeDialogProps) {
     const [name, setName] = useState(initialName);
     const [code, setCode] = useState(initialCode);
     const [isSaving, setIsSaving] = useState(false);
     const [inputTypes, setInputTypes] = useState<Record<string, TSLType>>({});
+    const [language, setLanguage] = useState<CodeNodeLanguage>(initialLanguage);
     const { createCodeNode, updateCodeNode, subgraphs, getCodeNode } = useEditorStore();
 
     const { resolvedTheme } = useTheme();
@@ -74,8 +84,13 @@ export function CodeNodeDialog({
         if (!code.trim()) {
             return { arguments: [], isValid: false, error: 'Enter code to validate' };
         }
-        return parseCodeNodeCode(code);
-    }, [code]);
+        return parseCodeNodeCode(code, language);
+    }, [code, language]);
+
+    // Reset input types when language changes
+    React.useEffect(() => {
+        setInputTypes({});
+    }, [language]);
 
     // Sync input types when arguments change
     React.useEffect(() => {
@@ -83,7 +98,10 @@ export function CodeNodeDialog({
         for (const arg of parseResult.arguments) {
             // Try to get existing type from code node (if editing)
             const existingInput = existingCodeNode?.inputs.find(inp => inp.label === arg);
-            newTypes[arg] = inputTypes[arg] || existingInput?.type as TSLType || 'any';
+            newTypes[arg] = inputTypes[arg]
+                || existingInput?.type as TSLType
+                || parseResult.argTypes?.[arg]
+                || 'any';
         }
         // Only update if different to avoid infinite loops
         const isDifferent = parseResult.arguments.some(arg => newTypes[arg] !== inputTypes[arg]) ||
@@ -92,7 +110,7 @@ export function CodeNodeDialog({
             setInputTypes(newTypes);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [parseResult.arguments, existingCodeNode]);
+    }, [parseResult.arguments, parseResult.argTypes, existingCodeNode, inputTypes]);
 
     // Check for name conflicts
     const nameConflict = useMemo(() => {
@@ -134,18 +152,20 @@ export function CodeNodeDialog({
             const inputs: SubgraphPort[] = parseResult.arguments.map((arg, i) => ({
                 id: `in_${i}`,
                 label: arg,
-                type: inputTypes[arg] || 'any',
+                type: language === 'wgsl'
+                    ? (parseResult.argTypes?.[arg] || 'any')
+                    : (inputTypes[arg] || 'any'),
             }));
 
             // Single output port
             const output: SubgraphPort = {
                 id: 'out',
                 label: 'Result',
-                type: 'any',
+                type: language === 'wgsl' ? (parseResult.returnType || 'any') : 'any',
             };
 
             if (mode === 'create') {
-                const id = await createCodeNode(name.trim(), code.trim(), inputs, output);
+                const id = await createCodeNode(name.trim(), code.trim(), inputs, output, language);
                 if (id) {
                     toast.success(`Created code node "${name}"`);
                     setName('');
@@ -159,7 +179,8 @@ export function CodeNodeDialog({
                         name: name.trim(),
                         code: code.trim(),
                         inputs,
-                        output
+                        output,
+                        language
                     });
                     toast.success(`Updated code node "${name}"`);
                     onOpenChange(false);
@@ -168,14 +189,15 @@ export function CodeNodeDialog({
         } finally {
             setIsSaving(false);
         }
-    }, [canCreate, isSaving, name, code, parseResult.arguments, inputTypes, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId]);
+    }, [canCreate, isSaving, name, code, parseResult.arguments, parseResult.returnType, inputTypes, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId, language]);
 
     const handleClose = useCallback(() => {
         // Reset to initial values on close without saving
         setName(initialName);
         setCode(initialCode);
+        setLanguage(initialLanguage);
         onOpenChange(false);
-    }, [onOpenChange, initialName, initialCode]);
+    }, [onOpenChange, initialName, initialCode, initialLanguage]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,8 +209,8 @@ export function CodeNodeDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {mode === 'create'
-                            ? 'Create a reusable node by writing TSL code. Arguments become input handles.'
-                            : 'Edit the TSL code. Changing arguments will update input handles.'}
+                            ? 'Create a reusable node by writing TSL or WGSL code. Arguments become input handles.'
+                            : 'Edit the code. Changing arguments will update input handles.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -208,16 +230,30 @@ export function CodeNodeDialog({
                         )}
                     </div>
 
+                    {/* Language selector */}
+                    <div className="space-y-2">
+                        <Label htmlFor="node-language">Language</Label>
+                        <select
+                            id="node-language"
+                            value={language}
+                            onChange={(e) => setLanguage(e.target.value as CodeNodeLanguage)}
+                            className="w-full h-8 px-2 text-sm bg-muted border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                            <option value="tsl">TSL</option>
+                            <option value="wgsl">WGSL</option>
+                        </select>
+                    </div>
+
                     {/* Code editor */}
                     <div className="space-y-2">
-                        <Label>TSL Code</Label>
+                        <Label>{language === 'wgsl' ? 'WGSL Code' : 'TSL Code'}</Label>
                         <div className="rounded-md border border-input overflow-hidden">
                             <CodeMirror
                                 value={code}
                                 onChange={setCode}
                                 extensions={extensions}
                                 theme={resolvedTheme === 'dark' ? oneDark : undefined}
-                                placeholder={PLACEHOLDER_CODE}
+                                placeholder={language === 'wgsl' ? PLACEHOLDER_WGSL_CODE : PLACEHOLDER_TSL_CODE}
                                 height="200px"
                                 basicSetup={{
                                     lineNumbers: true,
@@ -257,7 +293,7 @@ export function CodeNodeDialog({
                     </div>
 
                     {/* Input Types Configuration - only show if there are arguments */}
-                    {parseResult.isValid && parseResult.arguments.length > 0 && (
+                    {parseResult.isValid && parseResult.arguments.length > 0 && language === 'tsl' && (
                         <div className="space-y-2">
                             <Label>Input Types</Label>
                             <p className="text-xs text-muted-foreground">
@@ -285,6 +321,8 @@ export function CodeNodeDialog({
                             </div>
                         </div>
                     )}
+
+                    {/* For WGSL, input types are inferred and not editable */}
                 </div>
 
                 <DialogFooter>

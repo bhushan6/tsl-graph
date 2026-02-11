@@ -36,8 +36,8 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     }, [nodes, edges, subgraphs, codeNodes]);
 
     const imports = useMemo(() => {
-        return getRequiredImports(nodes, subgraphs);
-    }, [nodes, subgraphs]);
+        return getRequiredImports(nodes, subgraphs, codeNodes);
+    }, [nodes, subgraphs, codeNodes]);
 
     const handleCopy = useCallback(async () => {
         const fullCode = imports.length > 0

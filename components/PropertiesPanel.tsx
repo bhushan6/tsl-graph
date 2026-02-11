@@ -261,8 +261,11 @@ function CodeNodeInstancePanel({
                         Edit Code
                     </Button>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    {codeNode.name}
+                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                    <span>{codeNode.name}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                        {codeNode.language ?? 'tsl'}
+                    </span>
                 </p>
             </div>
 
@@ -608,6 +611,7 @@ function PropertiesPanelContent() {
                         nodeId={editingCodeNodeId}
                         initialName={codeNode.name}
                         initialCode={codeNode.code}
+                        initialLanguage={codeNode.language ?? 'tsl'}
                     />
                 )}
             </>

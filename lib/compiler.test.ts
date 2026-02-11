@@ -322,6 +322,36 @@ describe('compileGraph', () => {
         });
     });
 
+    describe('Code Nodes', () => {
+        it('should compile WGSL code nodes with wgslFn and named args', () => {
+            const nodes = [
+                createNode('wgsl-node', 'code/wgsl-test'),
+            ];
+
+            const codeNodes = {
+                'code/wgsl-test': {
+                    id: 'code/wgsl-test',
+                    name: 'WGSL Test',
+                    language: 'wgsl' as const,
+                    code: `fn colorFn(baseColor: vec4f, uv: vec2f) -> vec4f { return baseColor; }`,
+                    inputs: [
+                        { id: 'in_0', label: 'baseColor', type: 'vec4' },
+                        { id: 'in_1', label: 'uv', type: 'vec2' },
+                    ],
+                    output: { id: 'out', label: 'Result', type: 'vec4' },
+                    createdAt: 0,
+                    updatedAt: 0,
+                }
+            };
+
+            const code = compileGraph(nodes, [], undefined, codeNodes);
+            expect(code).toContain('wgslFn(`');
+            expect(code).toContain('const WGSL_Test = wgslFn(`');
+            expect(code).toContain('const _code_node_0 = WGSL_Test({ baseColor:');
+            expect(code).toContain('uv:');
+        });
+    });
+
     describe('Numeric inputs', () => {
         it('should compile integer values', () => {
             const nodes = [createNode('add1', 'math/add', { values: { a: 10, b: 5 } })];
@@ -764,7 +794,11 @@ describe('Logic Nodes', () => {
                 '',
                 'const _node0 = float(0);',
                 'const _node1 = float(1);',
-                '_node0.assign(_node1);',
+                'const _assign_2 = Fn(() => {',
+                '    _node0.assign(_node1);',
+                '    return _node0;',
+                '});',
+                'const _node2 = _assign_2();',
             ].join('\n');
 
             expect(code.trim()).toBe(expected.trim());
@@ -788,7 +822,11 @@ describe('Logic Nodes', () => {
                 '',
                 'const _node0 = float(0);',
                 'const _node1 = float(2);',
-                '_node0.addAssign(_node1);',
+                'const _assign_2 = Fn(() => {',
+                '    _node0.addAssign(_node1);',
+                '    return _node0;',
+                '});',
+                'const _node2 = _assign_2();',
             ].join('\n');
 
             expect(code.trim()).toBe(expected.trim());
@@ -889,6 +927,24 @@ describe('getRequiredImports', () => {
         ];
         const imports = getRequiredImports(nodes);
         expect(imports).toEqual(expect.arrayContaining(['add', 'mul', 'sin']));
+    });
+
+    it('should include wgslFn when WGSL code nodes are used', () => {
+        const nodes = [createNode('wgsl-node', 'code/wgsl-test')];
+        const codeNodes = {
+            'code/wgsl-test': {
+                id: 'code/wgsl-test',
+                name: 'WGSL Test',
+                language: 'wgsl' as const,
+                code: `fn colorFn(baseColor: vec4f) -> vec4f { return baseColor; }`,
+                inputs: [{ id: 'in_0', label: 'baseColor', type: 'vec4' }],
+                output: { id: 'out', label: 'Result', type: 'vec4' },
+                createdAt: 0,
+                updatedAt: 0,
+            }
+        };
+        const imports = getRequiredImports(nodes, undefined, codeNodes);
+        expect(imports).toContain('wgslFn');
     });
 
     it('should include loop-related imports when loop nodes exist', () => {

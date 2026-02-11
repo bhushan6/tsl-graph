@@ -61,6 +61,8 @@ export interface SubgraphDefinition {
 }
 
 // Code-based custom node definition - created from TSL Fn code
+export type CodeNodeLanguage = 'tsl' | 'wgsl';
+
 export interface CodeNodeDefinition {
     // Unique ID for this code node (e.g., 'code/my-effect')
     id: string;
@@ -69,7 +71,9 @@ export interface CodeNodeDefinition {
     // Template reference (if saved from/as a template)
     templateId?: string;
     templateVersion?: number;
-    // The raw TSL code (complete Fn definition)
+    // Code language (default: 'tsl' when missing)
+    language?: CodeNodeLanguage;
+    // The raw code (TSL Fn definition or WGSL fn)
     code: string;
     // Parsed input arguments that become input handles
     inputs: SubgraphPort[];

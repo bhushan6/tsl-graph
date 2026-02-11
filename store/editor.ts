@@ -404,7 +404,13 @@ interface EditorState {
     isSubgraphMode: () => boolean;
 
     // Code node actions
-    createCodeNode: (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => Promise<string | null>;
+    createCodeNode: (
+        name: string,
+        code: string,
+        inputs: SubgraphPort[],
+        output: SubgraphPort,
+        language?: CodeNodeDefinition['language']
+    ) => Promise<string | null>;
     updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => void;
     addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => void;
     deleteCodeNode: (id: string) => void;
@@ -1820,7 +1826,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Code Node Actions
 
-    createCodeNode: async (name: string, code: string, inputs: SubgraphPort[], output: SubgraphPort) => {
+    createCodeNode: async (
+        name: string,
+        code: string,
+        inputs: SubgraphPort[],
+        output: SubgraphPort,
+        language: CodeNodeDefinition['language'] = 'tsl'
+    ) => {
         get().takeSnapshot();
 
         // Generate unique ID
@@ -1832,6 +1844,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             code,
             inputs,
             output,
+            language,
             createdAt: Date.now(),
             updatedAt: Date.now(),
         };
@@ -1985,6 +1998,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 ...get().codeNodes,
                 [codeNode.id]: {
                     ...codeNode,
+                    language: codeNode.language ?? 'tsl',
                     createdAt: codeNode.createdAt || Date.now(),
                     updatedAt: Date.now(),
                 },

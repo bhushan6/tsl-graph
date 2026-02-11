@@ -90,4 +90,40 @@ describe('parseCodeNodeCode', () => {
         expect(result.isValid).toBe(false);
         expect(result.error).toBeTruthy();
     });
+
+    it('should parse WGSL and infer argument/return types', () => {
+        const code = `fn colorFn(baseColor: vec4f, uv: vec2f) -> vec4f {
+  return mix(baseColor, vec4f(1.0), uv.x);
+}`;
+        const result = parseCodeNodeCode(code, 'wgsl');
+        expect(result.isValid).toBe(true);
+        expect(result.arguments).toEqual(['baseColor', 'uv']);
+        expect(result.argTypes).toEqual({ baseColor: 'vec4', uv: 'vec2' });
+        expect(result.returnType).toBe('vec4');
+    });
+
+    it('should map WGSL generic types', () => {
+        const code = `fn mapFn(a: vec2<f32>, b: vec3<i32>) -> mat4x4<f32> {
+  return mat4x4<f32>(1.0);
+}`;
+        const result = parseCodeNodeCode(code, 'wgsl');
+        expect(result.isValid).toBe(true);
+        expect(result.argTypes?.a).toBe('vec2');
+        expect(result.argTypes?.b).toBe('ivec3');
+        expect(result.returnType).toBe('mat4');
+    });
+
+    it('should fail WGSL without a function signature', () => {
+        const code = `let x = 1.0;`;
+        const result = parseCodeNodeCode(code, 'wgsl');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toMatch(/function signature/i);
+    });
+
+    it('should fail WGSL with invalid argument names', () => {
+        const code = `fn bad(1a: vec4f) -> vec4f { return vec4f(1.0); }`;
+        const result = parseCodeNodeCode(code, 'wgsl');
+        expect(result.isValid).toBe(false);
+        expect(result.error).toBeTruthy();
+    });
 });

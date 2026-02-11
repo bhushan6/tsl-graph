@@ -84,7 +84,7 @@ export async function runToolCall(call: ToolCall): Promise<ToolResult> {
       case 'compileGraph': {
         const input = call.input as CompileGraphInput;
         const state = useEditorStore.getState();
-        const imports = getRequiredImports(state.nodes, state.subgraphs);
+        const imports = getRequiredImports(state.nodes, state.subgraphs, state.codeNodes);
         const codeBody = compileGraph(state.nodes, state.edges, state.subgraphs, state.codeNodes);
         const includeImports = input.includeImports !== false;
         const header = includeImports && imports.length > 0

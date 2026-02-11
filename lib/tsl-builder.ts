@@ -27,6 +27,7 @@ export function buildTSLMaterial(
     // We need all TSL functions (float, vec3, Fn, etc.) and Material classes available
     const scope = {
         ...TSL,
+        wgslFn: TSL.wgslFn,
         // Ensure Material classes are available if not in TSL
         MeshStandardNodeMaterial: THREE.MeshStandardNodeMaterial,
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
@@ -144,6 +145,7 @@ export function buildNodePreviewMaterial(
     // Build execution scope
     const scope = {
         ...TSL,
+        wgslFn: TSL.wgslFn,
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
         THREE: THREE,
         __uniform: ensureUniform,
