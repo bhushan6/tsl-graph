@@ -7,6 +7,8 @@ import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
+import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { getMaterialActiveInputsSet } from '@/lib/material-inputs';
 import {
     Tooltip,
     TooltipContent,
@@ -94,6 +96,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const isCustomInstance = isSubgraphInstance || isCodeNodeInstance;
     const isMultiOpNode = data.type === 'math/multiOp';
     const isUniformNode = data.type === 'const/uniform';
+    const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(data.type);
     const operations = Array.isArray(data.operations) ? (data.operations as MultiOp[]) : [];
 
     // For subgraph and code node instances, we don't need a registry definition
@@ -376,7 +379,11 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const outputKeys = Object.keys(outputs);
 
     // Filter out hidden inputs/outputs if necessary, currently inputs support hidden
-    const visibleInputKeys = inputKeys.filter(k => !inputs[k].hidden);
+    let visibleInputKeys = inputKeys.filter(k => !inputs[k].hidden);
+    if (isMaterialNode) {
+        const activeInputs = getMaterialActiveInputsSet(data, def, connectedInputs);
+        visibleInputKeys = visibleInputKeys.filter((key) => activeInputs.has(key));
+    }
     // Include 'out' in the main list of outputs.
     // We strictly align by index now for compactness
     const maxRows = Math.max(visibleInputKeys.length, outputKeys.length);
@@ -428,7 +435,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                             label={row.input[1].label}
                                             isConnected={connectedInputs.has(row.input[0])}
                                             isDark={isDark}
-                                            isMaterialNode={data.type.startsWith('material')}
+                                            isMaterialNode={isMaterialNode}
                                         />
                                     )}
 

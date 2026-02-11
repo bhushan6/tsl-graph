@@ -4,6 +4,8 @@ import { memo, useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { cn, getAbsolutePosition } from '@/lib/utils';
+import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { getMaterialActiveInputsSet, getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { Button } from '@/components/ui/button';
 import { HexColorPicker } from 'react-colorful';
 import { useEdges, useReactFlow } from '@xyflow/react';
@@ -688,6 +690,7 @@ function PropertiesPanelContent() {
         s.nodes.find((n) => n.id === s.selectedNodeId)
     );
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const setNodeActiveInput = useEditorStore((s) => s.setNodeActiveInput);
     const setUniformType = useEditorStore((s) => s.setUniformType);
     const addDynamicPort = useEditorStore((s) => s.addDynamicPort);
     const removeDynamicPort = useEditorStore((s) => s.removeDynamicPort);
@@ -811,9 +814,19 @@ function PropertiesPanelContent() {
 
     const inputs = def.inputs ?? {};
     const inputKeys = Object.keys(inputs);
-    const editableInputs = inputKeys.filter((key) =>
-        !connectedInputs.has(key) && !inputs[key].connectionOnly
+    const visibleInputKeys = inputKeys.filter((key) => !inputs[key].hidden);
+    const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+    const storedActiveInputs = isMaterialNode ? getMaterialStoredActiveInputs(node.data, def) : [];
+    const activeInputsSet = isMaterialNode ? getMaterialActiveInputsSet(node.data, def, connectedInputs) : new Set<string>();
+    const editableInputs = visibleInputKeys.filter((key) =>
+        !connectedInputs.has(key)
+        && !inputs[key].connectionOnly
+        && (!isMaterialNode || activeInputsSet.has(key))
     );
+    const activeInputKeys = isMaterialNode ? visibleInputKeys.filter((key) => activeInputsSet.has(key)) : visibleInputKeys;
+    const activeEditableCandidates = isMaterialNode
+        ? activeInputKeys.filter((key) => !inputs[key].connectionOnly)
+        : [];
 
     return (
         <div className="flex flex-col h-full">
@@ -829,9 +842,77 @@ function PropertiesPanelContent() {
                 {/* Node Preview - only shown in debug mode */}
                 {debugMode && <NodePreview />}
 
-                {editableInputs.length === 0 ? (
+                {isMaterialNode ? (
+                    <>
+                        {visibleInputKeys.length > 0 && (
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
+                                    Inputs
+                                </h4>
+                                <span className="text-[10px] text-muted-foreground">Active inputs show on node & compile</span>
+                            </div>
+                        )}
+                        {visibleInputKeys.length > 0 && (
+                            <div className="mt-2 flex flex-col gap-2">
+                                {visibleInputKeys.map((key) => {
+                                    const input = inputs[key];
+                                    const isConnected = connectedInputs.has(key);
+                                    const isActive = activeInputsSet.has(key);
+                                    const isExplicitlyActive = storedActiveInputs.includes(key);
+                                    const isInlineEditable = isActive && !isConnected && !input.connectionOnly;
+                                    const hints: string[] = [];
+                                    if (input.connectionOnly) hints.push('connection only');
+                                    if (input.propertyOnly) hints.push('property');
+                                    if (isConnected) hints.push('connected');
+                                    const hintText = hints.length > 0 ? ` • ${hints.join(' • ')}` : '';
+
+                                    return (
+                                        <div key={key} className="rounded-md border border-sidebar-border/60 px-2 py-1.5">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-medium text-sidebar-foreground truncate">
+                                                        {input.label}
+                                                    </div>
+                                                    <div className="text-[10px] text-muted-foreground truncate">
+                                                        {input.type}{hintText}
+                                                    </div>
+                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 rounded border-primary"
+                                                    checked={isActive}
+                                                    disabled={isConnected}
+                                                    onChange={(e) => setNodeActiveInput(node.id, key, e.target.checked)}
+                                                    title={isConnected ? 'Disconnect to deactivate' : (isExplicitlyActive ? 'Deactivate input' : 'Activate input')}
+                                                />
+                                            </div>
+                                            {isInlineEditable && (
+                                                <div className="mt-2">
+                                                    <PropertyInputInline
+                                                        nodeId={node.id}
+                                                        inputKey={key}
+                                                        inputType={input.type}
+                                                        inputDefault={input.default}
+                                                        inputOptions={input.options}
+                                                        onChange={(v) => updateNodeValue(node.id, key, v)}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {visibleInputKeys.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                This node has no editable properties
+                            </p>
+                        ) : null}
+                    </>
+                ) : editableInputs.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                        {inputKeys.length === 0
+                        {visibleInputKeys.length === 0
                             ? 'This node has no editable properties'
                             : 'All inputs are connected'}
                     </p>
@@ -901,6 +982,39 @@ function PropertyInputWrapper({
                 projectId={projectId}
             />
         </div>
+    );
+}
+
+interface PropertyInputInlineProps {
+    nodeId: string;
+    inputKey: string;
+    inputType: string;
+    inputDefault: TSLValueType | undefined;
+    inputOptions?: readonly { label: string; value: string | number }[];
+    onChange: (value: TSLValueType) => void;
+}
+
+function PropertyInputInline({
+    nodeId,
+    inputKey,
+    inputType,
+    inputDefault,
+    inputOptions,
+    onChange,
+}: PropertyInputInlineProps) {
+    const value = useNodeInputValue(nodeId, inputKey, inputDefault);
+    const projectId = useEditorStore((s) => s.projectId);
+
+    return (
+        <PropertyInput
+            type={inputType}
+            value={value}
+            options={inputOptions}
+            onChange={onChange}
+            nodeId={nodeId}
+            propertyName={inputKey}
+            projectId={projectId}
+        />
     );
 }
 

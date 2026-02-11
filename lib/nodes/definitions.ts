@@ -40,4 +40,5 @@ export interface BaseNodeDef {
     readonly tsl: string;           // TSL function name
     readonly pure?: boolean;        // No inputs = source node
     readonly callable?: boolean;    // If true, pure node needs to be called as function (e.g., uv())
+    readonly defaultActiveInputs?: readonly string[]; // If set, inputs that are active by default (material nodes)
 }
