@@ -270,7 +270,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             }
 
             const nodesById = new Map(nodes.map(n => [n.id, n]));
-            const sourceNode = nodesById.get(sourceNodeId);
+            const sourceNode = sourceNodeId && nodesById.get(sourceNodeId);
 
             const isGroupNode = (node: AppNode) => node.type === 'group' || node.data.type === 'loop';
             const isLoopBoundaryHandle = (node: AppNode, direction: 'input' | 'output', handleId?: string | null) => {
@@ -319,7 +319,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             };
 
             const blockGroupNesting = !!sourceNode && !!handleDirection && isLoopBoundaryHandle(sourceNode, handleDirection, sourceHandleId);
-            let parentGroupId: string | null = blockGroupNesting ? null : getGroupAncestorId(sourceNode);
+            let parentGroupId: string | null = blockGroupNesting || !sourceNode ? null : getGroupAncestorId(sourceNode);
 
             if (!parentGroupId && !blockGroupNesting) {
                 const groupCandidates = nodes.filter(isGroupNode).flatMap((node) => {
