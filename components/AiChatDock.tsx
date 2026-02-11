@@ -57,7 +57,7 @@ const makeId = () => {
   }
   return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
-export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
+export function AiChatDock({ onOpenToolbar, isOpen }: { onOpenToolbar?: () => void, isOpen?: boolean }) {
 
 
   const traceId = useMemo(() => makeId(), []);
@@ -259,10 +259,10 @@ export function AiChatDock({ onOpenToolbar }: { onOpenToolbar?: () => void }) {
   }, [settings]);
 
   useEffect(() => {
-    if (apiKeyMissing) {
+    if (apiKeyMissing && isOpen) {
       setShowSettings(true);
     }
-  }, [apiKeyMissing]);
+  }, [apiKeyMissing, isOpen]);
 
   const displayMessages = useMemo(
     () =>
