@@ -431,6 +431,8 @@ export function HelpDialog() {
                                     {[
                                         { key: "Ctrl + Z", label: "Undo" },
                                         { key: "Ctrl + Y", label: "Redo" },
+                                        { key: "Ctrl + C", label: "Copy Selection" },
+                                        { key: "Ctrl + V", label: "Paste" },
                                         { key: "Delete", label: "Delete Selection" },
                                         { key: "Shift + Drag", label: "Box Selection" },
                                         { key: "Middle Mouse", label: "Pan Canvas" },

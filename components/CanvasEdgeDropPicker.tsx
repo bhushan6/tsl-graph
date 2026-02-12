@@ -451,12 +451,13 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     if (!isOpen) return null;
 
     return (
-        <EdgeDropNodePicker
-            position={screenPosition}
-            sourceDataType={sourceDataType}
-            handleDirection={handleDirection}
-            onNodeSelect={handleNodeSelect}
-            onClose={close}
-        />
+            <EdgeDropNodePicker
+                position={screenPosition}
+                flowPosition={flowPosition}
+                sourceDataType={sourceDataType}
+                handleDirection={handleDirection}
+                onNodeSelect={handleNodeSelect}
+                onClose={close}
+            />
     );
 });

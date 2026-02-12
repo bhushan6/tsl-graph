@@ -6,6 +6,7 @@ import { api } from '@/convex/_generated/api';
 import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, getAllNodes } from '@/lib/node-picker-utils';
 import { NodeType, NodeDef, TSLType } from '@/lib/types';
 import { Code, Layers } from 'lucide-react';
+import { useEditorStore } from '@/store/editor';
 import {
     Command,
     CommandEmpty,
@@ -17,6 +18,7 @@ import {
 
 interface EdgeDropNodePickerProps {
     position: { x: number; y: number };
+    flowPosition: { x: number; y: number };
     sourceDataType: TSLType | '';
     handleDirection: 'input' | 'output' | null;
     onNodeSelect: (nodeType: NodeType) => void;
@@ -35,6 +37,7 @@ interface SubgraphNodeDef extends Omit<NodeDef, 'tsl'> {
 
 export function EdgeDropNodePicker({
     position,
+    flowPosition,
     sourceDataType,
     handleDirection,
     onNodeSelect,
@@ -66,6 +69,9 @@ export function EdgeDropNodePicker({
     const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
     // Fetch user's subgraph templates from server (cached by Convex)
     const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
+
+    const clipboard = useEditorStore((s) => s.clipboard);
+    const pasteSelection = useEditorStore((s) => s.pasteSelection);
 
     // Get compatible nodes
     const compatibleNodes = useMemo(() => {
@@ -219,6 +225,8 @@ export function EdgeDropNodePicker({
         return () => window.removeEventListener('resize', adjustPosition);
     }, [position]);
 
+    const showPaste = !sourceDataType && !handleDirection && !!clipboard?.nodes?.length;
+
     return (
         <div
             ref={containerRef}
@@ -240,6 +248,20 @@ export function EdgeDropNodePicker({
                 <CommandInput placeholder="Search nodes..." autoFocus />
                 <CommandList className="max-h-[300px]">
                     <CommandEmpty>No compatible nodes found.</CommandEmpty>
+                    {showPaste && (
+                        <CommandGroup heading="Actions">
+                            <CommandItem
+                                value="Paste"
+                                onSelect={() => {
+                                    pasteSelection(flowPosition);
+                                    onClose();
+                                }}
+                                className="gap-2"
+                            >
+                                <span>Paste</span>
+                            </CommandItem>
+                        </CommandGroup>
+                    )}
                     {Object.entries(groupedNodes).map(([category, nodes]) => (
                         <CommandGroup key={category} heading={category}>
                             {nodes.map((node) => (

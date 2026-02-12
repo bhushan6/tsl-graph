@@ -133,6 +133,33 @@ const isGroupLikeNode = (node: Node<TSLNodeData>) => node.type === 'group' || is
 
 const isLoopInternalNode = (node: Node<TSLNodeData>) => LOOP_INTERNAL_NODE_TYPES.has(node.data.type);
 
+const isAnchorNode = (node: Node<TSLNodeData>) =>
+    node.id === 'subgraph-input' ||
+    node.id === 'subgraph-output' ||
+    node.data.type === 'subgraph/input' ||
+    node.data.type === 'subgraph/output';
+
+const cloneNode = (node: Node<TSLNodeData>): Node<TSLNodeData> => ({
+    ...node,
+    data: {
+        ...node.data,
+        values: { ...(node.data.values || {}) },
+        connected: { ...(node.data.connected || {}) },
+        activeInputs: node.data.activeInputs ? [...node.data.activeInputs] : undefined,
+        dynamicPorts: node.data.dynamicPorts ? node.data.dynamicPorts.map((p) => ({ ...p })) : undefined,
+        operations: Array.isArray(node.data.operations)
+            ? node.data.operations.map((op) => ({ ...op }))
+            : undefined,
+    },
+    style: node.style ? { ...node.style } : undefined,
+});
+
+const cloneEdge = (edge: Edge): Edge => ({
+    ...edge,
+    data: edge.data ? { ...(edge.data as Record<string, unknown>) } : edge.data,
+    style: edge.style ? { ...edge.style } : edge.style,
+});
+
 const isLoopMode = (value: string): value is LoopMode => {
     return LOOP_MODES.includes(value as LoopMode);
 };
@@ -255,6 +282,14 @@ interface HistoryState {
     future: Snapshot[];
 }
 
+type ClipboardData = {
+    nodes: Node<TSLNodeData>[];
+    edges: Edge[];
+    worldPositions: Record<string, { x: number; y: number }>;
+    bounds: { x: number; y: number; width: number; height: number };
+    pasteIndex: number;
+};
+
 // Strip transient fields (like selection) from nodes for history
 const stripTransientFields = (nodes: Node<TSLNodeData>[]): Node<TSLNodeData>[] => {
     return nodes.map(node => ({
@@ -269,6 +304,7 @@ interface EditorState {
     edges: Edge[];
     selectedNodeId: string | null;
     selectedNodeIds: string[]; // For multi-selection
+    clipboard: ClipboardData | null;
     graphStructureVersion: number;
     hoveredGroupId: string | null;
     setHoveredGroupId: (groupId: string | null) => void;
@@ -364,6 +400,8 @@ interface EditorState {
     selectSingleNode: (nodeId: string | null) => void;
     getSelectedNode: () => Node<TSLNodeData> | undefined;
     getSelectedNodes: () => Node<TSLNodeData>[];
+    copySelection: () => void;
+    pasteSelection: (pastePosition?: { x: number; y: number }) => void;
 
     // Save/Load
     saveToJSON: () => string;
@@ -434,6 +472,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     edges: [],
     selectedNodeId: null,
     selectedNodeIds: [],
+    clipboard: null,
     graphStructureVersion: 0,
     hoveredGroupId: null,
     setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
@@ -1174,6 +1213,256 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     getSelectedNodes: () => {
         const { nodes, selectedNodeIds } = get();
         return nodes.filter((n) => selectedNodeIds.includes(n.id));
+    },
+
+    copySelection: () => {
+        const { nodes, edges, selectedNodeIds } = get();
+        if (selectedNodeIds.length === 0) return;
+
+        const expandedIds = new Set<string>(selectedNodeIds);
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const node of nodes) {
+                if (!node.parentId) continue;
+                if (expandedIds.has(node.parentId) && !expandedIds.has(node.id)) {
+                    expandedIds.add(node.id);
+                    changed = true;
+                }
+            }
+        }
+
+        const loopGroupIds = new Set(
+            nodes
+                .filter((node) => expandedIds.has(node.id) && isLoopGroupNode(node))
+                .map((node) => node.id)
+        );
+
+        const selectedNodes = nodes.filter((node) => {
+            if (!expandedIds.has(node.id)) return false;
+            if (isAnchorNode(node)) return false;
+            if (isLoopInternalNode(node)) {
+                return !!node.parentId && loopGroupIds.has(node.parentId);
+            }
+            return true;
+        });
+
+        if (selectedNodes.length === 0) {
+            set({ clipboard: null });
+            return;
+        }
+
+        const selectedIds = new Set(selectedNodes.map((node) => node.id));
+        const internalEdges = edges.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target));
+
+        const worldPositions: Record<string, { x: number; y: number }> = {};
+        for (const node of selectedNodes) {
+            worldPositions[node.id] = getAbsolutePosition(node, nodes);
+        }
+
+        const nodesForBounds = selectedNodes.map((node) => ({
+            ...node,
+            position: worldPositions[node.id] ?? node.position,
+        }));
+        const bounds = getNodesBounds(nodesForBounds);
+
+        set({
+            clipboard: {
+                nodes: selectedNodes.map(cloneNode),
+                edges: internalEdges.map(cloneEdge),
+                worldPositions,
+                bounds,
+                pasteIndex: 0,
+            },
+        });
+    },
+
+    pasteSelection: (pastePosition) => {
+        const { clipboard, nodes, edges, subgraphs, codeNodes, editorMode } = get();
+        if (!clipboard || clipboard.nodes.length === 0) return;
+
+        const existingMaterial = nodes.some((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
+        const isSubgraphMode = editorMode === 'subgraph';
+        const isMaterialNode = (node: Node<TSLNodeData>) =>
+            (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+
+        const nodesToPaste: Node<TSLNodeData>[] = [];
+        let skippedMaterial = false;
+        let skippedUniform = false;
+        let materialIncluded = false;
+
+        for (const node of clipboard.nodes) {
+            if (isAnchorNode(node)) {
+                continue;
+            }
+
+            if (isSubgraphMode) {
+                if (isMaterialNode(node)) {
+                    skippedMaterial = true;
+                    continue;
+                }
+                if (node.data.type === 'const/uniform') {
+                    skippedUniform = true;
+                    continue;
+                }
+            }
+
+            if (isMaterialNode(node)) {
+                if (existingMaterial || materialIncluded) {
+                    skippedMaterial = true;
+                    continue;
+                }
+                materialIncluded = true;
+            }
+
+            nodesToPaste.push(node);
+        }
+
+        if (skippedMaterial) {
+            if (isSubgraphMode) {
+                toast.error('Material nodes cannot be pasted inside subgraphs.');
+            } else if (existingMaterial) {
+                toast.error('Material node not pasted because one already exists in this graph.');
+            } else {
+                toast.error('Only one Material node can be pasted at a time.');
+            }
+        }
+
+        if (skippedUniform && isSubgraphMode) {
+            toast.error('Uniform nodes cannot be pasted inside subgraphs.');
+        }
+
+        if (nodesToPaste.length === 0) {
+            return;
+        }
+
+        const sourceCenter = {
+            x: clipboard.bounds.x + clipboard.bounds.width / 2,
+            y: clipboard.bounds.y + clipboard.bounds.height / 2,
+        };
+        const targetCenter = pastePosition ?? sourceCenter;
+        const PASTE_OFFSET = 30;
+        const offset = PASTE_OFFSET * (clipboard.pasteIndex + 1);
+        const translation = {
+            x: targetCenter.x - sourceCenter.x + offset,
+            y: targetCenter.y - sourceCenter.y + offset,
+        };
+
+        const nodesToPasteIds = new Set(nodesToPaste.map((node) => node.id));
+        const idMap = new Map<string, string>();
+        const typeMap = new Map<string, string>();
+        const newSubgraphs: Record<string, SubgraphDefinition> = { ...subgraphs };
+        const newCodeNodes: Record<string, CodeNodeDefinition> = { ...codeNodes };
+
+        const createCloneId = (prefix: 'custom' | 'code', nameFallback: string) => {
+            const base = nameFallback.toLowerCase().replace(/[^a-z0-9]/g, '-');
+            return `${prefix}/${base}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        };
+
+        for (const node of nodesToPaste) {
+            const nodeType = node.data.type;
+            if (nodeType.startsWith('custom/') && !typeMap.has(nodeType)) {
+                const def = subgraphs[nodeType];
+                if (!def) continue;
+                const baseName = def.name || nodeType.replace('custom/', '').split('-')[0] || 'subgraph';
+                const newTypeId = createCloneId('custom', baseName);
+                const clonedDef = JSON.parse(JSON.stringify(def));
+                clonedDef.id = newTypeId;
+                clonedDef.templateId = undefined;
+                clonedDef.templateVersion = undefined;
+                clonedDef.createdAt = Date.now();
+                clonedDef.updatedAt = Date.now();
+                newSubgraphs[newTypeId] = clonedDef;
+                typeMap.set(nodeType, newTypeId);
+            }
+            if (nodeType.startsWith('code/') && !typeMap.has(nodeType)) {
+                const def = codeNodes[nodeType];
+                if (!def) continue;
+                const baseName = def.name || nodeType.replace('code/', '').split('-')[0] || 'code-node';
+                const newTypeId = createCloneId('code', baseName);
+                const clonedDef = JSON.parse(JSON.stringify(def));
+                newCodeNodes[newTypeId] = {
+                    ...clonedDef,
+                    id: newTypeId,
+                    templateId: undefined,
+                    templateVersion: undefined,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                };
+                typeMap.set(nodeType, newTypeId);
+            }
+        }
+
+        let idCounter = 0;
+        const getNewNodeId = () => `node-${Date.now()}-${idCounter++}`;
+        for (const node of nodesToPaste) {
+            idMap.set(node.id, getNewNodeId());
+        }
+
+        const newNodes = nodes.map((node) => ({
+            ...node,
+            selected: false,
+        }));
+
+        const pastedNodes: Node<TSLNodeData>[] = nodesToPaste.map((node) => {
+            const newId = idMap.get(node.id)!;
+            const mappedType = typeMap.get(node.data.type) ?? node.data.type;
+            const hasParent = node.parentId && nodesToPasteIds.has(node.parentId);
+            const parentId = hasParent ? idMap.get(node.parentId!) : undefined;
+            const worldPos = clipboard.worldPositions[node.id] ?? node.position;
+            const position = hasParent
+                ? { ...node.position }
+                : {
+                    x: worldPos.x + translation.x,
+                    y: worldPos.y + translation.y,
+                };
+            const baseClone = cloneNode(node);
+
+            return {
+                ...baseClone,
+                id: newId,
+                type: mappedType,
+                parentId: parentId,
+                extent: hasParent ? node.extent : undefined,
+                position,
+                selected: true,
+                data: {
+                    ...baseClone.data,
+                    type: mappedType as NodeType,
+                },
+            };
+        });
+
+        const pastedEdges: Edge[] = [];
+        for (const edge of clipboard.edges) {
+            const newSource = idMap.get(edge.source);
+            const newTarget = idMap.get(edge.target);
+            if (!newSource || !newTarget) continue;
+            pastedEdges.push({
+                ...cloneEdge(edge),
+                id: `edge-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+                source: newSource,
+                target: newTarget,
+                selected: false,
+            });
+        }
+
+        if (pastedNodes.length === 0) return;
+
+        get().takeSnapshot();
+
+        set({
+            nodes: [...newNodes, ...pastedNodes],
+            edges: [...edges, ...pastedEdges],
+            subgraphs: newSubgraphs,
+            codeNodes: newCodeNodes,
+            selectedNodeIds: pastedNodes.map((node) => node.id),
+            selectedNodeId: pastedNodes.length === 1 ? pastedNodes[0].id : null,
+            clipboard: { ...clipboard, pasteIndex: clipboard.pasteIndex + 1 },
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
     },
 
     // Save graph to JSON string
@@ -2800,6 +3089,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: [],
             selectedNodeId: null,
             selectedNodeIds: [],
+            clipboard: null,
             graphStructureVersion: 0,
             subgraphs: {},
             editorMode: 'main',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useCallback, useState } from 'react';
+import { useMemo, useEffect, useCallback, useState, useRef } from 'react';
 import {
     ReactFlow,
     Background,
@@ -74,6 +74,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         redo,
         takeSnapshot,
         canvasMode,
+        copySelection,
+        pasteSelection,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -84,11 +86,12 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
     const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
+    const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
 
-    // Keyboard shortcuts for Undo/Redo
+    // Keyboard shortcuts for Undo/Redo + Copy/Paste
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             // Ignore if focus is in an input or textarea
@@ -116,17 +119,37 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 event.preventDefault();
                 redo();
             }
+
+            if (isMod && key === "c") {
+                event.preventDefault();
+                copySelection();
+            }
+
+            if (isMod && key === "v") {
+                event.preventDefault();
+                if (isReadOnly) return;
+                const screenPosition = lastPanePositionRef.current ?? {
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2,
+                };
+                const flowPosition = screenToFlowPosition(screenPosition);
+                pasteSelection(flowPosition);
+            }
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [undo, redo]);
+    }, [undo, redo, copySelection, pasteSelection, screenToFlowPosition, isReadOnly]);
 
     // Snapshot triggers for ReactFlow events
 
     const { getNodes, getEdges } = useReactFlow<AppNode>();
     const dropNodesIntoGroup = useEditorStore((s) => s.dropNodesIntoGroup);
     const setHoveredGroupId = useEditorStore((s) => s.setHoveredGroupId);
+
+    const handlePaneMouseMove = useCallback((event: React.MouseEvent) => {
+        lastPanePositionRef.current = { x: event.clientX, y: event.clientY };
+    }, []);
 
     // 1. Dragging: Snapshot when drag starts to capture original position
     const onNodeDragStart = useCallback(() => {
@@ -494,6 +517,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                             handleDirection: null,
                         });
                     }}
+                    onPaneMouseMove={handlePaneMouseMove}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
                     isValidConnection={isValidConnection}
