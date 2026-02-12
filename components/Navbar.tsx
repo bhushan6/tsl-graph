@@ -32,9 +32,10 @@ interface NavbarProps {
     projectName?: string;
     projectId?: Id<"projects">;
     isReadOnly?: boolean;
+    noteSearchBar?: React.ReactNode;
 }
 
-export function Navbar({ projectName, projectId, isReadOnly }: NavbarProps) {
+export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: NavbarProps) {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const {
@@ -214,7 +215,7 @@ export function Navbar({ projectName, projectId, isReadOnly }: NavbarProps) {
             </div>
 
             <div className="flex items-center gap-2 group">
-
+                {noteSearchBar}
 
                 {/* Sync Status Badge */}
                 {isSaving ? (

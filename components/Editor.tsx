@@ -24,6 +24,7 @@ import GroupNode from './GroupNode';
 import LoopInternalNode from './LoopInternalNode';
 import { NodePicker } from './NodePicker';
 import { Navbar } from '@/components/Navbar';
+import { NoteSearchBar } from './NoteSearchBar';
 import { registry } from '@/lib/registry';
 import { initializeNodes } from '@/lib/nodes';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
@@ -85,6 +86,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
+    const [isFindOpen, setIsFindOpen] = useState(false);
     const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
     const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -105,6 +107,11 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
             const isMod = event.ctrlKey || event.metaKey;
             const key = event.key.toLowerCase();
+
+            if (isMod && key === "f") {
+                event.preventDefault();
+                setIsFindOpen(true);
+            }
 
             if (isMod && key === "z") {
                 event.preventDefault();
@@ -541,7 +548,19 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
             {/* UI Layer */}
             < UILayer >
                 <UILayer.TopBar>
-                    <Navbar {...navbarProps} projectId={projectId} isReadOnly={isReadOnly} />
+                    <Navbar
+                        {...navbarProps}
+                        projectId={projectId}
+                        isReadOnly={isReadOnly}
+                        noteSearchBar={
+                            isFindOpen ? (
+                                <NoteSearchBar
+                                    open={true}
+                                    onClose={() => setIsFindOpen(false)}
+                                />
+                            ) : null
+                        }
+                    />
                 </UILayer.TopBar>
 
                 {!isReadOnly && (

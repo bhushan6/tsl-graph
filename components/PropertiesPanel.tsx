@@ -3,7 +3,7 @@
 import { memo, useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
-import { cn, getAbsolutePosition } from '@/lib/utils';
+import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { getMaterialActiveInputsSet, getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { Button } from '@/components/ui/button';
@@ -545,23 +545,6 @@ function getDefaultForType(type: string): TSLValueType {
         case 'float':
         default: return 0;
     }
-}
-
-function getNodeDimensions(node: AppNode): { width: number; height: number } {
-    const anyNode = node as AppNode & {
-        width?: number;
-        height?: number;
-        measured?: { width?: number; height?: number };
-        style?: { width?: number | string; height?: number | string };
-    };
-
-    const rawWidth = anyNode.width ?? anyNode.measured?.width ?? anyNode.style?.width;
-    const rawHeight = anyNode.height ?? anyNode.measured?.height ?? anyNode.style?.height;
-
-    const width = typeof rawWidth === 'number' ? rawWidth : 0;
-    const height = typeof rawHeight === 'number' ? rawHeight : 0;
-
-    return { width, height };
 }
 
 function UniformListItem({ node }: { node: AppNode }) {

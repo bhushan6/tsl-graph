@@ -26,6 +26,23 @@ export const getAbsolutePosition = (node: Node<TSLNodeData>, nodes: Node<TSLNode
   return { x, y };
 };
 
+export const getNodeDimensions = (node: Node<TSLNodeData>): { width: number; height: number } => {
+  const anyNode = node as Node<TSLNodeData> & {
+    width?: number;
+    height?: number;
+    measured?: { width?: number; height?: number };
+    style?: { width?: number | string; height?: number | string };
+  };
+
+  const rawWidth = anyNode.width ?? anyNode.measured?.width ?? anyNode.style?.width;
+  const rawHeight = anyNode.height ?? anyNode.measured?.height ?? anyNode.style?.height;
+
+  const width = typeof rawWidth === 'number' ? rawWidth : 0;
+  const height = typeof rawHeight === 'number' ? rawHeight : 0;
+
+  return { width, height };
+};
+
 import { ConvexError } from "convex/values";
 
 /**
