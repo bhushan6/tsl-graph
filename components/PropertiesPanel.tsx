@@ -15,7 +15,7 @@ import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
 import { getMultiOpInputs, getMultiOpLabel, type MultiOp } from '@/lib/multi-op';
-import { Layers, Plus, Trash2, Upload, Code } from 'lucide-react';
+import { Layers, Plus, Trash2, Upload, Code, Crosshair } from 'lucide-react';
 import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { AssetInput } from './inputs/AssetInput';
@@ -575,31 +575,45 @@ function UniformListItem({ node }: { node: AppNode }) {
     const uniformValue = useNodeInputValue(node.id, 'value', getUniformDefaultValue(uniformKind));
     const displayName = node.data.values.localName || node.id;
 
-    const handleSelect = useCallback(() => {
-        selectSingleNode(node.id);
-        const absPosition = getAbsolutePosition(node, nodes);
-        const { width, height } = getNodeDimensions(node);
-        setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
-            zoom: getZoom(),
-            duration: 300,
-        });
-    }, [node, nodes, selectSingleNode, setCenter, getZoom]);
+    const handleFocus = useCallback(
+        (event: React.MouseEvent<HTMLSpanElement>) => {
+            event.preventDefault();
+            event.stopPropagation();
+            selectSingleNode(node.id);
+            const absPosition = getAbsolutePosition(node, nodes);
+            const { width, height } = getNodeDimensions(node);
+            setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
+                zoom: getZoom(),
+                duration: 300,
+            });
+        },
+        [node, nodes, selectSingleNode, setCenter, getZoom]
+    );
 
     // console.log({ node });
 
 
     return (
         <AccordionItem value={node.id} className="w-[100%]">
-            <AccordionTrigger className="py-2" onClick={handleSelect}>
+            <AccordionTrigger className="py-2">
                 <div className="flex flex-1 items-start justify-between gap-3">
                     <div className="flex flex-col">
                         <span className="text-sm font-medium text-sidebar-foreground">
                             {String(displayName)}
                         </span>
                     </div>
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
-                        {uniformKind}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                            {uniformKind}
+                        </span>
+                        <span
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                            onClick={handleFocus}
+                            title="Focus node"
+                        >
+                            <Crosshair className="h-3.5 w-3.5" />
+                        </span>
+                    </div>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="pt-2">
