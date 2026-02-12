@@ -1091,7 +1091,7 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
         <NumberInput
             value={Number(value ?? 0)}
             onChange={onChange}
-            step={type === 'int' || type === 'uint' ? 1 : 0.1}
+            step={type === 'int' || type === 'uint' ? 1 : 0.00001}
             immediate={immediate}
         />
     );
@@ -1252,6 +1252,7 @@ function NumberInput({
             onBlur={handleBlur}
             step={step}
             min={-Infinity}
+            max={Infinity}
             className="h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs"
         />
     );

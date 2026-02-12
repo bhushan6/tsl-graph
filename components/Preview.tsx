@@ -193,11 +193,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     }, [nodes.length, isReady, props.projectId, captureSnapshot]);
 
 
-
-
-
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
-
 
 
     // Build material from graph
@@ -224,6 +220,15 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphStructureVersion, isReady]);
+
+    useEffect(() => {
+        if (!rendererRef.current || !sceneRef.current || !cameraRef.current || !meshRef.current) return;
+        const rawShader = (async () => await rendererRef.current!.debug.getShaderAsync(sceneRef.current!, cameraRef.current!, meshRef.current!))()
+        rawShader.then((shader) => {
+            console.log('vertexShader', shader.vertexShader)
+            console.log('fragmentShader', shader.fragmentShader)
+        })
+    }, [material]);
 
     // Dispose material when it changes
     useEffect(() => {

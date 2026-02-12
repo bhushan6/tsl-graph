@@ -226,7 +226,7 @@ function DebouncedFloatInput({
     value,
     onChange,
     immediate = false,
-    step = 0.001,
+    step = 0.00001,
 }: {
     value: number;
     onChange: (v: TSLValueType) => void;
@@ -276,6 +276,8 @@ function DebouncedFloatInput({
                 handleChange(v);
             }}
             step={step}
+            min={-Infinity}
+            max={Infinity}
             onBlur={handleBlur}
             className="h-7 text-xs font-mono w-full"
         />

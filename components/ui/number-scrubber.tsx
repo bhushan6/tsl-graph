@@ -48,8 +48,8 @@ export const NumericScrubber = React.forwardRef<
     {
       value,
       onChange,
-      min = 0,
-      max = 100,
+      min = -Infinity,
+      max = Infinity,
       step = 1,
       className,
       scrubSensitivity = 0.5,
@@ -130,15 +130,17 @@ export const NumericScrubber = React.forwardRef<
     function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
       const inputVal = e.target.value;
       if (inputVal === "") {
-        setInternalValue(min);
-        onChange(min);
+        const fallback = Number.isFinite(min) ? min : 0;
+        setInternalValue(fallback);
+        onChange(fallback);
         return;
       }
 
       const parsed = parseFloat(inputVal);
       if (isNaN(parsed)) {
-        setInternalValue(min);
-        onChange(min);
+        const fallback = Number.isFinite(min) ? min : 0;
+        setInternalValue(fallback);
+        onChange(fallback);
         return;
       }
 

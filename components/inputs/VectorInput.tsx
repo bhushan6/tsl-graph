@@ -103,8 +103,9 @@ function NumberInput({
                     setLocalValue(String(normalized));
                     onChange(normalized);
                 }}
-                step={0.001}
+                step={0.00001}
                 min={-Infinity}
+                max={Infinity}
                 className="h-7 text-xs font-mono w-full"
             />
         </>
