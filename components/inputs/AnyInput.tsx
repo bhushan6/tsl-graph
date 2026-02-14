@@ -188,7 +188,7 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
                         value={Number(value ?? 0)}
                         onChange={onChange}
                         immediate={immediate}
-                        step={0.001}
+                        step={0.1}
                     />
                 );
         }
@@ -226,7 +226,7 @@ function DebouncedFloatInput({
     value,
     onChange,
     immediate = false,
-    step = 0.00001,
+    step = 0.1,
 }: {
     value: number;
     onChange: (v: TSLValueType) => void;

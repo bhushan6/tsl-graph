@@ -51,7 +51,7 @@ function getCustomNodeDefinition(
 }
 
 export function getGraphSnapshot(): GraphSnapshot {
-  const { nodes, edges, selectedNodeIds } = useEditorStore.getState();
+  const { nodes, edges, selectedNodeIds, globals } = useEditorStore.getState();
   const materialNode = nodes.find((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
 
   const summarizedNodes: NodeSummary[] = nodes.map((node) => ({
@@ -73,6 +73,7 @@ export function getGraphSnapshot(): GraphSnapshot {
     edges: summarizedEdges,
     materialNodeId: materialNode?.id ?? null,
     selectedNodeIds,
+    globals,
   };
 }
 
@@ -200,10 +201,11 @@ function getPortSets(node: Node<TSLNodeData>, def: NodeDefinition | null): PortS
 }
 
 export function validateGraph(): ValidationReport {
-  const { nodes, edges } = useEditorStore.getState();
+  const { nodes, edges, globals } = useEditorStore.getState();
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const globalIdSet = new Set(globals.map((g) => g.id));
   const definitionCache = new Map<string, NodeDefinition | null>();
   const incomingCount = new Map<string, number>();
   const outgoingCount = new Map<string, number>();
@@ -225,6 +227,17 @@ export function validateGraph(): ValidationReport {
         nodeId: node.id,
         message: `Unknown node type "${node.data.type}" (${node.id}).`,
       });
+    }
+
+    if (node.data.type === 'global/ref') {
+      const globalId = typeof node.data.values?.globalId === 'string' ? node.data.values.globalId : null;
+      if (!globalId || !globalIdSet.has(globalId)) {
+        errors.push({
+          type: 'missing-node',
+          nodeId: node.id,
+          message: `Global reference "${node.id}" is missing a valid global binding.`,
+        });
+      }
     }
   }
 
@@ -324,6 +337,4 @@ export function validateGraph(): ValidationReport {
     },
   };
 }
-
-
 

@@ -51,8 +51,8 @@ export function NodePreview() {
             return { material: null, error: null };
         }
         try {
-            const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
-            const mat = buildNodePreviewMaterial(selectedNodeId, nodes, edges, subgraphs, codeNodes);
+            const { nodes, edges, subgraphs, codeNodes, globals } = useEditorStore.getState();
+            const mat = buildNodePreviewMaterial(selectedNodeId, nodes, edges, subgraphs, codeNodes, globals);
             return { material: mat, error: null };
         } catch (e) {
             console.error('Preview material build error:', e);

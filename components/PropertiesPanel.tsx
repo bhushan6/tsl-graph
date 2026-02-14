@@ -13,7 +13,7 @@ import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
+import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind } from '@/lib/types';
 import { getMultiOpInputs, getMultiOpLabel, type MultiOp } from '@/lib/multi-op';
 import { Layers, Plus, Trash2, Upload, Code, Crosshair } from 'lucide-react';
 import { NodePreview } from './NodePreview';
@@ -27,6 +27,7 @@ import {
     SidebarInput,
 } from '@/components/ui/sidebar';
 import { NumericScrubber } from './ui/number-scrubber';
+import { Textarea } from '@/components/ui/textarea';
 import {
     Accordion,
     AccordionContent,
@@ -34,6 +35,8 @@ import {
     AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { parseGlobalDeclarations } from '@/lib/global-parser';
+import { toast } from 'sonner';
 
 // Type options for port type selector
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -46,6 +49,14 @@ const PORT_TYPES: { value: TSLType; label: string }[] = [
     { value: 'int', label: 'Int' },
     { value: 'bool', label: 'Bool' },
 ];
+
+const GLOBAL_KIND_OPTIONS: { value: GlobalContextKind; label: string }[] = [
+    { value: 'uniform', label: 'Uniform' },
+    { value: 'varying', label: 'Varying' },
+    { value: 'const', label: 'Constant' },
+];
+
+const GLOBAL_TYPE_OPTIONS = PORT_TYPES.filter((entry) => entry.value !== 'any');
 
 const LOOP_MODE_OPTIONS = [
     { label: 'Count', value: 'count' },
@@ -680,6 +691,252 @@ function UniformsPanelContent() {
     );
 }
 
+function GlobalListItem({ entry }: { entry: GlobalContextEntry }) {
+    const updateGlobal = useEditorStore((s) => s.updateGlobal);
+    const removeGlobal = useEditorStore((s) => s.removeGlobal);
+
+    return (
+        <AccordionItem value={entry.id}>
+            <AccordionTrigger className="text-xs">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium">{entry.name}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                        {entry.kind} · {entry.type}
+                    </span>
+                </div>
+            </AccordionTrigger>
+            <AccordionContent>
+                <div className="flex flex-col gap-3 pb-2">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Name
+                        </label>
+                        <SidebarInput
+                            type="text"
+                            value={entry.name}
+                            onChange={(e) => updateGlobal(entry.id, { name: e.target.value })}
+                            className="h-7 text-xs"
+                            placeholder="Global name"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Kind
+                            </label>
+                            <select
+                                value={entry.kind}
+                                onChange={(e) => updateGlobal(entry.id, { kind: e.target.value as GlobalContextKind })}
+                                className="h-7 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                            >
+                                {GLOBAL_KIND_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Type
+                            </label>
+                            <select
+                                value={entry.type}
+                                onChange={(e) => updateGlobal(entry.id, { type: e.target.value as TSLType })}
+                                className="h-7 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                            >
+                                {GLOBAL_TYPE_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Default Value
+                        </label>
+                        <PropertyInput
+                            type={entry.type}
+                            value={entry.defaultValue}
+                            onChange={(v) => updateGlobal(entry.id, { defaultValue: v })}
+                            immediate
+                        />
+                    </div>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeGlobal(entry.id)}
+                        className="justify-start text-destructive hover:text-destructive"
+                    >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Remove Global
+                    </Button>
+                </div>
+            </AccordionContent>
+        </AccordionItem>
+    );
+}
+
+function GlobalsPanelContent() {
+    const globals = useEditorStore((s) => s.globals);
+    const addGlobal = useEditorStore((s) => s.addGlobal);
+    const addGlobals = useEditorStore((s) => s.addGlobals);
+    const [bulkInput, setBulkInput] = useState('');
+
+    const handleBulkImport = useCallback(() => {
+        const { entries, errors } = parseGlobalDeclarations(bulkInput);
+        if (entries.length === 0) {
+            toast.error(errors[0] ?? 'No globals found in snippet.');
+            return;
+        }
+
+        addGlobals(entries);
+        setBulkInput('');
+
+        if (errors.length > 0) {
+            console.warn('Global import warnings:', errors);
+            toast.error(`Imported ${entries.length} globals with ${errors.length} issue(s).`);
+        } else {
+            toast.success(`Imported ${entries.length} globals.`);
+        }
+    }, [addGlobals, bulkInput]);
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm">Globals</h3>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{globals.length}</span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => addGlobal()}
+                        >
+                            <Plus className="w-3.5 h-3.5 mr-1" />
+                            Add
+                        </Button>
+                    </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Define project-level uniforms, varyings, and constants.
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3">
+                <div className="px-1 py-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Bulk Import
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={handleBulkImport}
+                            disabled={!bulkInput.trim()}
+                        >
+                            Import
+                        </Button>
+                    </div>
+                    <Textarea
+                        value={bulkInput}
+                        onChange={(e) => setBulkInput(e.target.value)}
+                        placeholder="Paste const foo = uniform(1); const bar = uniform(vec2(0, 0));"
+                        className="min-h-[120px] text-xs"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                        Supports <code>uniform()</code>, <code>varying()</code>, and constant initializers with
+                        <code>float</code>, <code>int</code>, <code>bool</code>, <code>vec2</code>, <code>vec3</code>,
+                        <code>vec4</code>, and <code>color</code>.
+                    </p>
+                </div>
+
+                {globals.length === 0 ? (
+                    <p className="text-sm text-muted-foreground px-1 py-2">
+                        No globals yet. Add one to reuse it across your graph.
+                    </p>
+                ) : (
+                    <Accordion type="single" collapsible>
+                        {globals.map((entry) => (
+                            <GlobalListItem key={entry.id} entry={entry} />
+                        ))}
+                    </Accordion>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function GlobalRefPanel({ node }: { node: AppNode }) {
+    const globals = useEditorStore((s) => s.globals);
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const addGlobal = useEditorStore((s) => s.addGlobal);
+
+    const selectedGlobalId = typeof node.data.values?.globalId === 'string'
+        ? node.data.values.globalId
+        : '';
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Global Reference</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Bind this node to a project-level global.
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                {globals.length === 0 ? (
+                    <>
+                        <p className="text-sm text-muted-foreground">
+                            No globals defined yet.
+                        </p>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                const id = addGlobal();
+                                if (id) updateNodeValue(node.id, 'globalId', id);
+                            }}
+                        >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Create Global
+                        </Button>
+                    </>
+                ) : (
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Global
+                        </label>
+                        <select
+                            value={selectedGlobalId}
+                            onChange={(e) => updateNodeValue(node.id, 'globalId', e.target.value)}
+                            className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                        >
+                            <option value="" disabled>
+                                Select a global
+                            </option>
+                            {globals.map((entry) => (
+                                <option key={entry.id} value={entry.id}>
+                                    {entry.name} ({entry.kind})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
@@ -783,6 +1040,10 @@ function PropertiesPanelContent() {
 
     if (node.data.type === 'loop') {
         return <LoopGroupPanel node={node} />;
+    }
+
+    if (node.data.type === 'global/ref') {
+        return <GlobalRefPanel node={node} />;
     }
 
     const def = registry.get(node.data.type);
@@ -1088,7 +1349,7 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
         <NumberInput
             value={Number(value ?? 0)}
             onChange={onChange}
-            step={type === 'int' || type === 'uint' ? 1 : 0.00001}
+            step={type === 'int' || type === 'uint' ? 1 : 0.1}
             immediate={immediate}
         />
     );
@@ -1268,12 +1529,16 @@ function PropertiesPanelComponent() {
                 <TabsList className="mx-2 mt-3 mb-2 w-[calc(100%-1rem)]">
                     <TabsTrigger value="properties">Properties</TabsTrigger>
                     <TabsTrigger value="uniforms">Uniforms</TabsTrigger>
+                    <TabsTrigger value="globals">Globals</TabsTrigger>
                 </TabsList>
                 <TabsContent value="properties" className="flex-1 min-h-0">
                     <PropertiesPanelContent />
                 </TabsContent>
                 <TabsContent value="uniforms" className="flex-1 min-h-0">
                     <UniformsPanelContent />
+                </TabsContent>
+                <TabsContent value="globals" className="flex-1 min-h-0">
+                    <GlobalsPanelContent />
                 </TabsContent>
             </Tabs>
         </div>

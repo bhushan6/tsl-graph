@@ -11,6 +11,7 @@ import { noiseNodes } from './noise';
 import { utilsNodes } from './utils';
 import { loopNodes } from './loop';
 import { assignNodes } from './assign';
+import { globalNodes } from './globals';
 
 
 // Aggregate all nodes
@@ -27,6 +28,7 @@ export const allNodes = [
     ...utilsNodes,
     ...loopNodes,
     ...assignNodes,
+    ...globalNodes,
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread

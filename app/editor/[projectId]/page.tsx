@@ -68,6 +68,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                     data: {
                         id: subgraph.id,
                         name: subgraph.name,
+                        scope: subgraph.scope ?? 'project',
                         inputs: subgraph.inputs,
                         outputs: subgraph.outputs,
                         nodes: subgraph.nodes,
@@ -86,6 +87,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                     data: {
                         id: subgraph.id,
                         name: subgraph.name,
+                        scope: subgraph.scope ?? 'project',
                         inputs: subgraph.inputs,
                         outputs: subgraph.outputs,
                         nodes: subgraph.nodes,

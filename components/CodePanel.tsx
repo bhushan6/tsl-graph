@@ -7,7 +7,8 @@ import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
-import { compileGraph, getRequiredImports } from '@/lib/compiler';
+import { compileGraph, compileSubgraphCode, getRequiredImports } from '@/lib/compiler';
+import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -28,16 +29,49 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
+    const globals = useEditorStore((s) => s.globals);
+    const editorMode = useEditorStore((s) => s.editorMode);
+    const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
 
     const extensions = useMemo(() => [javascript()], []);
 
+    const subgraphDefinition = useMemo<SubgraphDefinition | null>(() => {
+        if (editorMode !== 'subgraph' || !editingSubgraphId) return null;
+        const base = subgraphs[editingSubgraphId];
+        if (!base) return null;
+
+        const internalNodes = nodes.filter(
+            (node) => node.id !== 'subgraph-input' && node.id !== 'subgraph-output'
+        );
+        const inputNode = nodes.find((node) => node.id === 'subgraph-input');
+        const outputNode = nodes.find((node) => node.id === 'subgraph-output');
+
+        return {
+            ...base,
+            nodes: internalNodes,
+            edges,
+            inputs: inputNode?.data.dynamicPorts ?? base.inputs,
+            outputs: outputNode?.data.dynamicPorts ?? base.outputs,
+            updatedAt: base.updatedAt,
+        };
+    }, [editorMode, editingSubgraphId, subgraphs, nodes, edges]);
+
     const compiledCode = useMemo(() => {
-        return compileGraph(nodes, edges, subgraphs, codeNodes);
-    }, [nodes, edges, subgraphs, codeNodes]);
+        if (subgraphDefinition) {
+            return compileSubgraphCode(subgraphDefinition, subgraphs, codeNodes, { globals });
+        }
+        return compileGraph(nodes, edges, subgraphs, codeNodes, { globals });
+    }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition]);
 
     const imports = useMemo(() => {
-        return getRequiredImports(nodes, subgraphs, codeNodes);
-    }, [nodes, subgraphs, codeNodes]);
+        if (subgraphDefinition) {
+            const subgraphImports = getRequiredImports(subgraphDefinition.nodes, subgraphs, codeNodes, globals);
+            const importSet = new Set(subgraphImports);
+            importSet.add('Fn');
+            return Array.from(importSet).sort();
+        }
+        return getRequiredImports(nodes, subgraphs, codeNodes, globals);
+    }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition]);
 
     const handleCopy = useCallback(async () => {
         const fullCode = imports.length > 0
@@ -54,9 +88,9 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             <DialogContent className="max-h-[80vh] flex flex-col sm:max-w-[90vw] z-[10000]">
                 <DialogHeader>
                     <DialogTitle className="flex flex-col gap-1">
-                        <span>TSL Output</span>
+                        <span>{subgraphDefinition ? 'Subgraph Output' : 'TSL Output'}</span>
                         <span className="text-xs text-muted-foreground font-normal">
-                            ({nodes.length} node{nodes.length !== 1 ? 's' : ''})
+                            ({subgraphDefinition ? subgraphDefinition.nodes.length : nodes.length} node{(subgraphDefinition ? subgraphDefinition.nodes.length : nodes.length) !== 1 ? 's' : ''})
                         </span>
                     </DialogTitle>
                 </DialogHeader>

@@ -37,12 +37,25 @@ export interface TSLNodeData extends Record<string, unknown> {
 
 export type AppNode = Node<TSLNodeData>;
 
+export type GlobalContextKind = 'uniform' | 'varying' | 'const';
+
+export interface GlobalContextEntry {
+    id: string;
+    name: string;
+    kind: GlobalContextKind;
+    type: TSLType;
+    defaultValue: TSLValueType;
+    description?: string;
+}
+
 // Subgraph definition - stored in project and used to create custom nodes
 export interface SubgraphDefinition {
     // Unique ID for this subgraph (e.g., 'custom/my-blur')
     id: string;
     // Display name (e.g., 'My Blur Effect')
     name: string;
+    // Scope: project-only or available across user's projects
+    scope?: 'project' | 'library';
     // Template reference (if saved from/as a template)
     templateId?: string;
     templateVersion?: number;

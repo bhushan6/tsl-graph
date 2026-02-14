@@ -69,6 +69,7 @@ export function EdgeDropNodePicker({
     const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
     // Fetch user's subgraph templates from server (cached by Convex)
     const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
 
     const clipboard = useEditorStore((s) => s.clipboard);
     const pasteSelection = useEditorStore((s) => s.pasteSelection);
@@ -139,10 +140,20 @@ export function EdgeDropNodePicker({
     }, [userCodeNodeTemplates, sourceDataType, handleDirection]);
 
     // Build subgraph nodes from templates (fetched from server, cached by Convex)
+    const getSubgraphScope = (def: { scope?: string; templateId?: string }) => {
+        if (def.scope === 'library' || def.scope === 'project') return def.scope;
+        return def.templateId ? 'library' : 'project';
+    };
+
     const compatibleSubgraphNodes = useMemo((): SubgraphNodeDef[] => {
         if (!userSubgraphTemplates) return [];
 
-        return userSubgraphTemplates.map(template => {
+        return userSubgraphTemplates
+            .filter(template => {
+                const scope = getSubgraphScope((template.data as { scope?: string; templateId?: string }) || {});
+                return scope !== 'project';
+            })
+            .map(template => {
             const data = template.data as {
                 id: string;
                 inputs: Array<{ id: string; label: string; type: string }>;
@@ -166,11 +177,32 @@ export function EdgeDropNodePicker({
         });
     }, [userSubgraphTemplates]);
 
+    const projectSubgraphNodes = useMemo((): SubgraphNodeDef[] => {
+        return Object.values(subgraphs)
+            .filter(sg => getSubgraphScope(sg) === 'project')
+            .map((sg) => ({
+                type: sg.id as NodeType,
+                label: sg.name,
+                category: 'Custom' as const,
+                isSubgraphNode: true as const,
+                inputs: sg.inputs.reduce((acc, inp) => {
+                    acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                outputs: sg.outputs.reduce((acc, out) => {
+                    acc[out.id] = { label: out.label, type: out.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                tsl: sg.id,
+            }));
+    }, [subgraphs]);
+
     const groupedNodes = useMemo(() => {
         const grouped = getGroupedCompatibleNodes(compatibleNodes);
 
         // Add custom nodes to Custom category
         const customNodes: (CodeNodeDef | SubgraphNodeDef)[] = [
+            ...projectSubgraphNodes,
             ...compatibleSubgraphNodes,
             ...compatibleCodeNodes,
         ];

@@ -1,4 +1,4 @@
-import type { NodeType, TSLType, TSLValueType } from '@/lib/types';
+import type { NodeType, TSLType, TSLValueType, GlobalContextEntry } from '@/lib/types';
 
 export type ToolName =
   | 'getGraphSnapshot'
@@ -45,6 +45,7 @@ export interface GraphSnapshot {
   edges: EdgeSummary[];
   materialNodeId: string | null;
   selectedNodeIds: string[];
+  globals?: GlobalContextEntry[];
 }
 
 export type AvailableNode = {

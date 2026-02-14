@@ -35,6 +35,9 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             const definition = registry.get(nodeType);
             const isCodeNode = nodeType.startsWith('code/');
             const isSubgraphNode = nodeType.startsWith('subgraph/') && !nodeType.startsWith('subgraph/input') && !nodeType.startsWith('subgraph/output');
+            const projectSubgraph = nodeType.startsWith('custom/')
+                ? useEditorStore.getState().subgraphs[nodeType]
+                : undefined;
 
             // For code nodes, look up the template from the fetched templates
             // nodeType is in format "code/{templateId}"
@@ -83,6 +86,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 outputs: SubgraphPort[];
                 nodes: AppNode[];
                 edges: import('@xyflow/react').Edge[];
+                scope?: 'project' | 'library';
             } | null = null;
             let subgraphTemplateId: string | undefined;
             let subgraphTemplateVersion: number | undefined;
@@ -98,6 +102,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         outputs: Array<{ id: string; label: string; type: string }>;
                         nodes: AppNode[];
                         edges: import('@xyflow/react').Edge[];
+                        scope?: 'project' | 'library';
                     };
                     subgraphTemplateData = {
                         id: data.id,
@@ -106,6 +111,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         outputs: data.outputs.map(out => ({ id: out.id, label: out.label, type: out.type as SubgraphPort['type'] })),
                         nodes: data.nodes || [],
                         edges: data.edges || [],
+                        scope: data.scope,
                     };
                     subgraphTemplateId = template._id;
                     subgraphTemplateVersion = template.version;
@@ -113,7 +119,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             }
 
             // Must have either a registry definition or be a valid template
-            if (!definition && !codeTemplateData && !subgraphTemplateData) return;
+            if (!definition && !codeTemplateData && !subgraphTemplateData && !projectSubgraph) return;
 
             // Build default values from definition
             // Note: definition.inputs is a Record<string, Port>
@@ -218,16 +224,18 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     } as TSLNodeData,
                 };
             } else if (isSubgraphNode && subgraphTemplateData) {
-                // Generate a unique instance ID for this subgraph node
-                const instanceId = `${subgraphTemplateData.id || 'subgraph-template'}-${Date.now()}`;
-                actualNodeType = instanceId as NodeType;
+                const rawId = subgraphTemplateData.id || subgraphTemplateId || 'subgraph-template';
+                const subgraphId = rawId.startsWith('custom/') ? rawId : `custom/${rawId}`;
+                actualNodeType = subgraphId as NodeType;
+                const existingSubgraph = useEditorStore.getState().subgraphs[subgraphId];
 
                 // Add the subgraph definition to the store
                 const subgraphDefinition = {
-                    id: instanceId,
+                    id: subgraphId,
                     name: subgraphTemplateData.name,
                     templateId: subgraphTemplateId,
                     templateVersion: subgraphTemplateVersion,
+                    scope: subgraphTemplateData.scope ?? 'library',
                     inputs: subgraphTemplateData.inputs,
                     outputs: subgraphTemplateData.outputs,
                     nodes: subgraphTemplateData.nodes,
@@ -235,7 +243,10 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 };
-                useEditorStore.getState().addSubgraphDefinition(subgraphDefinition);
+                if (!existingSubgraph) {
+                    useEditorStore.getState().addSubgraphDefinition(subgraphDefinition);
+                }
+                const definitionForPorts = existingSubgraph ?? subgraphDefinition;
 
                 // Subgraph node instance
                 newNode = {
@@ -247,7 +258,20 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         type: actualNodeType,
                         values: {},
                         connected: {},
-                        dynamicPorts: [...subgraphTemplateData.inputs, ...subgraphTemplateData.outputs],
+                        dynamicPorts: [...definitionForPorts.inputs, ...definitionForPorts.outputs],
+                    } as TSLNodeData,
+                };
+            } else if (projectSubgraph) {
+                newNode = {
+                    id: newNodeId,
+                    type: nodeType,
+                    position: flowPosition,
+                    selected: true,
+                    data: {
+                        type: nodeType,
+                        values: {},
+                        connected: {},
+                        dynamicPorts: [...projectSubgraph.inputs, ...projectSubgraph.outputs],
                     } as TSLNodeData,
                 };
             } else {
