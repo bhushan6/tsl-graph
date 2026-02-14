@@ -8,7 +8,7 @@ import { SidebarInput } from '@/components/ui/sidebar';
 import { Label } from '@/components/ui/label';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import { TSLValueType } from '@/lib/types';
-import { NumericScrubber } from '../ui/number-scrubber';
+import { DebouncedFloatInput } from './DebouncedFloatInput';
 
 interface AnyInputProps {
     value: TSLValueType;
@@ -218,69 +218,6 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
             {/* Input Area */}
             {renderInput()}
         </div>
-    );
-}
-
-// Debounced float input with local state
-function DebouncedFloatInput({
-    value,
-    onChange,
-    immediate = false,
-    step = 0.1,
-}: {
-    value: number;
-    onChange: (v: TSLValueType) => void;
-    immediate?: boolean;
-    step?: number;
-}) {
-    const [localValue, setLocalValue] = useState<string>(String(value));
-    const debouncedOnChange = useDebouncedCallback(onChange, 100);
-
-    useEffect(() => {
-        setLocalValue(String(value));
-    }, [value]);
-
-    const handleChange = useCallback((v: number) => {
-        const inputValue = String(v);
-        // Allow empty, minus sign, or valid number patterns (including negative)
-        if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
-            setLocalValue(inputValue);
-            return;
-        }
-        // Check if it's a valid number pattern
-        if (/^-?\d*\.?\d*$/.test(inputValue)) {
-            setLocalValue(inputValue);
-            const parsed = parseFloat(inputValue);
-            if (!isNaN(parsed)) {
-                if (immediate) {
-                    onChange(parsed);
-                } else {
-                    debouncedOnChange(parsed);
-                }
-            }
-        }
-    }, [debouncedOnChange, immediate, onChange]);
-
-    const handleBlur = useCallback(() => {
-        // On blur, normalize the value
-        const parsed = parseFloat(localValue);
-        const normalized = isNaN(parsed) ? 0 : parsed;
-        setLocalValue(String(normalized));
-        onChange(normalized);
-    }, [localValue, onChange]);
-
-    return (
-        <NumericScrubber
-            value={Number(localValue)}
-            onChange={(v) => {
-                handleChange(v);
-            }}
-            step={step}
-            min={-Infinity}
-            max={Infinity}
-            onBlur={handleBlur}
-            className="h-7 text-xs font-mono w-full"
-        />
     );
 }
 

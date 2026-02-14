@@ -27,6 +27,7 @@ import {
     SidebarInput,
 } from '@/components/ui/sidebar';
 import { NumericScrubber } from './ui/number-scrubber';
+import { DebouncedFloatInput } from './inputs/DebouncedFloatInput';
 import { Textarea } from '@/components/ui/textarea';
 import {
     Accordion,
@@ -1081,10 +1082,10 @@ function PropertiesPanelContent() {
         && !inputs[key].connectionOnly
         && (!isMaterialNode || activeInputsSet.has(key))
     );
-    const activeInputKeys = isMaterialNode ? visibleInputKeys.filter((key) => activeInputsSet.has(key)) : visibleInputKeys;
-    const activeEditableCandidates = isMaterialNode
-        ? activeInputKeys.filter((key) => !inputs[key].connectionOnly)
-        : [];
+    // const activeInputKeys = isMaterialNode ? visibleInputKeys.filter((key) => activeInputsSet.has(key)) : visibleInputKeys;
+    // const activeEditableCandidates = isMaterialNode
+    //     ? activeInputKeys.filter((key) => !inputs[key].connectionOnly)
+    //     : [];
 
     return (
         <div className="flex flex-col h-full">
@@ -1345,12 +1346,23 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
         return <VectorInput size={4} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} immediate={immediate} />;
     }
 
+    if (type === 'int' || type === 'uint') {
+        return (
+            <NumberInput
+                value={Number(value ?? 0)}
+                onChange={onChange}
+                step={1}
+                immediate={immediate}
+            />
+        );
+    }
+
     return (
-        <NumberInput
+        <DebouncedFloatInput
             value={Number(value ?? 0)}
             onChange={onChange}
-            step={type === 'int' || type === 'uint' ? 1 : 0.1}
             immediate={immediate}
+            step={0.1}
         />
     );
 }

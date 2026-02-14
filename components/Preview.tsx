@@ -50,6 +50,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
+    const updatePreviewSettingsDebounced = useEditorStore((state) => state.updatePreviewSettingsDebounced);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isReady, setIsReady] = useState(false);
     const [isGeometryScriptOpen, setIsGeometryScriptOpen] = useState(false);
@@ -761,7 +762,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                     <select
                                         className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
                                         value={previewSettings.environment || 'none'}
-                                        onChange={(e) => updatePreviewSettings({ environment: e.target.value })}
+                                        onChange={(e) => updatePreviewSettingsDebounced({ environment: e.target.value })}
                                     >
                                         {hdriOptions.map((opt) => (
                                             <option key={opt.value} value={opt.value}>
@@ -791,7 +792,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                                 type="checkbox"
                                                 className="h-4 w-4 rounded border-primary"
                                                 checked={previewSettings.showEnvironmentBackground ?? false}
-                                                onChange={(e) => updatePreviewSettings({ showEnvironmentBackground: e.target.checked })}
+                                                onChange={(e) => updatePreviewSettingsDebounced({ showEnvironmentBackground: e.target.checked })}
                                             />
                                         </div>
                                     </>
@@ -803,7 +804,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                         type="checkbox"
                                         className="h-4 w-4 rounded border-primary"
                                         checked={previewSettings.showGrid ?? true}
-                                        onChange={(e) => updatePreviewSettings({ showGrid: e.target.checked })}
+                                        onChange={(e) => updatePreviewSettingsDebounced({ showGrid: e.target.checked })}
                                     />
                                 </div>
 
@@ -1051,7 +1052,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                         type="checkbox"
                                         className="h-4 w-4 rounded border-primary"
                                         checked={previewSettings.showBackdrop ?? false}
-                                        onChange={(e) => updatePreviewSettings({ showBackdrop: e.target.checked })}
+                                        onChange={(e) => updatePreviewSettingsDebounced({ showBackdrop: e.target.checked })}
                                     />
                                 </div>
 

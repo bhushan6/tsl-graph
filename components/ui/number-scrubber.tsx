@@ -66,6 +66,8 @@ export const NumericScrubber = React.forwardRef<
     const step = stepProp ?? 1;
     const shouldQuantizeInput =
       quantizeInput ?? (stepProp !== undefined && Number.isInteger(step));
+    const inputStep =
+      stepProp === undefined ? undefined : (Number.isInteger(step) ? step : "any");
     // Internal state
     const [internalValue, setInternalValue] = React.useState<number>(value);
 
@@ -194,7 +196,7 @@ export const NumericScrubber = React.forwardRef<
              `,
             className
           )}
-          step={step}
+          step={inputStep}
           value={internalValue}
           onChange={handleInputChange}
           onPointerDown={handlePointerDown}

@@ -419,6 +419,7 @@ interface EditorState {
     // Preview settings
     previewSettings: PreviewSettings;
     updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
+    updatePreviewSettingsDebounced: (updates: Partial<PreviewSettings>) => void;
 
     // Preview snapshot (used for AI visual verification)
     previewSnapshotProvider: ((
@@ -715,6 +716,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         environment: 'studio',
         environmentIntensity: 1,
         showEnvironmentBackground: false,
+        showBackdrop: false,
         showGrid: true,
         config: {
             // Defaults with low resolution as requested
@@ -756,6 +758,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ previewSettings: { ...get().previewSettings, ...updates } });
         get().markDirty();
     },
+    updatePreviewSettingsDebounced: (() => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        return (updates) => {
+            set({ previewSettings: { ...get().previewSettings, ...updates } });
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(() => {
+                get().markDirty();
+            }, 250);
+        };
+    })(),
     previewSnapshotProvider: null,
     setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
 
@@ -1803,6 +1817,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     environment: 'studio',
                     environmentIntensity: 1,
                     showEnvironmentBackground: false,
+                    showBackdrop: false,
                     showGrid: true,
                     codeMode: 'generated',
                     customCode: '',
@@ -3523,6 +3538,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 mesh: 'sphere',
                 isInstanced: false,
                 instanceCount: 100,
+                geometryScript: '',
+                codeMode: 'generated',
+                customCode: '',
+                environment: 'studio',
+                environmentIntensity: 1,
+                showEnvironmentBackground: false,
+                showBackdrop: false,
+                showGrid: true,
                 config: {
                     width: 1.5,
                     height: 1.5,
@@ -3541,6 +3564,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     heightPlane: 1,
                     widthSegmentsPlane: 1,
                     heightSegmentsPlane: 1,
+                    radiusTop: 1,
+                    radiusBottom: 1,
+                    heightCylinder: 1,
+                    radialSegmentsCylinder: 20,
+                    heightSegmentsCylinder: 20,
+                    openEnded: true,
                 }
             },
         });
