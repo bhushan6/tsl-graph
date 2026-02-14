@@ -68,6 +68,9 @@ export interface PreviewSettings {
     config: GeometryConfig;
     isInstanced: boolean;
     instanceCount: number;
+    geometryScript?: string;
+    codeMode?: 'generated' | 'custom';
+    customCode?: string;
     environment?: string;
     environmentIntensity?: number;
     showEnvironmentBackground?: boolean;
@@ -703,6 +706,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         mesh: 'sphere' as PreviewMeshType,
         isInstanced: false,
         instanceCount: 100,
+        geometryScript: '',
+        codeMode: 'generated',
+        customCode: '',
         environment: 'studio',
         environmentIntensity: 1,
         showEnvironmentBackground: false,
@@ -1790,6 +1796,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     mesh: 'sphere',
                     isInstanced: false,
                     instanceCount: 100,
+                    geometryScript: '',
                     environment: 'studio',
                     environmentIntensity: 1,
                     showEnvironmentBackground: false,

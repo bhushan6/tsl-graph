@@ -10,6 +10,14 @@ import { buildTSLMaterial } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -20,8 +28,13 @@ import { DebouncedInput } from './DebouncedInput';
 import { useMutation, useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-import { Maximize2, Minimize2, Settings2, Camera } from 'lucide-react';
+import { Maximize2, Minimize2, Settings2, Camera, AlertCircle } from 'lucide-react';
 import { Id } from '@/convex/_generated/dataModel';
+import CodeMirror from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { useTheme } from 'next-themes';
+import { toast } from 'sonner';
 
 export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -39,8 +52,18 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isReady, setIsReady] = useState(false);
+    const [isGeometryScriptOpen, setIsGeometryScriptOpen] = useState(false);
+    const [geometryScriptDraft, setGeometryScriptDraft] = useState(previewSettings.geometryScript ?? '');
     const setPreviewSnapshotProvider = useEditorStore((state) => state.setPreviewSnapshotProvider);
     const convex = useConvex();
+    const { resolvedTheme } = useTheme();
+    const lastGeometryScriptError = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (isGeometryScriptOpen) {
+            setGeometryScriptDraft(previewSettings.geometryScript ?? '');
+        }
+    }, [isGeometryScriptOpen, previewSettings.geometryScript]);
 
     // Thumbnail generation
     const generateThumbnailUploadUrl = useMutation(api.projects.generateThumbnailUploadUrl);
@@ -238,13 +261,13 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     }, [material]);
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
-    const geometry = useMemo(() => {
+    const { geometry, geometryScriptError } = useMemo(() => {
         const config = previewSettings.config || {};
-        let geo: THREE.BufferGeometry;
+        let baseGeometry: THREE.BufferGeometry;
 
         switch (previewSettings.mesh) {
             case 'box':
-                geo = new THREE.BoxGeometry(
+                baseGeometry = new THREE.BoxGeometry(
                     config.width ?? 1.5,
                     config.height ?? 1.5,
                     config.depth ?? 1.5,
@@ -254,7 +277,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 );
                 break;
             case 'torus':
-                geo = new THREE.TorusKnotGeometry(
+                baseGeometry = new THREE.TorusKnotGeometry(
                     config.radiusTorus ?? 0.8,
                     config.tube ?? 0.3,
                     config.tubularSegments ?? 32, // Lower default
@@ -262,27 +285,23 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 );
                 break;
             case 'plane':
-                geo = new THREE.PlaneGeometry(
+                baseGeometry = new THREE.PlaneGeometry(
                     config.widthPlane ?? 1,
                     config.heightPlane ?? 1,
                     config.widthSegmentsPlane ?? 1,
                     config.heightSegmentsPlane ?? 1
                 );
-                geo.deleteAttribute('uv');
-                geo.deleteAttribute('normal');
-                geo.rotateX(- Math.PI * 0.5);
-
                 break;
             case 'sphere':
             default:
-                geo = new THREE.SphereGeometry(
+                baseGeometry = new THREE.SphereGeometry(
                     config.radius ?? 1,
                     config.widthSegmentsSphere ?? 32,
                     config.heightSegmentsSphere ?? 16
                 );
                 break;
             case 'cylinder':
-                geo = new THREE.CylinderGeometry(
+                baseGeometry = new THREE.CylinderGeometry(
                     config.radiusTop ?? 1,
                     config.radiusBottom ?? 1,
                     config.heightCylinder ?? 1,
@@ -293,9 +312,28 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 break;
         }
 
-        geo.computeTangents();
-        return geo;
-    }, [previewSettings.mesh, previewSettings.config]);
+        let geometry: THREE.BufferGeometry = baseGeometry;
+        let scriptError: string | null = null;
+        const script = previewSettings.geometryScript?.trim();
+
+        if (script) {
+            const scriptedGeometry = baseGeometry.clone();
+            try {
+                const fn = new Function('geometry', 'THREE', `"use strict";\n${script}`);
+                fn(scriptedGeometry, THREE);
+                geometry = scriptedGeometry;
+                baseGeometry.dispose();
+            } catch (err) {
+                scriptError = err instanceof Error ? err.message : String(err);
+                scriptedGeometry.dispose();
+            }
+        }
+
+        if (geometry.getAttribute('uv') && geometry.getAttribute('normal')) {
+            geometry.computeTangents();
+        }
+        return { geometry, geometryScriptError: scriptError };
+    }, [previewSettings.mesh, previewSettings.config, previewSettings.geometryScript]);
 
     // Dispose geometry when it changes
     useEffect(() => {
@@ -303,6 +341,17 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             geometry?.dispose();
         };
     }, [geometry]);
+
+    useEffect(() => {
+        if (geometryScriptError) {
+            if (geometryScriptError !== lastGeometryScriptError.current) {
+                toast.error(`Geometry script error: ${geometryScriptError}`);
+                lastGeometryScriptError.current = geometryScriptError;
+            }
+        } else {
+            lastGeometryScriptError.current = null;
+        }
+    }, [geometryScriptError]);
 
     const handleResize = () => {
         if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
@@ -608,6 +657,54 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     : 'relative rounded-xl shadow-lg w-72 h-72'
             )}
         >
+            <Dialog open={isGeometryScriptOpen} onOpenChange={setIsGeometryScriptOpen}>
+                <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            Geometry Script
+                        </DialogTitle>
+                        <DialogDescription>
+                            Runs automatically on the preview geometry. Available variables: <code className="text-xs">geometry</code>, <code className="text-xs">THREE</code>.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-2 py-2">
+                        <CodeMirror
+                            value={geometryScriptDraft}
+                            height="280px"
+                            extensions={[javascript()]}
+                            theme={resolvedTheme === 'dark' ? oneDark : undefined}
+                            onChange={(value) => setGeometryScriptDraft(value)}
+                        />
+                        {geometryScriptError && (
+                            <div className="flex items-center gap-2 text-xs text-destructive">
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                <span>{geometryScriptError}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setGeometryScriptDraft(previewSettings.geometryScript ?? '');
+                                setIsGeometryScriptOpen(false);
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                updatePreviewSettings({ geometryScript: geometryScriptDraft });
+                                setIsGeometryScriptOpen(false);
+                            }}
+                        >
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <div className="absolute top-2 right-2 z-10 flex gap-1">
                 <Button
                     variant="ghost"
@@ -929,6 +1026,23 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                     </>
                                 )}
 
+                                <div className="flex items-center justify-between">
+                                    <Label>Geometry Script</Label>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsGeometryScriptOpen(true)}
+                                    >
+                                        {previewSettings.geometryScript?.trim() ? 'Edit' : 'Add'}
+                                    </Button>
+                                </div>
+                                {geometryScriptError && (
+                                    <div className="flex items-center gap-2 text-xs text-destructive">
+                                        <AlertCircle className="h-3.5 w-3.5" />
+                                        <span>Geometry script error</span>
+                                    </div>
+                                )}
+
                                 <div className="h-[1px] bg-border my-1" />
 
                                 <div className="flex items-center justify-between">
@@ -968,9 +1082,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             </div>
 
             {/* Error display */}
-            {error && (
-                <div className="absolute bottom-2 left-2 right-2 z-10 bg-destructive/80 text-destructive-foreground text-xs p-2 rounded">
-                    {error}
+            {(error || geometryScriptError) && (
+                <div className="absolute bottom-2 left-2 right-2 z-10 bg-destructive/80 text-destructive-foreground text-xs p-2 rounded space-y-1">
+                    {error && <div>{error}</div>}
+                    {geometryScriptError && <div>Geometry Script: {geometryScriptError}</div>}
                 </div>
             )}
 
