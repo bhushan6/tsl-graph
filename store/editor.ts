@@ -236,9 +236,6 @@ const coerceGlobalValue = (type: TSLType, value: TSLValueType | undefined): TSLV
     if (type === 'string') {
         return typeof value === 'string' ? value : String(value ?? '');
     }
-    if (type === 'bool') {
-        return Boolean(value);
-    }
     if (type === 'any') {
         return value ?? 0;
     }
@@ -259,8 +256,14 @@ const makeUniqueGlobalName = (baseName: string, globals: GlobalContextEntry[]): 
 };
 
 const syncGlobalUniforms = (prev: GlobalContextEntry[], next: GlobalContextEntry[]) => {
-    const prevUniforms = prev.filter((entry) => entry.kind === 'uniform' && isUniformKindType(entry.type));
-    const nextUniforms = next.filter((entry) => entry.kind === 'uniform' && isUniformKindType(entry.type));
+    const prevUniforms = prev.filter(
+        (entry): entry is GlobalContextEntry & { type: UniformKind } =>
+            entry.kind === 'uniform' && isUniformKindType(entry.type)
+    );
+    const nextUniforms = next.filter(
+        (entry): entry is GlobalContextEntry & { type: UniformKind } =>
+            entry.kind === 'uniform' && isUniformKindType(entry.type)
+    );
     const nextUniformMap = new Map(nextUniforms.map((entry) => [entry.id, entry]));
 
     prevUniforms.forEach((entry) => {
