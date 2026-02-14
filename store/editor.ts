@@ -3541,7 +3541,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 geometryScript: '',
                 codeMode: 'generated',
                 customCode: '',
-                environment: 'studio',
+                environment: 'none',
                 environmentIntensity: 1,
                 showEnvironmentBackground: false,
                 showBackdrop: false,
