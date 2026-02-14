@@ -25,6 +25,11 @@ export interface NumericScrubberProps
    */
   step?: number;
   /**
+   * Whether to quantize typed input to the step size.
+   * Defaults to true only when an explicit integer step is provided.
+   */
+  quantizeInput?: boolean;
+  /**
    * Additional class names for the outer wrapper
    */
   className?: string;
@@ -50,13 +55,17 @@ export const NumericScrubber = React.forwardRef<
       onChange,
       min = -Infinity,
       max = Infinity,
-      step = 1,
+      step: stepProp,
+      quantizeInput,
       className,
       scrubSensitivity = 0.5,
       ...rest
     },
     ref
   ) => {
+    const step = stepProp ?? 1;
+    const shouldQuantizeInput =
+      quantizeInput ?? (stepProp !== undefined && Number.isInteger(step));
     // Internal state
     const [internalValue, setInternalValue] = React.useState<number>(value);
 
@@ -76,9 +85,13 @@ export const NumericScrubber = React.forwardRef<
     /**
      * Clamp and quantize the given number
      */
+    function clampValue(n: number) {
+      return Math.max(min, Math.min(n, max));
+    }
+
     function clampAndQuantize(n: number) {
       // First quantize to nearest step
-      const quantized = Math.round(n / step) * step;
+      const quantized = step !== 0 ? Math.round(n / step) * step : n;
       // Then clamp between min and max
       const clamped = Math.max(min, Math.min(quantized, max));
       return parseFloat(clamped.toFixed(decimals));
@@ -144,7 +157,7 @@ export const NumericScrubber = React.forwardRef<
         return;
       }
 
-      const newValue = clampAndQuantize(parsed);
+      const newValue = shouldQuantizeInput ? clampAndQuantize(parsed) : clampValue(parsed);
       setInternalValue(newValue);
       onChange(newValue);
     }
