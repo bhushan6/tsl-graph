@@ -28,6 +28,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
         exitSubgraphEditor,
         editingSubgraphId,
         subgraphs,
+        updateSubgraphDefinition,
         undo,
         redo,
         history,
@@ -48,12 +49,10 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
-        if (selectedNodeIds.length < 1) return;
-
         const defaultName = 'Subgraph';
         const subgraphId = createSubgraph(defaultName, selectedNodeIds);
         if (subgraphId) {
-            enterSubgraphEditor(subgraphId);
+            enterSubgraphEditor(subgraphId, { createInstanceOnSave: true });
         }
     }, [selectedNodeIds, createSubgraph, enterSubgraphEditor]);
 
@@ -66,6 +65,9 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
         if (save && editingSubgraphId && subgraphNameRef.current) {
             const rawName = subgraphNameRef.current.value;
             const normalizedName = rawName.trim();
+            const currentName = subgraphs[editingSubgraphId]?.name ?? '';
+            const currentNormalized = currentName.trim();
+            const nameChanged = normalizedName.toLowerCase() !== currentNormalized.toLowerCase();
 
             if (!normalizedName) {
                 toast.error('Subgraph name cannot be empty.');
@@ -73,25 +75,29 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                 return;
             }
 
-            // Uniqueness Check
-            // 1. Check against built-in nodes
-            const registryConfict = registry.all().some(def => def.label.toLowerCase() === normalizedName.toLowerCase());
-            if (registryConfict) {
-                toast.error(`Name "${normalizedName}" is reserved by a built-in node.`);
-                posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Name reserved by built-in node', name: normalizedName });
-                return;
+            if (nameChanged) {
+                // Uniqueness Check
+                // 1. Check against built-in nodes
+                const registryConfict = registry.all().some(def => def.label.toLowerCase() === normalizedName.toLowerCase());
+                if (registryConfict) {
+                    toast.error(`Name "${normalizedName}" is reserved by a built-in node.`);
+                    posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Name reserved by built-in node', name: normalizedName });
+                    return;
+                }
+
+                // 2. Check against other subgraphs
+                const otherSubgraphs = Object.values(subgraphs).filter(sg => sg.id !== editingSubgraphId);
+                const subgraphConflict = otherSubgraphs.some(sg => sg.name.toLowerCase() === normalizedName.toLowerCase());
+                if (subgraphConflict) {
+                    toast.error(`A subgraph with the name "${normalizedName}" already exists.`);
+                    posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Subgraph name already exists', name: normalizedName });
+                    return;
+                }
             }
 
-            // 2. Check against other subgraphs
-            const otherSubgraphs = Object.values(subgraphs).filter(sg => sg.id !== editingSubgraphId);
-            const subgraphConflict = otherSubgraphs.some(sg => sg.name.toLowerCase() === normalizedName.toLowerCase());
-            if (subgraphConflict) {
-                toast.error(`A subgraph with the name "${normalizedName}" already exists.`);
-                posthog.capture('error_occurred', { context: 'exit_subgraph_validation', error: 'Subgraph name already exists', name: normalizedName });
-                return;
+            if (rawName !== currentName) {
+                nameOverride = rawName;
             }
-
-            nameOverride = rawName;
         }
 
         setIsProcessing(true);
@@ -127,6 +133,21 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                         className="h-7 w-40 px-2 text-xs border-transparent hover:border-border focus:border-border bg-transparent focus:bg-background transition-colors font-medium"
                         placeholder="Subgraph Name"
                     />
+                    {editingSubgraphId && (
+                        <select
+                            className="h-7 rounded-md border border-border bg-background/60 px-2 text-xs text-foreground"
+                            title="Scope: Project = only in this project. Library = available in all your projects."
+                            value={subgraphs[editingSubgraphId]?.scope ?? (subgraphs[editingSubgraphId]?.templateId ? 'library' : 'project')}
+                            onChange={(e) =>
+                                updateSubgraphDefinition(editingSubgraphId, {
+                                    scope: e.target.value as 'project' | 'library',
+                                })
+                            }
+                        >
+                            <option value="project">Project</option>
+                            <option value="library">Library</option>
+                        </select>
+                    )}
                 </div>
 
 
@@ -201,6 +222,44 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                         </TooltipTrigger>
                         <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
                     </Tooltip>
+                </div>
+
+                <div className="w-px h-4 bg-border" />
+
+                <div className="flex items-center gap-0.5">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={createLoopGroup}
+                                    className="h-8 w-8 text-primary hover:text-primary"
+                                    disabled={isMaterialSelected}
+                                >
+                                    <Repeat className="w-4 h-4" />
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Create Loop</TooltipContent>
+                    </Tooltip>
+                    {onOpenCodePanel && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={onOpenCodePanel}
+                                    className="h-8 w-8 text-primary hover:text-primary"
+                                >
+                                    <Code className="w-4 h-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>View Code</TooltipContent>
+                        </Tooltip>
+                    )}
                 </div>
 
                 <div className="w-px h-4 bg-border" />
@@ -285,7 +344,6 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                             size="icon"
                             onClick={handleCreateSubgraph}
                             className="h-8 w-8"
-                            disabled={selectedNodeIds.length < 1}
                         >
                             <Layers className="w-4 h-4" />
                         </Button>
@@ -335,7 +393,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                                 size="icon"
                                 onClick={createLoopGroup}
                                 className="h-8 w-8"
-                                disabled={selectedNodeIds.length < 1 || isMaterialSelected}
+                                disabled={isMaterialSelected}
                             >
                                 <Repeat className="w-4 h-4" />
                             </Button>

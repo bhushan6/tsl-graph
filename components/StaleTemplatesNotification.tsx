@@ -59,6 +59,11 @@ export function StaleTemplatesNotification() {
         (userCodeNodeTemplates || []).map(t => t.name.toLowerCase())
     ), [userCodeNodeTemplates]);
 
+    const getSubgraphScope = (def: { scope?: string; templateId?: string }) => {
+        if (def.scope === 'library' || def.scope === 'project') return def.scope;
+        return def.templateId ? 'library' : 'project';
+    };
+
     // Get the set of subgraph/code node types actually used in the current graph
     const usedSubgraphIds = useMemo(() => new Set(
         nodes
@@ -75,7 +80,7 @@ export function StaleTemplatesNotification() {
     // Also deduplicate by templateId
     const subgraphTemplateIds = [...new Set(
         Object.values(subgraphs)
-            .filter(sg => sg.templateId && usedSubgraphIds.has(sg.id))
+            .filter(sg => getSubgraphScope(sg) === 'library' && sg.templateId && usedSubgraphIds.has(sg.id))
             .map(sg => sg.templateId as Id<"subgraphTemplates">)
     )];
 
@@ -107,6 +112,8 @@ export function StaleTemplatesNotification() {
             for (const sg of Object.values(subgraphs)) {
                 // Skip if not used in graph
                 if (!usedSubgraphIds.has(sg.id)) continue;
+                // Skip project-scoped subgraphs
+                if (getSubgraphScope(sg) === 'project') continue;
                 // Skip if no template reference
                 if (!sg.templateId || !sg.templateVersion) continue;
                 // Skip if we've already processed this templateId (deduplication)

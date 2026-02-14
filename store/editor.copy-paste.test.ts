@@ -100,7 +100,7 @@ describe('Editor copy/paste', () => {
         expect(pastedChild?.position).toEqual({ x: 20, y: 30 });
     });
 
-    it('clones custom and code node definitions', () => {
+    it('reuses subgraph definitions and clones code node definitions', () => {
         const subgraphDef = {
             id: 'custom/foo-1',
             name: 'Foo',
@@ -141,16 +141,16 @@ describe('Editor copy/paste', () => {
         const subgraphIds = Object.keys(state.subgraphs);
         const codeIds = Object.keys(state.codeNodes);
 
-        expect(subgraphIds).toHaveLength(2);
+        expect(subgraphIds).toHaveLength(1);
         expect(codeIds).toHaveLength(2);
 
         const newSubgraphId = subgraphIds.find((id) => id !== subgraphDef.id);
         const newCodeId = codeIds.find((id) => id !== codeDef.id);
 
-        expect(newSubgraphId).toBeDefined();
+        expect(newSubgraphId).toBeUndefined();
         expect(newCodeId).toBeDefined();
 
-        const pastedCustom = state.nodes.find((node) => node.data.type === newSubgraphId);
+        const pastedCustom = state.nodes.find((node) => node.data.type === subgraphDef.id && node.id !== customNode.id);
         const pastedCode = state.nodes.find((node) => node.data.type === newCodeId);
 
         expect(pastedCustom).toBeDefined();

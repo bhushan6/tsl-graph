@@ -1,8 +1,8 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { compileGraph, getRequiredImports } from './compiler';
+import { compileGraph, compileSubgraphCode, getRequiredImports } from './compiler';
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData } from '@/lib/types';
+import { TSLNodeData, GlobalContextEntry } from '@/lib/types';
 import { registry } from './registry';
 import { NodeDef } from './types';
 import { NodeType } from '@/lib/types';
@@ -70,6 +70,22 @@ const mockDefs: NodeDef[] = [
         },
         outputs: { out: { type: 'any', label: 'Out' } }
     },
+    {
+        type: 'math/split',
+        label: 'Split',
+        category: 'Math',
+        tsl: 'split',
+        inputs: {
+            in: { type: 'any', default: 0, label: 'In' },
+        },
+        outputs: {
+            x: { type: 'float', label: 'X' },
+            y: { type: 'float', label: 'Y' },
+            z: { type: 'float', label: 'Z' },
+            w: { type: 'float', label: 'W' },
+            out: { type: 'any', label: 'Out' },
+        },
+    },
     // Material nodes
     {
         type: 'material/standard',
@@ -128,6 +144,15 @@ const mockDefs: NodeDef[] = [
         tsl: 'color',
         inputs: { value: { type: 'color', default: '#ffffff', label: 'Color' } },
         outputs: { out: { type: 'color', label: 'RGB' } }
+    },
+    // Advanced nodes
+    {
+        type: 'advanced/var',
+        label: 'Var',
+        category: 'Advanced',
+        tsl: 'Var',
+        inputs: { node: { type: 'any', default: 0, label: 'Node' } },
+        outputs: { out: { type: 'any', label: 'Out' } }
     },
     // Geometry nodes
     {
@@ -280,6 +305,25 @@ describe('compileGraph', () => {
                 'const _node0 = __uniform(\"u1\", new THREE.Vector3(1, 2, 3), \"vec3\");',
             ].join('\n');
             expect(code.trim()).toBe(expected.trim());
+        });
+
+        it('should compile global context references', () => {
+            const nodes = [
+                createNode('g1', 'global/ref', { values: { globalId: 'global-1' } }),
+            ];
+            const globals: GlobalContextEntry[] = [
+                { id: 'global-1', name: 'uTime', kind: 'uniform', type: 'float', defaultValue: 1 },
+            ];
+            const code = compileGraph(nodes, [], undefined, undefined, { globals });
+            const expected = [
+                '// Global Context',
+                'const uTime = uniform(float(1));',
+                '',
+                '// Generated TSL Code',
+                '',
+            ].join('\n');
+            expect(code).toBe(expected);
+            expect(() => new Function(code)).not.toThrow();
         });
 
         it('should use user-defined names when available', () => {
@@ -564,6 +608,76 @@ describe('compileGraph', () => {
             const code = compileGraph(nodes, []);
             expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), 0.5)');
         });
+    });
+});
+
+describe('compileSubgraphCode', () => {
+    it('should compile a subgraph function with inputs/outputs', () => {
+        const addNode = createNode('add1', 'math/add');
+
+        const subgraph = {
+            id: 'custom/my-subgraph',
+            name: 'My Subgraph',
+            inputs: [
+                { id: 'in_0', label: 'a', type: 'float' },
+                { id: 'in_1', label: 'b', type: 'float' },
+            ],
+            outputs: [{ id: 'out_0', label: 'out', type: 'float' }],
+            nodes: [addNode],
+            edges: [
+                { id: 'e1', source: 'subgraph-input', sourceHandle: 'in_0', target: 'add1', targetHandle: 'a' },
+                { id: 'e2', source: 'subgraph-input', sourceHandle: 'in_1', target: 'add1', targetHandle: 'b' },
+                { id: 'e3', source: 'add1', sourceHandle: 'out', target: 'subgraph-output', targetHandle: 'out_0' },
+            ],
+            createdAt: 0,
+            updatedAt: 0,
+        };
+
+        const code = compileSubgraphCode(subgraph);
+        const expected = [
+            '// Subgraph Definition: My Subgraph',
+            'const My_Subgraph = Fn(([arg_in_0, arg_in_1]) => {',
+            '    const _subgraph_node0 = add(arg_in_0, arg_in_1);',
+            '    return _subgraph_node0;',
+            '});',
+        ].join('\n');
+
+        expect(code).toBe(expected);
+        expect(() => new Function(code)).not.toThrow();
+    });
+
+    it('should compile loop groups inside subgraphs', () => {
+        const loop = createNode('loop1', 'loop');
+        const count = { ...createNode('loop1::count', 'loop/count', { values: { count: 3 } }), parentId: 'loop1' };
+        const index = { ...createNode('loop1::index', 'loop/index'), parentId: 'loop1' };
+        const acc = { ...createNode('loop1::acc', 'loop/accumulator', { values: { seed: 0.2 } }), parentId: 'loop1' };
+        const output = { ...createNode('loop1::output', 'loop/output'), parentId: 'loop1' };
+        const c2 = { ...createNode('loop1::c2', 'const/float', { values: { value: 2 } }), parentId: 'loop1' };
+        const add1 = { ...createNode('loop1::add', 'math/add'), parentId: 'loop1' };
+
+        const edges: Edge[] = [
+            { id: 'e1', source: acc.id, sourceHandle: 'acc', target: add1.id, targetHandle: 'a' },
+            { id: 'e2', source: c2.id, sourceHandle: 'out', target: add1.id, targetHandle: 'b' },
+            { id: 'e3', source: add1.id, sourceHandle: 'out', target: output.id, targetHandle: 'next' },
+        ];
+
+        const subgraph = {
+            id: 'custom/loop-subgraph',
+            name: 'Loop Subgraph',
+            inputs: [],
+            outputs: [],
+            nodes: [loop, count, index, acc, output, c2, add1],
+            edges,
+            createdAt: 0,
+            updatedAt: 0,
+        };
+
+        const code = compileSubgraphCode(subgraph);
+        expect(code).toContain('Loop(');
+        expect(code).toContain('Var(');
+        expect(code).toContain('.assign(');
+        expect(code).not.toContain('__loop_');
+        expect(() => new Function(code)).not.toThrow();
     });
 });
 
@@ -855,6 +969,27 @@ describe('Logic Nodes', () => {
 
             expect(code.trim()).toBe(expected.trim());
         });
+
+        it('should assign to Var swizzles when target comes from split(Var)', () => {
+            const vec = createNode('vec1', 'const/vec3', { values: { x: 0, y: 0, z: 0 } });
+            const varNode = createNode('var1', 'advanced/var', { localName: 'position' });
+            const splitNode = createNode('split1', 'math/split');
+            const value = createNode('v1', 'const/float', { values: { value: 1 } });
+            const addAssignNode = createNode('assign3', 'assign/addAssign');
+
+            const edges: Edge[] = [
+                { id: 'e1', source: vec.id, sourceHandle: 'out', target: varNode.id, targetHandle: 'node' },
+                { id: 'e2', source: varNode.id, sourceHandle: 'out', target: splitNode.id, targetHandle: 'in' },
+                { id: 'e3', source: splitNode.id, sourceHandle: 'y', target: addAssignNode.id, targetHandle: 'target' },
+                { id: 'e4', source: value.id, sourceHandle: 'out', target: addAssignNode.id, targetHandle: 'value' },
+            ];
+
+            const nodes = [vec, varNode, splitNode, value, addAssignNode];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const position = Var(');
+            expect(code).toContain('position.y.addAssign(');
+        });
     });
 });
 
@@ -979,5 +1114,16 @@ describe('getRequiredImports', () => {
 
         const imports = getRequiredImports([loop, count, acc, output]);
         expect(imports).toEqual(expect.arrayContaining(['Fn', 'Loop', 'Var', 'int', 'max']));
+    });
+
+    it('should include global context imports', () => {
+        const nodes = [createNode('g1', 'global/ref', { values: { globalId: 'global-1' } })];
+        const globals: GlobalContextEntry[] = [
+            { id: 'global-1', name: 'uTime', kind: 'uniform', type: 'float', defaultValue: 1 },
+            { id: 'global-2', name: 'vPos', kind: 'varying', type: 'vec2', defaultValue: [0, 0] },
+            { id: 'global-3', name: 'cTint', kind: 'const', type: 'color', defaultValue: '#ffffff' },
+        ];
+        const imports = getRequiredImports(nodes, undefined, undefined, globals);
+        expect(imports).toEqual(expect.arrayContaining(['uniform', 'varying', 'float', 'vec2', 'color']));
     });
 });

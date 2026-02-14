@@ -43,6 +43,7 @@ const categoryColors: Record<string, string> = {
     'Noise': 'border-fuchsia-500 bg-fuchsia-100 dark:bg-fuchsia-900/20',
     'Utils': 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20',
     'Loop': 'border-indigo-500 bg-indigo-100 dark:bg-indigo-900/20',
+    'Globals': 'border-emerald-500 bg-emerald-100 dark:bg-emerald-900/20',
     'Default': 'border-gray-500 bg-gray-100 dark:bg-gray-900/20',
 };
 
@@ -54,6 +55,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const removeMultiOp = useEditorStore((s) => s.removeMultiOp);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
+    const globals = useEditorStore((s) => s.globals);
     const edges = useEdges();
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
@@ -112,6 +114,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     // Check if this is a subgraph anchor node with dynamic ports
     const isSubgraphInput = data.type === 'subgraph/input';
     const isSubgraphOutput = data.type === 'subgraph/output';
+    const isGlobalRef = data.type === 'global/ref';
     const isAnchorNode = isSubgraphInput || isSubgraphOutput;
 
     // Get ports - for anchor nodes and subgraph instances, use dynamic ports from data
@@ -119,10 +122,14 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     let outputs: Record<string, Port> = {};
     let nodeLabel = def?.label || 'Custom Node';
 
-    if (isSubgraphInstance && data.dynamicPorts) {
-        // Subgraph instance: dynamicPorts contains both inputs and outputs
+    if (isSubgraphInstance) {
+        const subgraphDef = subgraphs[data.type];
+        const ports = subgraphDef
+            ? [...(subgraphDef.inputs || []), ...(subgraphDef.outputs || [])]
+            : (data.dynamicPorts || []);
+        // Subgraph instance: ports contain both inputs and outputs
         // Inputs have ids starting with 'in_', outputs with 'out_'
-        for (const port of data.dynamicPorts) {
+        for (const port of ports) {
             if (port.id.startsWith('in_')) {
                 inputs[port.id] = { label: port.label, type: port.type as TSLType, connectionOnly: true };
             } else if (port.id.startsWith('out_') || port.id === 'out') {
@@ -152,6 +159,15 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
             const namePart = data.type.replace('code/', '').split('-')[0];
             nodeLabel = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
         }
+    } else if (isGlobalRef) {
+        const selectedGlobalId = data.values?.globalId;
+        const globalEntry = globals.find((g) => g.id === selectedGlobalId);
+        const outputLabel = globalEntry?.name || 'Global';
+        const outputType = (globalEntry?.type as TSLType) || 'any';
+        outputs = {
+            out: { label: outputLabel, type: outputType },
+        };
+        nodeLabel = 'Global';
     } else if (isAnchorNode && data.dynamicPorts) {
         // Subgraph Input: dynamic ports become outputs (to connect to internal nodes)
         // Subgraph Output: dynamic ports become inputs (to receive from internal nodes)
@@ -178,6 +194,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         category = def.category;
     } else if (isSubgraphInstance || isSubgraphInput || isSubgraphOutput) {
         category = 'Subgraph';
+    } else if (isGlobalRef) {
+        category = 'Globals';
     } else if (isCodeNodeInstance) {
         category = 'Advanced';
     }

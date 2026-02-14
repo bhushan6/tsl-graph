@@ -200,7 +200,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const { material, error } = useMemo(() => {
         if (!isReady) return { material: null, error: null };
         try {
-            const { nodes, edges, subgraphs, codeNodes } = useEditorStore.getState();
+            const { nodes, edges, subgraphs, codeNodes, globals } = useEditorStore.getState();
             // Pass instanceCount to the builder so it's available in the scope (if needed)
             // Even though we moved to baking it into the compiled code, 
             // the builder might still use it for other things or future proofing.
@@ -208,7 +208,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             // buildTSLMaterial calls compileGraph.
             // So we don't strictly need to pass it to buildTSLMaterial if the nodes are already updated.
             return {
-                material: buildTSLMaterial(nodes, edges, subgraphs, codeNodes),
+                material: buildTSLMaterial(nodes, edges, subgraphs, codeNodes, globals),
                 error: null
             };
         } catch (e) {
@@ -268,6 +268,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                     config.widthSegmentsPlane ?? 1,
                     config.heightSegmentsPlane ?? 1
                 );
+                geo.deleteAttribute('uv');
+                geo.deleteAttribute('normal');
+                geo.rotateX(- Math.PI * 0.5);
+
                 break;
             case 'sphere':
             default:

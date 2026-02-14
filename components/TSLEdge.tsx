@@ -3,6 +3,7 @@ import { BaseEdge, EdgeProps, getBezierPath, useReactFlow } from "@xyflow/react"
 import { TYPE_COLORS, DEFAULT_HANDLE_COLOR } from "./TSLHandle";
 import type { AppNode, TSLType } from "@/lib/types";
 import { registry } from "@/lib/registry";
+import { useEditorStore } from "@/store/editor";
 import { getMultiOpInputs, type MultiOp } from "@/lib/multi-op";
 
 const TSLEdge = ({
@@ -30,6 +31,7 @@ const TSLEdge = ({
         targetPosition,
     });
     const { getNode } = useReactFlow<AppNode>();
+    const subgraphs = useEditorStore((s) => s.subgraphs);
 
     // source date type
 
@@ -46,9 +48,16 @@ const TSLEdge = ({
         sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId
             ? sourceDefination.outputs[sourceHandleId]?.type ?? null
             : null;
-        if (!sourceDataType && sourceHandleId && sourceNode?.data.dynamicPorts) {
-            const dynamicPort = sourceNode.data.dynamicPorts.find((port) => port.id === sourceHandleId);
-            sourceDataType = (dynamicPort?.type as TSLType) ?? null;
+        if (!sourceDataType && sourceHandleId) {
+            if (sourceNode?.data.type.startsWith('custom/')) {
+                const sg = subgraphs[sourceNode.data.type];
+                const port = sg?.outputs.find((p) => p.id === sourceHandleId) ?? sg?.inputs.find((p) => p.id === sourceHandleId);
+                sourceDataType = (port?.type as TSLType) ?? null;
+            }
+            if (!sourceDataType && sourceNode?.data.dynamicPorts) {
+                const dynamicPort = sourceNode.data.dynamicPorts.find((port) => port.id === sourceHandleId);
+                sourceDataType = (dynamicPort?.type as TSLType) ?? null;
+            }
         }
     }
 
@@ -70,9 +79,16 @@ const TSLEdge = ({
         targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId
             ? targetDefination.inputs[targetHandleId]?.type ?? null
             : null;
-        if (!targetDataType && targetHandleId && targetNode?.data.dynamicPorts) {
-            const dynamicPort = targetNode.data.dynamicPorts.find((port) => port.id === targetHandleId);
-            targetDataType = (dynamicPort?.type as TSLType) ?? null;
+        if (!targetDataType && targetHandleId) {
+            if (targetNode?.data.type.startsWith('custom/')) {
+                const sg = subgraphs[targetNode.data.type];
+                const port = sg?.inputs.find((p) => p.id === targetHandleId) ?? sg?.outputs.find((p) => p.id === targetHandleId);
+                targetDataType = (port?.type as TSLType) ?? null;
+            }
+            if (!targetDataType && targetNode?.data.dynamicPorts) {
+                const dynamicPort = targetNode.data.dynamicPorts.find((port) => port.id === targetHandleId);
+                targetDataType = (dynamicPort?.type as TSLType) ?? null;
+            }
         }
     }
 

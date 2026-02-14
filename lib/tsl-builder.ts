@@ -1,7 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import * as THREE from 'three/webgpu'; // For Material classes
 import * as TSL from 'three/tsl'; // For TSL functions
-import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition } from '@/lib/types';
+import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, GlobalContextEntry } from '@/lib/types';
 import { compileGraph } from './compiler';
 import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
 import { hashBlur } from 'three/addons/tsl/display/hashBlur.js';
@@ -15,10 +15,11 @@ export function buildTSLMaterial(
     nodes: Node<TSLNodeData>[],
     edges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
-    codeNodes?: Record<string, CodeNodeDefinition>
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    globals?: GlobalContextEntry[]
 ): THREE.Material {
     // 1. Compile the graph to TSL code
-    const code = compileGraph(nodes, edges, subgraphs, codeNodes, { uniformMode: 'runtime' });
+    const code = compileGraph(nodes, edges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
 
     // Ensure uniform factory is wired to TSL runtime
     setUniformFactory(TSL.uniform);
@@ -105,7 +106,8 @@ export function buildNodePreviewMaterial(
     nodes: Node<TSLNodeData>[],
     edges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
-    codeNodes?: Record<string, CodeNodeDefinition>
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    globals?: GlobalContextEntry[]
 ): THREE.Material {
     // 1. Find all ancestor nodes (including target)
     const ancestorIds = getAncestorNodeIds(targetNodeId, edges);
@@ -115,7 +117,7 @@ export function buildNodePreviewMaterial(
     const partialEdges = edges.filter(e => ancestorIds.has(e.source) && ancestorIds.has(e.target));
 
     // 3. Compile the partial graph (without material node)
-    const code = compileGraph(partialNodes, partialEdges, subgraphs, codeNodes, { uniformMode: 'runtime' });
+    const code = compileGraph(partialNodes, partialEdges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
 
     // Ensure uniform factory is wired to TSL runtime
     setUniformFactory(TSL.uniform);

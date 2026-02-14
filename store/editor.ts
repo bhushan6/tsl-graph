@@ -14,13 +14,13 @@ import {
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
-import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode } from '@/lib/types';
+import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
 import { registry } from '@/lib/registry';
 import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
-import { coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
+import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
 
 // Preview mesh type
@@ -80,6 +80,7 @@ export interface GraphData {
     version: number;
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
+    globals?: GlobalContextEntry[];
     // Subgraph definitions
     subgraphs?: Record<string, SubgraphDefinition>;
     // Code node definitions
@@ -197,6 +198,80 @@ const getLoopInternalDefaultValues = (type: string): Record<string, TSLValueType
     }
 };
 
+const isUniformKindType = (type: TSLType): type is UniformKind => {
+    return UNIFORM_KINDS.includes(type as UniformKind);
+};
+
+const getGlobalDefaultValue = (type: TSLType): TSLValueType => {
+    switch (type) {
+        case 'color':
+            return '#ffffff';
+        case 'bool':
+            return false;
+        case 'vec2':
+            return [0, 0];
+        case 'vec3':
+            return [0, 0, 0];
+        case 'vec4':
+            return [0, 0, 0, 1];
+        case 'int':
+        case 'uint':
+        case 'float':
+        case 'any':
+            return 0;
+        case 'string':
+            return '';
+        default:
+            return 0;
+    }
+};
+
+const coerceGlobalValue = (type: TSLType, value: TSLValueType | undefined): TSLValueType => {
+    if (isUniformKindType(type)) {
+        return coerceUniformValue(type, value);
+    }
+    if (type === 'string') {
+        return typeof value === 'string' ? value : String(value ?? '');
+    }
+    if (type === 'bool') {
+        return Boolean(value);
+    }
+    if (type === 'any') {
+        return value ?? 0;
+    }
+    return value ?? getGlobalDefaultValue(type);
+};
+
+const makeUniqueGlobalName = (baseName: string, globals: GlobalContextEntry[]): string => {
+    const trimmed = baseName.trim() || 'Global';
+    const lowerSet = new Set(globals.map((g) => g.name.toLowerCase()));
+    if (!lowerSet.has(trimmed.toLowerCase())) return trimmed;
+    let suffix = 1;
+    let candidate = `${trimmed}_${suffix}`;
+    while (lowerSet.has(candidate.toLowerCase())) {
+        suffix += 1;
+        candidate = `${trimmed}_${suffix}`;
+    }
+    return candidate;
+};
+
+const syncGlobalUniforms = (prev: GlobalContextEntry[], next: GlobalContextEntry[]) => {
+    const prevUniforms = prev.filter((entry) => entry.kind === 'uniform' && isUniformKindType(entry.type));
+    const nextUniforms = next.filter((entry) => entry.kind === 'uniform' && isUniformKindType(entry.type));
+    const nextUniformMap = new Map(nextUniforms.map((entry) => [entry.id, entry]));
+
+    prevUniforms.forEach((entry) => {
+        const nextEntry = nextUniformMap.get(entry.id);
+        if (!nextEntry || nextEntry.type !== entry.type) {
+            removeUniform(entry.id);
+        }
+    });
+
+    nextUniforms.forEach((entry) => {
+        updateUniformValue(entry.id, entry.type, entry.defaultValue);
+    });
+};
+
 const LOOP_INTERNAL_ID_SUFFIX: Record<string, string> = {
     'loop/count': 'count',
     'loop/start': 'start',
@@ -269,12 +344,14 @@ interface SubgraphStackItem {
     originalNodeIds: string[];
     subgraphId: string | null; // The ID of the subgraph we were editing (or null for main graph)
     history: HistoryState; // Preserve history of the parent graph
+    createInstanceOnSave?: boolean;
 }
 
 interface Snapshot {
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
     subgraphs: Record<string, SubgraphDefinition>;
+    globals: GlobalContextEntry[];
 }
 
 interface HistoryState {
@@ -308,6 +385,14 @@ interface EditorState {
     graphStructureVersion: number;
     hoveredGroupId: string | null;
     setHoveredGroupId: (groupId: string | null) => void;
+
+    // Global context
+    globals: GlobalContextEntry[];
+    addGlobal: (entry?: Partial<GlobalContextEntry>) => string | null;
+    addGlobals: (entries: Partial<GlobalContextEntry>[]) => string[];
+    updateGlobal: (id: string, updates: Partial<GlobalContextEntry>) => void;
+    removeGlobal: (id: string) => void;
+    getGlobal: (id: string) => GlobalContextEntry | undefined;
 
     // Subgraph state
     subgraphs: Record<string, SubgraphDefinition>;
@@ -434,7 +519,7 @@ interface EditorState {
 
     // Subgraph actions
     createSubgraph: (name: string, selectedNodeIds: string[]) => string | null;
-    enterSubgraphEditor: (subgraphId: string) => boolean;
+    enterSubgraphEditor: (subgraphId: string, options?: { createInstanceOnSave?: boolean }) => boolean;
     exitSubgraphEditor: (save: boolean, nameOverride?: string) => Promise<void>;
     updateSubgraphDefinition: (subgraphId: string, updates: Partial<SubgraphDefinition>) => void;
     addSubgraphDefinition: (subgraph: SubgraphDefinition) => void;
@@ -476,6 +561,142 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     graphStructureVersion: 0,
     hoveredGroupId: null,
     setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
+    globals: [],
+
+    addGlobal: (entry = {}) => {
+        get().takeSnapshot();
+        const globals = get().globals;
+        const baseName = typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name.trim() : 'Global';
+        const name = makeUniqueGlobalName(baseName, globals);
+        const type = (entry.type ?? 'float') as TSLType;
+        const kind = (entry.kind ?? 'uniform') as GlobalContextKind;
+        const defaultValue = coerceGlobalValue(type, entry.defaultValue);
+        const id = entry.id ?? `global-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+        set({
+            globals: [
+                ...globals,
+                {
+                    id,
+                    name,
+                    kind,
+                    type,
+                    defaultValue,
+                    description: entry.description,
+                },
+            ],
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+        return id;
+    },
+
+    addGlobals: (entries) => {
+        if (!entries || entries.length === 0) return [];
+        get().takeSnapshot();
+        const globals = [...get().globals];
+        const ids: string[] = [];
+
+        entries.forEach((entry, index) => {
+            const baseName = typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name.trim() : 'Global';
+            const name = makeUniqueGlobalName(baseName, globals);
+            const type = (entry.type ?? 'float') as TSLType;
+            const kind = (entry.kind ?? 'uniform') as GlobalContextKind;
+            const defaultValue = coerceGlobalValue(type, entry.defaultValue);
+            const id = entry.id ?? `global-${Date.now()}-${index}-${Math.floor(Math.random() * 10000)}`;
+
+            globals.push({
+                id,
+                name,
+                kind,
+                type,
+                defaultValue,
+                description: entry.description,
+            });
+            ids.push(id);
+        });
+
+        set({
+            globals,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+        return ids;
+    },
+
+    updateGlobal: (id, updates) => {
+        get().takeSnapshot();
+        const globals = get().globals;
+        const existing = globals.find((g) => g.id === id);
+        if (!existing) return;
+
+        let nextName = existing.name;
+        if (typeof updates.name === 'string') {
+            const trimmed = updates.name.trim();
+            if (!trimmed) {
+                toast.error('Global name cannot be empty.');
+                return;
+            }
+            const nameConflict = globals.some(
+                (g) => g.id !== id && g.name.toLowerCase() === trimmed.toLowerCase()
+            );
+            if (nameConflict) {
+                toast.error(`Global name "${trimmed}" already exists.`);
+                return;
+            }
+            nextName = trimmed;
+        }
+
+        const nextType = (updates.type ?? existing.type) as TSLType;
+        const nextKind = (updates.kind ?? existing.kind) as GlobalContextKind;
+        const nextDefaultValue = updates.defaultValue !== undefined
+            ? coerceGlobalValue(nextType, updates.defaultValue)
+            : (updates.type ? coerceGlobalValue(nextType, existing.defaultValue) : existing.defaultValue);
+
+        const updatedEntry: GlobalContextEntry = {
+            ...existing,
+            ...updates,
+            name: nextName,
+            kind: nextKind,
+            type: nextType,
+            defaultValue: nextDefaultValue,
+        };
+
+        if (existing.kind === 'uniform' && (!isUniformKindType(updatedEntry.type) || updatedEntry.kind !== 'uniform')) {
+            removeUniform(existing.id);
+        }
+
+        if (updatedEntry.kind === 'uniform' && isUniformKindType(updatedEntry.type)) {
+            updateUniformValue(updatedEntry.id, updatedEntry.type, updatedEntry.defaultValue);
+        }
+
+        set({
+            globals: globals.map((g) => (g.id === id ? updatedEntry : g)),
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    removeGlobal: (id) => {
+        get().takeSnapshot();
+        const globals = get().globals;
+        const existing = globals.find((g) => g.id === id);
+        if (!existing) return;
+
+        if (existing.kind === 'uniform') {
+            removeUniform(existing.id);
+        }
+
+        set({
+            globals: globals.filter((g) => g.id !== id),
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    getGlobal: (id) => {
+        return get().globals.find((g) => g.id === id);
+    },
 
     // Preview settings
     previewSettings: {
@@ -911,6 +1132,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (type === 'math/multiOp' && !data.operations) {
             const opId = `op_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
             data.operations = [{ id: opId, op: 'add' }];
+        }
+
+        if (type === 'global/ref') {
+            const globals = get().globals;
+            if (globals.length > 0) {
+                data.values = {
+                    ...data.values,
+                    globalId: data.values?.globalId ?? globals[0].id,
+                };
+            }
         }
 
         const newNode: Node<TSLNodeData> = {
@@ -1362,20 +1593,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         for (const node of nodesToPaste) {
             const nodeType = node.data.type;
-            if (nodeType.startsWith('custom/') && !typeMap.has(nodeType)) {
-                const def = subgraphs[nodeType];
-                if (!def) continue;
-                const baseName = def.name || nodeType.replace('custom/', '').split('-')[0] || 'subgraph';
-                const newTypeId = createCloneId('custom', baseName);
-                const clonedDef = JSON.parse(JSON.stringify(def));
-                clonedDef.id = newTypeId;
-                clonedDef.templateId = undefined;
-                clonedDef.templateVersion = undefined;
-                clonedDef.createdAt = Date.now();
-                clonedDef.updatedAt = Date.now();
-                newSubgraphs[newTypeId] = clonedDef;
-                typeMap.set(nodeType, newTypeId);
-            }
             if (nodeType.startsWith('code/') && !typeMap.has(nodeType)) {
                 const def = codeNodes[nodeType];
                 if (!def) continue;
@@ -1467,7 +1684,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Save graph to JSON string
     saveToJSON: () => {
-        const { nodes, edges, subgraphs, codeNodes, editorMode, subgraphStack, editingSubgraphId } = get();
+        const { nodes, edges, subgraphs, codeNodes, globals, editorMode, subgraphStack, editingSubgraphId } = get();
 
         let nodesToSave = nodes;
         let edgesToSave = edges;
@@ -1540,6 +1757,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             version: GRAPH_VERSION,
             nodes: nodesToSave,
             edges: edgesToSave,
+            globals,
             subgraphs: subgraphsToSave,
             codeNodes: codeNodes,
             previewSettings: get().previewSettings,
@@ -1550,47 +1768,80 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Load graph from JSON string
     loadFromJSON: (json: string) => {
         try {
-            const data = JSON.parse(json) as GraphData;
-            if (data.version && data.nodes && data.edges) {
+            const parsed = JSON.parse(json) as Partial<GraphData> & { graph?: Partial<GraphData> };
+            const data = parsed && typeof parsed === 'object' ? parsed : null;
+            if (!data) return false;
+
+            const nodes = Array.isArray(data.nodes)
+                ? data.nodes
+                : Array.isArray(data.graph?.nodes)
+                    ? data.graph?.nodes
+                    : null;
+            const edges = Array.isArray(data.edges)
+                ? data.edges
+                : Array.isArray(data.graph?.edges)
+                    ? data.graph?.edges
+                    : null;
+
+            if (nodes && edges) {
                 clearUniforms();
+
+                const defaultPreviewSettings: PreviewSettings = {
+                    mesh: 'sphere',
+                    isInstanced: false,
+                    instanceCount: 100,
+                    environment: 'studio',
+                    environmentIntensity: 1,
+                    showEnvironmentBackground: false,
+                    showGrid: true,
+                    codeMode: 'generated',
+                    customCode: '',
+                    config: {
+                        width: 1.5,
+                        height: 1.5,
+                        depth: 1.5,
+                        widthSegments: 1,
+                        heightSegments: 1,
+                        depthSegments: 1,
+                        radius: 1,
+                        widthSegmentsSphere: 32,
+                        heightSegmentsSphere: 16,
+                        radiusTorus: 0.8,
+                        tube: 0.3,
+                        radialSegments: 16,
+                        tubularSegments: 32,
+                        widthPlane: 1,
+                        heightPlane: 1,
+                        widthSegmentsPlane: 1,
+                        heightSegmentsPlane: 1,
+                        radiusTop: 1,
+                        radiusBottom: 1,
+                        heightCylinder: 1,
+                        radialSegmentsCylinder: 20,
+                        heightSegmentsCylinder: 20,
+                        openEnded: true,
+                    },
+                };
+
+                const persistedPreview = data.previewSettings ?? data.graph?.previewSettings;
+                const mergedPreviewSettings: PreviewSettings = {
+                    ...defaultPreviewSettings,
+                    ...persistedPreview,
+                    config: {
+                        ...defaultPreviewSettings.config,
+                        ...(persistedPreview?.config || {}),
+                    },
+                };
+
                 set({
-                    nodes: data.nodes,
-                    edges: data.edges,
-                    subgraphs: data.subgraphs || {},
-                    codeNodes: data.codeNodes || {},
+                    nodes,
+                    edges,
+                    globals: data.globals ?? data.graph?.globals ?? [],
+                    subgraphs: data.subgraphs ?? data.graph?.subgraphs ?? {},
+                    codeNodes: data.codeNodes ?? data.graph?.codeNodes ?? {},
                     graphStructureVersion: get().graphStructureVersion + 1,
                     // Restore preview settings
-                    previewSettings: data.previewSettings || {
-                        mesh: 'sphere',
-                        isInstanced: false,
-                        instanceCount: 100,
-                        showGrid: true,
-                        config: {
-                            width: 1.5,
-                            height: 1.5,
-                            depth: 1.5,
-                            widthSegments: 1,
-                            heightSegments: 1,
-                            depthSegments: 1,
-                            radius: 1,
-                            widthSegmentsSphere: 32,
-                            heightSegmentsSphere: 16,
-                            radiusTorus: 0.8,
-                            tube: 0.3,
-                            radialSegments: 16,
-                            tubularSegments: 32,
-                            widthPlane: 1,
-                            heightPlane: 1,
-                            widthSegmentsPlane: 1,
-                            heightSegmentsPlane: 1,
-                            radiusTop: 1,
-                            radiusBottom: 1,
-                            heightCylinder: 1,
-                            radialSegmentsCylinder: 20,
-                            heightSegmentsCylinder: 20,
-                            openEnded: true,
-                        }
-                    },
+                    previewSettings: mergedPreviewSettings,
                     // Reset subgraph state on load
                     editorMode: 'main',
                     editingSubgraphId: null,
@@ -1632,6 +1883,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({
             nodes: [],
             edges: [],
+            globals: [],
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
@@ -1648,10 +1900,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Subgraph actions
 
     createSubgraph: (name: string, selectedNodeIds: string[]) => {
-        if (selectedNodeIds.length === 0) return null;
-
         get().takeSnapshot();
         const { nodes, edges } = get();
+
+        if (selectedNodeIds.length === 0) {
+            const id = `custom/${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
+            const subgraph: SubgraphDefinition = {
+                id,
+                name,
+                scope: 'project',
+                inputs: [{ id: 'in_0', label: 'Input 1', type: 'any' }],
+                outputs: [{ id: 'out_0', label: 'Output 1', type: 'any' }],
+                nodes: [],
+                edges: [],
+                inputNodePosition: { x: 0, y: 200 },
+                outputNodePosition: { x: 600, y: 200 },
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            };
+
+            set({
+                subgraphs: { ...get().subgraphs, [id]: subgraph },
+            });
+            get().markDirty();
+            return id;
+        }
         // 1. Expand selection to include children of selected groups
         let expandedNodeIds = [...selectedNodeIds];
         const initialSelectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
@@ -1724,6 +1997,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const subgraph: SubgraphDefinition = {
             id,
             name,
+            scope: 'project',
             inputs: [{ id: 'in_0', label: 'Input 1', type: 'any' }],
             outputs: [{ id: 'out_0', label: 'Output 1', type: 'any' }],
             nodes: selectedNodes.map(n => {
@@ -1776,7 +2050,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return id;
     },
 
-    enterSubgraphEditor: (subgraphId: string) => {
+    enterSubgraphEditor: (subgraphId: string, options?: { createInstanceOnSave?: boolean }) => {
         const subgraph = get().subgraphs[subgraphId];
         if (!subgraph) return false;
 
@@ -1795,6 +2069,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             originalNodeIds,
             subgraphId: editingSubgraphId,
             history: get().history, // Save current history
+            createInstanceOnSave: options?.createInstanceOnSave ?? false,
         };
 
         // Create input anchor node (use stored position or calculate fallback)
@@ -1910,6 +2185,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (nameOverride) {
                 updatedSubgraph.name = nameOverride;
             }
+            if (!updatedSubgraph.scope) {
+                updatedSubgraph.scope = subgraphs[editingSubgraphId]?.templateId ? 'library' : 'project';
+            }
 
             // Update subgraphs first
             // Note: We don't snapshot here because exitSubgraphEditor is a meta-action
@@ -1923,27 +2201,48 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 subgraphs: { ...subgraphs, [editingSubgraphId]: updatedSubgraph },
             });
 
-            // Push to DB: Create new template OR update existing
+            // Push to DB: Create new template OR update existing (library scope only)
             const currentSubgraph = get().subgraphs[editingSubgraphId];
             const { onSubgraphTemplateCreate, onSubgraphTemplateUpdate } = get();
+            const shouldSyncTemplate = updatedSubgraph.scope === 'library';
 
             if (currentSubgraph?.templateId) {
                 // UPDATE existing template
                 if (onSubgraphTemplateUpdate) {
                     try {
-                        const result = await onSubgraphTemplateUpdate(currentSubgraph.templateId, updatedSubgraph);
-                        // Update local version
-                        const latestSubgraphs = useEditorStore.getState().subgraphs;
-                        if (latestSubgraphs[editingSubgraphId]) {
-                            useEditorStore.setState({
-                                subgraphs: {
-                                    ...latestSubgraphs,
-                                    [editingSubgraphId]: {
-                                        ...latestSubgraphs[editingSubgraphId],
-                                        templateVersion: result.version,
+                        if (shouldSyncTemplate) {
+                            const result = await onSubgraphTemplateUpdate(currentSubgraph.templateId, updatedSubgraph);
+                            // Update local version
+                            const latestSubgraphs = useEditorStore.getState().subgraphs;
+                            if (latestSubgraphs[editingSubgraphId]) {
+                                useEditorStore.setState({
+                                    subgraphs: {
+                                        ...latestSubgraphs,
+                                        [editingSubgraphId]: {
+                                            ...latestSubgraphs[editingSubgraphId],
+                                            templateVersion: result.version,
+                                        },
                                     },
-                                },
+                                });
+                            }
+                        } else {
+                            // Mark template as project-scoped so it doesn't appear in library lists
+                            const result = await onSubgraphTemplateUpdate(currentSubgraph.templateId, {
+                                ...updatedSubgraph,
+                                scope: 'project',
                             });
+                            const latestSubgraphs = useEditorStore.getState().subgraphs;
+                            if (latestSubgraphs[editingSubgraphId]) {
+                                useEditorStore.setState({
+                                    subgraphs: {
+                                        ...latestSubgraphs,
+                                        [editingSubgraphId]: {
+                                            ...latestSubgraphs[editingSubgraphId],
+                                            templateVersion: result.version,
+                                        },
+                                    },
+                                });
+                            }
                         }
                     } catch (error) {
                         console.error('Failed to update subgraph template in DB:', error);
@@ -1954,7 +2253,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             } else {
                 // CREATE new template (first time saving this subgraph)
-                if (onSubgraphTemplateCreate) {
+                if (onSubgraphTemplateCreate && shouldSyncTemplate) {
                     try {
                         const result = await onSubgraphTemplateCreate(updatedSubgraph);
                         // Update local definition with template reference
@@ -1990,6 +2289,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             // Determine previous mode based on stack item
             const previousMode = stackItem.subgraphId ? 'subgraph' : 'main';
             const previousSubgraphId = stackItem.subgraphId;
+
+            const shouldCreateInstance = stackItem.createInstanceOnSave ?? false;
+
+            if (!shouldCreateInstance) {
+                setTimeout(() => {
+                    set({
+                        nodes: restoredNodes,
+                        edges: restoredEdges,
+                        subgraphStack: newStack,
+                        selectedNodeId: null,
+                        selectedNodeIds: [],
+                        editorMode: previousMode,
+                        editingSubgraphId: previousSubgraphId,
+                        history: stackItem.history, // Restore parent history
+                    });
+                }, 0);
+                return;
+            }
 
             if (originalNodes.length > 0) {
                 // Calculate center position of original nodes
@@ -2059,17 +2376,42 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 return;
             }
 
-            // No original nodes - just restore backup
-            set({
-                nodes: restoredNodes,
-                edges: restoredEdges,
-                subgraphStack: newStack,
-                selectedNodeId: null,
-                selectedNodeIds: [],
-                editorMode: previousMode,
-                editingSubgraphId: previousSubgraphId,
-                history: stackItem.history, // Restore parent history
-            });
+            // No original nodes - insert a fresh instance near the current graph
+            const nodesForBounds = restoredNodes.map(n => ({
+                ...n,
+                position: getAbsolutePosition(n, restoredNodes),
+            }));
+            const bounds = nodesForBounds.length > 0
+                ? getNodesBounds(nodesForBounds)
+                : { x: 0, y: 0, width: 0, height: 0 };
+            const instanceX = nodesForBounds.length > 0 ? bounds.x + bounds.width + 80 : 0;
+            const instanceY = nodesForBounds.length > 0 ? bounds.y : 0;
+
+            const instanceId = `${subgraphIdForInstance}-instance-${Date.now()}`;
+            const instanceNode: Node<TSLNodeData> = {
+                id: instanceId,
+                type: subgraphIdForInstance as NodeType,
+                position: { x: instanceX, y: instanceY },
+                data: {
+                    type: subgraphIdForInstance as NodeType,
+                    values: {},
+                    connected: {},
+                    dynamicPorts: [...inputPorts, ...outputPorts],
+                },
+            };
+
+            setTimeout(() => {
+                set({
+                    nodes: [...restoredNodes, instanceNode],
+                    edges: restoredEdges,
+                    subgraphStack: newStack,
+                    selectedNodeId: instanceId,
+                    selectedNodeIds: [instanceId],
+                    editorMode: previousMode,
+                    editingSubgraphId: previousSubgraphId,
+                    history: stackItem.history, // Restore parent history
+                });
+            }, 0);
             return;
         }
 
@@ -2379,7 +2721,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // History Implementation
 
     takeSnapshot: () => {
-        const { nodes, edges, subgraphs, history, isUndoRedoInProgress } = get();
+        const { nodes, edges, subgraphs, globals, history, isUndoRedoInProgress } = get();
 
         if (isUndoRedoInProgress) return;
 
@@ -2387,6 +2729,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: stripTransientFields(nodes),
             edges,
             subgraphs, // Tracking subgraphs changes too
+            globals,
         };
 
         const newPast = [...history.past, snapshot];
@@ -2404,7 +2747,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     undo: () => {
-        const { history, nodes, edges, subgraphs } = get();
+        const { history, nodes, edges, subgraphs, globals } = get();
         if (history.past.length === 0) return;
 
         const previous = history.past[history.past.length - 1];
@@ -2414,6 +2757,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: stripTransientFields(nodes),
             edges,
             subgraphs,
+            globals,
         };
 
         // Don't trigger snapshot during undo
@@ -2423,12 +2767,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: previous.nodes,
             edges: previous.edges,
             subgraphs: previous.subgraphs,
+            globals: previous.globals,
             history: {
                 past: newPast,
                 future: [currentSnapshot, ...history.future],
             },
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        syncGlobalUniforms(globals, previous.globals);
 
         // Use setTimeout to ensure we don't block render with flag
         setTimeout(() => {
@@ -2438,7 +2784,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     redo: () => {
-        const { history, nodes, edges, subgraphs } = get();
+        const { history, nodes, edges, subgraphs, globals } = get();
         if (history.future.length === 0) return;
 
         const next = history.future[0];
@@ -2448,6 +2794,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: stripTransientFields(nodes),
             edges,
             subgraphs,
+            globals,
         };
 
         set({ isUndoRedoInProgress: true });
@@ -2456,12 +2803,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: next.nodes,
             edges: next.edges,
             subgraphs: next.subgraphs,
+            globals: next.globals,
             history: {
                 past: [...history.past, currentSnapshot],
                 future: newFuture,
             },
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+        syncGlobalUniforms(globals, next.globals);
 
         setTimeout(() => {
             set({ isUndoRedoInProgress: false });
@@ -2608,7 +2957,65 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     createLoopGroup: () => {
         const { nodes, selectedNodeIds } = get();
-        if (selectedNodeIds.length === 0) return;
+        if (selectedNodeIds.length === 0) {
+            get().takeSnapshot();
+
+            const nodesForBounds = nodes.map(n => ({
+                ...n,
+                position: getAbsolutePosition(n, nodes),
+            }));
+
+            const bounds = nodesForBounds.length > 0
+                ? getNodesBounds(nodesForBounds)
+                : { x: 0, y: 0, width: 0, height: 0 };
+
+            const BASE_PADDING = 40;
+            const MIN_WIDTH = 600;
+            const MIN_HEIGHT = 320;
+            const minLoopHeight = getLoopRequiredHeight(DEFAULT_LOOP_MODE);
+            const width = MIN_WIDTH;
+            const height = Math.max(MIN_HEIGHT, minLoopHeight);
+            const x = nodesForBounds.length > 0 ? bounds.x + bounds.width + BASE_PADDING : 0;
+            const y = nodesForBounds.length > 0 ? bounds.y : 0;
+
+            const loopId = `loop-${Date.now()}`;
+
+            const loopNode: Node<TSLNodeData> = {
+                id: loopId,
+                type: 'group',
+                position: { x, y },
+                style: { width, height },
+                data: {
+                    type: 'loop',
+                    values: {
+                        label: 'Loop',
+                        loopMode: DEFAULT_LOOP_MODE,
+                        loopType: DEFAULT_LOOP_TYPE,
+                        loopCompare: DEFAULT_LOOP_COMPARE,
+                    },
+                    connected: {},
+                },
+                selected: true,
+            };
+
+            const leftNodes = getLoopLeftNodeTypes(DEFAULT_LOOP_MODE).map((type, index) =>
+                createLoopInternalNode(loopId, type, {
+                    x: LOOP_SLOT_X,
+                    y: LOOP_SLOT_Y + LOOP_SLOT_GAP * index,
+                })
+            );
+
+            const outputNode = createLoopInternalNode(loopId, 'loop/output', { x: LOOP_SLOT_X, y: LOOP_SLOT_Y }, width);
+
+            set({
+                nodes: [...nodes, loopNode, ...leftNodes, outputNode],
+                selectedNodeIds: [loopId],
+                selectedNodeId: loopId,
+                graphStructureVersion: get().graphStructureVersion + 1,
+            });
+            get().markDirty();
+            return;
+        }
 
         // 1. Get all selected nodes
         const allSelectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
@@ -3091,6 +3498,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeIds: [],
             clipboard: null,
             graphStructureVersion: 0,
+            globals: [],
             subgraphs: {},
             editorMode: 'main',
             editingSubgraphId: null,
