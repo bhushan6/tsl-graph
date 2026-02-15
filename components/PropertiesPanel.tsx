@@ -559,7 +559,7 @@ function getDefaultForType(type: string): TSLValueType {
     }
 }
 
-function UniformListItem({ node }: { node: AppNode }) {
+function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setUniformType = useEditorStore((s) => s.setUniformType);
     const selectSingleNode = useEditorStore((s) => s.selectSingleNode);
@@ -589,7 +589,7 @@ function UniformListItem({ node }: { node: AppNode }) {
 
 
     return (
-        <AccordionItem value={node.id} className="w-[100%]">
+        <AccordionItem value={value ?? node.id} className="w-[100%]">
             <AccordionTrigger className="py-2">
                 <div className="flex flex-1 items-start justify-between gap-3">
                     <div className="flex flex-col">
@@ -649,19 +649,93 @@ function UniformListItem({ node }: { node: AppNode }) {
     );
 }
 
+function GlobalUniformListItem({ entry, value }: { entry: GlobalContextEntry; value?: string }) {
+    const updateGlobal = useEditorStore((s) => s.updateGlobal);
+
+    const uniformKind = UNIFORM_KINDS.includes(entry.type as UniformKind)
+        ? (entry.type as UniformKind)
+        : 'float';
+    const uniformValue = entry.defaultValue ?? getUniformDefaultValue(uniformKind);
+
+    return (
+        <AccordionItem value={value ?? entry.id} className="w-[100%]">
+            <AccordionTrigger className="py-2">
+                <div className="flex flex-1 items-start justify-between gap-3">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-medium text-sidebar-foreground">
+                            {entry.name}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                            Global
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                            {uniformKind}
+                        </span>
+                    </div>
+                </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-2">
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Type
+                        </label>
+                        <select
+                            value={uniformKind}
+                            onChange={(e) => updateGlobal(entry.id, { type: e.target.value as TSLType })}
+                            className="h-8 mx-1 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-[97%] outline-none focus:ring-2 focus:ring-sidebar-ring"
+                        >
+                            {UNIFORM_KINDS.map((kind) => (
+                                <option key={kind} value={kind}>
+                                    {kind}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Value
+                        </label>
+                        <PropertyInput
+                            type={uniformKind}
+                            value={uniformValue}
+                            onChange={(v) => updateGlobal(entry.id, { defaultValue: v })}
+                            immediate={true}
+                        />
+                    </div>
+                </div>
+            </AccordionContent>
+        </AccordionItem>
+    );
+}
+
 function UniformsPanelContent() {
     const nodes = useEditorStore((s) => s.nodes);
-    const uniforms = useMemo(
-        () =>
-            nodes
-                .filter((n) => n.data.type === 'const/uniform')
-                .sort((a, b) => {
-                    const nameA = (a.data.localName || a.id).toLowerCase();
-                    const nameB = (b.data.localName || b.id).toLowerCase();
-                    return nameA.localeCompare(nameB);
-                }),
-        [nodes]
-    );
+    const globals = useEditorStore((s) => s.globals);
+    const uniforms = useMemo(() => {
+        const nodeUniforms = nodes
+            .filter((n) => n.data.type === 'const/uniform')
+            .map((node) => ({
+                kind: 'node' as const,
+                key: `node-${node.id}`,
+                label: (node.data.localName || node.id).toLowerCase(),
+                node,
+            }));
+
+        const globalUniforms = globals
+            .filter((entry) => entry.kind === 'uniform')
+            .map((entry) => ({
+                kind: 'global' as const,
+                key: `global-${entry.id}`,
+                label: entry.name.toLowerCase(),
+                entry,
+            }));
+
+        return [...globalUniforms, ...nodeUniforms].sort((a, b) => a.label.localeCompare(b.label));
+    }, [globals, nodes]);
 
     return (
         <div className="flex flex-col h-full">
@@ -671,7 +745,7 @@ function UniformsPanelContent() {
                     <span className="text-xs text-muted-foreground">{uniforms.length}</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    Edit uniforms without hunting nodes
+                    Edit node and global uniforms without hunting nodes
                 </p>
             </div>
 
@@ -682,9 +756,13 @@ function UniformsPanelContent() {
                     </p>
                 ) : (
                     <Accordion type="single" collapsible className="">
-                        {uniforms.map((node) => (
-                            <UniformListItem key={node.id} node={node} />
-                        ))}
+                        {uniforms.map((item) =>
+                            item.kind === 'node' ? (
+                                <UniformListItem key={item.key} node={item.node} value={item.key} />
+                            ) : (
+                                <GlobalUniformListItem key={item.key} entry={item.entry} value={item.key} />
+                            )
+                        )}
                     </Accordion>
                 )}
             </div>
