@@ -7,6 +7,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
+import { useCodePanelStore } from '@/store/code-panel';
 import { compileGraph, compileSubgraphCode, getRequiredImports } from '@/lib/compiler';
 import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -17,12 +18,9 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 
-interface CodePanelProps {
-    isOpen: boolean;
-    onClose: () => void;
-}
-
-export function CodePanel({ isOpen, onClose }: CodePanelProps) {
+export function CodePanel() {
+    const isOpen = useCodePanelStore((s) => s.isOpen);
+    const close = useCodePanelStore((s) => s.close);
     const [copied, setCopied] = useState(false);
     const { resolvedTheme } = useTheme();
     const nodes = useEditorStore((s) => s.nodes);
@@ -84,7 +82,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     }, [compiledCode, imports]);
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
+        <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && close()} >
             <DialogContent className="max-h-[80vh] flex flex-col sm:max-w-[90vw] z-[10000]">
                 <DialogHeader>
                     <DialogTitle className="flex flex-col gap-1">

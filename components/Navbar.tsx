@@ -27,25 +27,26 @@ import { Logo } from '@/components/ui/logo';
 import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
 import { HelpDialog } from '@/components/HelpDialog';
+import { useFindStore } from '@/store/find';
+import { NoteSearchBar } from '@/components/NodeSearchBar';
 
 interface NavbarProps {
     projectName?: string;
     projectId?: Id<"projects">;
     isReadOnly?: boolean;
-    noteSearchBar?: React.ReactNode;
 }
 
-export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: NavbarProps) {
+export function Navbar({ projectName, projectId, isReadOnly }: NavbarProps) {
+    const isFindOpen = useFindStore((s) => s.isOpen);
+    const closeFind = useFindStore((s) => s.close);
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const {
-        saveToJSON,
-        loadFromJSON,
-        clearGraph,
-        nodes,
-        isSaving,
-        isDirty,
-    } = useEditorStore();
+    const saveToJSON = useEditorStore((s) => s.saveToJSON);
+    const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
+    const clearGraph = useEditorStore((s) => s.clearGraph);
+    const nodeCount = useEditorStore((s) => s.nodes.length);
+    const isSaving = useEditorStore((s) => s.isSaving);
+    const isDirty = useEditorStore((s) => s.isDirty);
 
     const updateProject = useMutation(api.projects.update);
     const project = useQuery(api.projects.get, projectId ? { id: projectId } : "skip");
@@ -133,9 +134,9 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
 
     // Initial check before showing dialog
     const handleClearClick = useCallback(() => {
-        if (nodes.length === 0) return;
+        if (nodeCount === 0) return;
         setShowClearDialog(true);
-    }, [nodes.length]);
+    }, [nodeCount]);
 
     // Actual clear action
     const handleConfirmClear = useCallback(() => {
@@ -204,7 +205,7 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={handleClearClick}
-                            disabled={nodes.length === 0}
+                            disabled={nodeCount === 0}
                             className="gap-2 text-destructive focus:text-destructive"
                         >
                             <Trash2 className="w-4 h-4" />
@@ -215,7 +216,7 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
             </div>
 
             <div className="flex items-center gap-2 group">
-                {noteSearchBar}
+                {isFindOpen && <NoteSearchBar onClose={closeFind} />}
 
                 {/* Sync Status Badge */}
                 {isSaving ? (

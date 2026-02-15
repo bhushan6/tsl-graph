@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -26,7 +27,7 @@ const COLOR_GUIDE: { label: string; type: TSLType }[] = [
     { label: 'Any', type: 'any' },
 ];
 
-export function HelpDialog() {
+function HelpDialogInner() {
     return (
         <Dialog>
             <DialogTrigger asChild>
@@ -428,17 +429,17 @@ export function HelpDialog() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {[
-                                            { key: "Ctrl + Z", label: "Undo" },
-                                            { key: "Ctrl + Y", label: "Redo" },
-                                            { key: "Ctrl + C", label: "Copy Selection" },
-                                            { key: "Ctrl + V", label: "Paste" },
-                                            { key: "Ctrl/Cmd + F", label: "Find Notes" },
-                                            { key: "Delete", label: "Delete Selection" },
-                                            { key: "Shift + Drag", label: "Box Selection" },
-                                            { key: "Middle Mouse", label: "Pan Canvas" },
-                                            { key: "Wheel", label: "Zoom" },
-                                        ].map((shortcut) => (
+                                    {[
+                                        { key: "Ctrl + Z", label: "Undo" },
+                                        { key: "Ctrl + Y", label: "Redo" },
+                                        { key: "Ctrl + C", label: "Copy Selection" },
+                                        { key: "Ctrl + V", label: "Paste" },
+                                        { key: "Ctrl/Cmd + F", label: "Find Notes" },
+                                        { key: "Delete", label: "Delete Selection" },
+                                        { key: "Shift + Drag", label: "Box Selection" },
+                                        { key: "Middle Mouse", label: "Pan Canvas" },
+                                        { key: "Wheel", label: "Zoom" },
+                                    ].map((shortcut) => (
                                         <div key={shortcut.label} className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
                                             <span className="text-sm font-medium">{shortcut.label}</span>
                                             <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-2 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
@@ -518,3 +519,5 @@ export function HelpDialog() {
         </Dialog>
     );
 }
+
+export const HelpDialog = memo(HelpDialogInner);

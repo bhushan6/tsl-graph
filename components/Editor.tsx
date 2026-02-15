@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useCallback, useState, useRef } from 'react';
+import { useMemo, useEffect, useCallback, useRef } from 'react';
 import {
     ReactFlow,
     Background,
@@ -22,24 +22,25 @@ import { getAbsolutePosition } from '@/lib/utils';
 import { TSLNode } from './TSLNode';
 import GroupNode from './GroupNode';
 import LoopInternalNode from './LoopInternalNode';
-import { NodePicker } from './NodePicker';
+import { NodePickerPanel } from './NodePickerPanel';
+import { getNodeDimension, getGroupDepth, getGroupAncestorId, isGroupNode } from '@/lib/drag-utils';
 import { Navbar } from '@/components/Navbar';
-import { NoteSearchBar } from './NodeSearchBar';
+import { useFindStore } from '@/store/find';
 import { registry } from '@/lib/registry';
 import { initializeNodes } from '@/lib/nodes';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { UILayer } from './UILayer';
 import { Preview } from './Preview';
-import { Toolbar } from './Toolbar';
-import { AiChatDock } from './AiChatDock';
+
+import { BottomBarPanel } from './BottomBarPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
-import { Button } from '@/components/ui/button';
-import { PanelLeft } from 'lucide-react';
+
 import TSLEdge from './TSLEdge';
 import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
+import { useCodeNodeDialogStore } from '@/store/code-node-dialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 import type { Id } from '@/convex/_generated/dataModel';
 
@@ -83,15 +84,9 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const { screenToFlowPosition } = useReactFlow();
 
     // const isInitialized = useRef(false);
-    const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
-    const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
-    const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
-    const [isFindOpen, setIsFindOpen] = useState(false);
-    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
     const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
-
-    const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
-    const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
+    const isCodeNodeDialogOpen = useCodeNodeDialogStore((s) => s.isOpen);
+    const closeCodeNodeDialog = useCodeNodeDialogStore((s) => s.close);
 
     // Keyboard shortcuts for Undo/Redo + Copy/Paste
     useEffect(() => {
@@ -110,7 +105,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
             if (isMod && key === "f") {
                 event.preventDefault();
-                setIsFindOpen(true);
+                useFindStore.getState().open();
             }
 
             if (isMod && key === "z") {
@@ -339,29 +334,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
             const draggedIds = draggedNodes.map(n => n.id);
             const absPos = getAbsolutePosition(draggedNode, nodes);
 
-            const getNodeDimension = (n: AppNode, key: 'width' | 'height'): number | null => {
-                const direct = (n as AppNode & { [k: string]: unknown })[key];
-                if (typeof direct === 'number') return direct;
-                const styleValue = n.style?.[key];
-                if (typeof styleValue === 'number') return styleValue;
-                if (typeof styleValue === 'string') {
-                    const parsed = Number(styleValue.replace('px', ''));
-                    return Number.isFinite(parsed) ? parsed : null;
-                }
-                return null;
-            };
 
-            const getGroupDepth = (n: AppNode): number => {
-                let depth = 0;
-                let parentId = n.parentId;
-                while (parentId) {
-                    depth += 1;
-                    parentId = nodesById.get(parentId)?.parentId;
-                }
-                return depth;
-            };
-
-            const isGroupNode = (n: AppNode) => n.type === 'group' || n.data.type === 'loop';
 
             const center = {
                 x: absPos.x + (getNodeDimension(draggedNode, 'width') ?? 0) / 2,
@@ -381,7 +354,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         && center.y >= groupAbs.y
                         && center.y <= groupAbs.y + height;
                     if (!inside) return [];
-                    return [{ group, depth: getGroupDepth(group) }];
+                    return [{ group, depth: getGroupDepth(group, nodesById) }];
                 });
 
             if (groupCandidates.length === 0) return;
@@ -415,40 +388,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
             );
 
-            const getNodeDimension = (n: AppNode, key: 'width' | 'height'): number | null => {
-                const direct = (n as AppNode & { [k: string]: unknown })[key];
-                if (typeof direct === 'number') return direct;
-                const styleValue = n.style?.[key];
-                if (typeof styleValue === 'number') return styleValue;
-                if (typeof styleValue === 'string') {
-                    const parsed = Number(styleValue.replace('px', ''));
-                    return Number.isFinite(parsed) ? parsed : null;
-                }
-                return null;
-            };
 
-            const getGroupDepth = (n: AppNode): number => {
-                let depth = 0;
-                let parentId = n.parentId;
-                while (parentId) {
-                    depth += 1;
-                    parentId = nodesById.get(parentId)?.parentId;
-                }
-                return depth;
-            };
-
-            const getGroupAncestorId = (n: AppNode): string | null => {
-                let parentId = n.parentId;
-                while (parentId) {
-                    const parent = nodesById.get(parentId);
-                    if (!parent) break;
-                    if (parent.type === 'group' || parent.data.type === 'loop') return parent.id;
-                    parentId = parent.parentId;
-                }
-                return null;
-            };
-
-            const isGroupNode = (n: AppNode) => n.type === 'group' || n.data.type === 'loop';
 
             const absPos = getAbsolutePosition(draggedNode, nodes);
             const center = {
@@ -469,7 +409,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         && center.y >= groupAbs.y
                         && center.y <= groupAbs.y + height;
                     if (!inside) return [];
-                    return [{ group, depth: getGroupDepth(group) }];
+                    return [{ group, depth: getGroupDepth(group, nodesById) }];
                 });
 
             if (groupCandidates.length === 0) {
@@ -479,7 +419,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
             groupCandidates.sort((a, b) => b.depth - a.depth);
             const targetGroup = groupCandidates[0].group;
-            const currentParentGroup = getGroupAncestorId(draggedNode);
+            const currentParentGroup = getGroupAncestorId(draggedNode, nodesById);
 
             if (currentParentGroup && currentParentGroup === targetGroup.id) {
                 setHoveredGroupId(null);
@@ -552,34 +492,12 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         {...navbarProps}
                         projectId={projectId}
                         isReadOnly={isReadOnly}
-                        noteSearchBar={
-                            isFindOpen ? (
-                                <NoteSearchBar
-                                    onClose={() => setIsFindOpen(false)}
-                                />
-                            ) : null
-                        }
                     />
                 </UILayer.TopBar>
 
                 {!isReadOnly && (
                     <UILayer.LeftPanel>
-                        {isNodePickerOpen ? (
-                            <NodePicker
-                                onClose={onNodePickerClose}
-                                onOpenCodeNodeDialog={onOpenCodeNodeDialog}
-                            />
-                        ) : (
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setIsNodePickerOpen(true)}
-                                className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-10 w-10 pointer-events-auto"
-                                title="Open Node Picker"
-                            >
-                                <PanelLeft className="h-4 w-4" />
-                            </Button>
-                        )}
+                        <NodePickerPanel />
                     </UILayer.LeftPanel>
                 )}
 
@@ -590,40 +508,20 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
                 {!isReadOnly && (
                     <UILayer.BottomBar>
-                        {editorMode === 'subgraph' ? (
-                            <Toolbar
-                                onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                            />
-                        ) : (
-                            <div className="pointer-events-auto">
-                                <div className={bottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
-                                    <Toolbar
-                                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                                        onOpenAiDock={() => setBottomBarMode('ai')}
-                                    />
-                                </div>
-                                <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
-                                    <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} isOpen={bottomBarMode === 'ai'} />
-                                </div>
-                            </div>
-                        )}
+                        <BottomBarPanel />
                     </UILayer.BottomBar>
                 )}
             </UILayer >
 
             {!isReadOnly && (
                 <>
-                    {/* Code Panel Modal */}
-                    <CodePanel
-                        isOpen={isCodePanelOpen}
-                        onClose={() => setIsCodePanelOpen(false)}
-                    />
+                    <CodePanel />
 
                     {/* Code Node Dialog */}
                     {isCodeNodeDialogOpen && (
                         <CodeNodeDialog
                             open={true}
-                            onOpenChange={setIsCodeNodeDialogOpen}
+                            onOpenChange={(open) => !open && closeCodeNodeDialog()}
                             mode="create"
                         />
                     )}

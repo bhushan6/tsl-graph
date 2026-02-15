@@ -11,13 +11,14 @@ import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
 import { detectConvertibleChain } from '@/lib/multi-op-convert';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { useCodePanelStore } from '@/store/code-panel';
 
 interface ToolbarProps {
-    onOpenCodePanel?: () => void;
     onOpenAiDock?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
+export function Toolbar({ onOpenAiDock }: ToolbarProps) {
+    const openCodePanel = useCodePanelStore((s) => s.open);
     const {
         nodes,
         edges,
@@ -244,14 +245,14 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                         </TooltipTrigger>
                         <TooltipContent>Create Loop</TooltipContent>
                     </Tooltip>
-                    {onOpenCodePanel && (
+                    {openCodePanel && (
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    onClick={onOpenCodePanel}
+                                    onClick={openCodePanel}
                                     className="h-8 w-8 text-primary hover:text-primary"
                                 >
                                     <Code className="w-4 h-4" />
@@ -525,7 +526,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                 </>
             )}
 
-            {onOpenCodePanel && (
+            {openCodePanel && (
                 <>
                     <div className="w-px h-4 bg-border" />
                     <Tooltip>
@@ -533,7 +534,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={onOpenCodePanel}
+                                onClick={openCodePanel}
                                 className="h-8 w-8"
                             >
                                 <Code className="w-4 h-4" />

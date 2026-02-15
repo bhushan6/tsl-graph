@@ -8,6 +8,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
+import { useCodeNodeDialogStore } from '@/store/code-node-dialog';
 import { cn, getErrorMessage } from '@/lib/utils';
 import { NodeType, SubgraphPort } from '@/lib/types';
 import { X, ChevronDown, Search, Code, Plus, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
@@ -63,10 +64,10 @@ function CategoryGroup({ title, children, defaultOpen = true, forceOpen = false 
 
 interface NodePickerProps {
     onClose?: () => void;
-    onOpenCodeNodeDialog?: () => void;
 }
 
-function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
+function NodePickerComponent({ onClose }: NodePickerProps) {
+    const openCodeNodeDialog = useCodeNodeDialogStore((s) => s.open);
     const addNode = useEditorStore((s) => s.addNode);
     const editorMode = useEditorStore((s) => s.editorMode);
     const nodes = useEditorStore((s) => s.nodes);
@@ -337,7 +338,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     );
 
     // Show custom section if we have the code node dialog button or templates
-    const showCustomSection = !!onOpenCodeNodeDialog;
+    const showCustomSection = true;
 
     // Filter nodes by category, handling anchor nodes and material nodes specially
     const filteredNodesByCategory = useMemo(() => {
@@ -450,10 +451,10 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                     <CategoryGroup title="Custom Nodes" forceOpen={!!searchQuery}>
                         <SidebarMenu>
                             {/* Create Node from Code button */}
-                            {onOpenCodeNodeDialog && (
+                            {openCodeNodeDialog && (
                                 <SidebarMenuItem>
                                     <button
-                                        onClick={onOpenCodeNodeDialog}
+                                        onClick={openCodeNodeDialog}
                                         className={cn(
                                             menuButtonStyles,
                                             'border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-primary/70 hover:text-primary gap-2'
