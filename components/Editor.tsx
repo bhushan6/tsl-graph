@@ -16,7 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
-import type { AppNode, TSLType, TSLNodeData } from '@/lib/types';
+import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
 import { TSLNode } from './TSLNode';
@@ -24,7 +24,7 @@ import GroupNode from './GroupNode';
 import LoopInternalNode from './LoopInternalNode';
 import { NodePicker } from './NodePicker';
 import { Navbar } from '@/components/Navbar';
-import { NoteSearchBar } from './NoteSearchBar';
+import { NoteSearchBar } from './NodeSearchBar';
 import { registry } from '@/lib/registry';
 import { initializeNodes } from '@/lib/nodes';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
@@ -555,7 +555,6 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         noteSearchBar={
                             isFindOpen ? (
                                 <NoteSearchBar
-                                    open={true}
                                     onClose={() => setIsFindOpen(false)}
                                 />
                             ) : null

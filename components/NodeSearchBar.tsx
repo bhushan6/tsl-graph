@@ -11,16 +11,15 @@ import type { AppNode } from '@/lib/types';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
 
 interface NoteSearchBarProps {
-    open: boolean;
     onClose: () => void;
 }
 
-export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
+export function NoteSearchBar({ onClose }: NoteSearchBarProps) {
     const [query, setQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
-    const lastAutoQueryRef = useRef('');
+    const prevDebouncedRef = useRef('');
 
     const nodes = useEditorStore((s) => s.nodes);
     const subgraphs = useEditorStore((s) => s.subgraphs);
@@ -79,6 +78,18 @@ export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
             .map((node) => node.id);
     }, [nodes, debouncedQuery, getDisplayName]);
 
+    // Reset activeIndex when debounced query changes (render-time state adjustment)
+    const trimmedDebounced = debouncedQuery.trim();
+    if (trimmedDebounced !== prevDebouncedRef.current) {
+        prevDebouncedRef.current = trimmedDebounced;
+        if (activeIndex !== 0) {
+            setActiveIndex(0);
+        }
+    }
+
+    // Derive clamped index instead of fixing it up in an effect
+    const clampedIndex = matchIds.length > 0 ? Math.min(activeIndex, matchIds.length - 1) : 0;
+
     const focusMatch = useCallback(
         (index: number) => {
             if (matchIds.length === 0) return;
@@ -101,59 +112,42 @@ export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
     );
 
     const handleNext = useCallback(() => {
-        focusMatch(activeIndex + 1);
-    }, [activeIndex, focusMatch]);
+        focusMatch(clampedIndex + 1);
+    }, [clampedIndex, focusMatch]);
 
     const handlePrev = useCallback(() => {
-        focusMatch(activeIndex - 1);
-    }, [activeIndex, focusMatch]);
+        focusMatch(clampedIndex - 1);
+    }, [clampedIndex, focusMatch]);
 
     useEffect(() => {
-        if (!open) return;
         const handle = requestAnimationFrame(() => inputRef.current?.focus());
         return () => cancelAnimationFrame(handle);
-    }, [open]);
+    }, []);
 
+    // Navigate viewport to first match when search query changes
     useEffect(() => {
-        if (!open) {
-            lastAutoQueryRef.current = '';
-        }
-    }, [open]);
-
-    useEffect(() => {
-        if (!open) return;
-        const trimmed = debouncedQuery.trim();
-        if (!trimmed) {
-            lastAutoQueryRef.current = '';
-            if (activeIndex !== 0) {
-                setActiveIndex(0);
-            }
-            return;
-        }
-        if (lastAutoQueryRef.current !== trimmed) {
-            lastAutoQueryRef.current = trimmed;
-            if (matchIds.length > 0) {
-                focusMatch(0);
-            } else if (activeIndex !== 0) {
-                setActiveIndex(0);
-            }
-        }
-    }, [open, debouncedQuery, matchIds.length, focusMatch, activeIndex]);
-
-    useEffect(() => {
-        if (activeIndex >= matchIds.length) {
-            setActiveIndex(matchIds.length > 0 ? matchIds.length - 1 : 0);
-        }
-    }, [activeIndex, matchIds.length]);
+        if (!trimmedDebounced || matchIds.length === 0) return;
+        const nodeId = matchIds[0];
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return;
+        selectSingleNode(nodeId);
+        const absPosition = getAbsolutePosition(node, nodes);
+        const { width, height } = getNodeDimensions(node);
+        setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
+            zoom: getZoom(),
+            duration: 300,
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedQuery]);
 
     const matchCount = matchIds.length;
-    const matchDisplay = matchCount === 0 ? '0/0' : `${activeIndex + 1}/${matchCount}`;
+    const matchDisplay = matchCount === 0 ? '0/0' : `${clampedIndex + 1}/${matchCount}`;
 
     return (
         <div
             className={cn(
                 "pointer-events-auto flex items-center gap-1 rounded-md border border-border bg-background/95 px-2 py-1 shadow-sm",
-                open ? "opacity-100" : "hidden"
+                "opacity-100"
             )}
         >
             <Input
