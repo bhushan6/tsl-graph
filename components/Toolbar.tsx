@@ -244,6 +244,25 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                         </TooltipTrigger>
                         <TooltipContent>Create Loop</TooltipContent>
                     </Tooltip>
+                    {selectedNodeIds.length >= 2 && (() => {
+                        const chainResult = detectConvertibleChain(selectedNodeIds, nodes, edges);
+                        if (!chainResult.valid) return null;
+                        return (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => convertChainToMultiOp(chainResult.orderedNodeIds)}
+                                        className="h-8 w-8"
+                                    >
+                                        <Combine className="w-4 h-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Convert to Multi-op</TooltipContent>
+                            </Tooltip>
+                        );
+                    })()}
                     {onOpenCodePanel && (
                         <Tooltip>
                             <TooltipTrigger asChild>
