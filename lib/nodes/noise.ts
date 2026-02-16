@@ -1,7 +1,7 @@
 import { BaseNodeDef } from './definitions';
 
 // NOISE NODES with built-in TSL functions
-export const noiseNodes: BaseNodeDef[] = [
+export const noiseNodes = [
     {
         type: 'noise/interleaved_gradient',
         label: 'Interleaved Gradient Noise',
@@ -217,7 +217,7 @@ export const noiseNodes: BaseNodeDef[] = [
         outputs: { out: { label: 'Out', type: 'float' } },
         tsl: 'triNoise3D',
     },
-];
+] as const;
 
 // Type check
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

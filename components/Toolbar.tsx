@@ -11,6 +11,7 @@ import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
 import { detectConvertibleChain } from '@/lib/multi-op-convert';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { useReactFlow } from '@xyflow/react';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
@@ -46,6 +47,8 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
     // Ref to track subgraph name without causing re-renders
     const subgraphNameRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    const { setCenter, getZoom } = useReactFlow();
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
@@ -102,11 +105,15 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
 
         setIsProcessing(true);
         try {
-            await exitSubgraphEditor(save, nameOverride);
+            const subgraphNode = await exitSubgraphEditor(save, nameOverride);
+            if (subgraphNode) {
+                const zoom = getZoom();
+                setCenter(subgraphNode.position.x, subgraphNode.position.y, { duration: 0, zoom });
+            }
         } finally {
             setIsProcessing(false);
         }
-    }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing]);
+    }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing, setCenter, getZoom]);
 
     // Check if any selected node is a material node
     const isMaterialSelected = selectedNodeIds.some(id => {

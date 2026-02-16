@@ -65,12 +65,12 @@ export function StaleTemplatesNotification() {
     };
 
     // Get the set of subgraph/code node types actually used in the current graph
-    const usedSubgraphIds = useMemo(() => new Set(
+    const usedSubgraphIds = useMemo(() => new Set<string>(
         nodes
             .filter(n => n.data.type.startsWith('custom/'))
             .map(n => n.data.type)
     ), [nodes]);
-    const usedCodeNodeIds = useMemo(() => new Set(
+    const usedCodeNodeIds = useMemo(() => new Set<string>(
         nodes
             .filter(n => n.data.type.startsWith('code/'))
             .map(n => n.data.type)

@@ -1,5 +1,5 @@
 import { registry } from './registry';
-import { NodeDef } from './types';
+import { NodeDef, NodeType } from './types';
 
 export interface GroupedNodeList<T> {
     [category: string]: T[];
@@ -64,5 +64,9 @@ export const getGroupedCompatibleNodes = <T extends { category: string }>(nodes:
 };
 
 export const getAllNodes = (): NodeDef[] => {
-    return registry.all();
+    return registry.all()
+};
+
+export const getAllNodesButExclud = (excludedNodes: NodeType[]): NodeDef[] => {
+    return registry.allButExclud(excludedNodes)
 };

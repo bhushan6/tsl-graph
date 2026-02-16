@@ -13,7 +13,7 @@ import {
     getNodesBounds,
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
-import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { loopNodes, MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
@@ -123,7 +123,10 @@ const LOOP_SLOT_GAP = 90;
 const LOOP_NODE_WIDTH = 50;
 const LOOP_EXTRA_HEIGHT = 120;
 
-const LOOP_LEFT_NODE_TYPES_BY_MODE: Record<LoopMode, readonly string[]> = {
+//omit 'loop' 
+type LoopInternalNodeType = Exclude<typeof loopNodes[number]['type'], "loop">;
+
+const LOOP_LEFT_NODE_TYPES_BY_MODE: Record<LoopMode, readonly LoopInternalNodeType[]> = {
     count: ['loop/count', 'loop/index', 'loop/accumulator'],
     range: ['loop/start', 'loop/end', 'loop/index', 'loop/accumulator'],
     reverse: ['loop/start', 'loop/index', 'loop/accumulator'],
@@ -173,7 +176,7 @@ const getLoopMode = (node: Node<TSLNodeData>): LoopMode => {
     return typeof mode === 'string' && isLoopMode(mode) ? mode : DEFAULT_LOOP_MODE;
 };
 
-const getLoopLeftNodeTypes = (mode: LoopMode): readonly string[] => {
+const getLoopLeftNodeTypes = (mode: LoopMode): readonly NodeType[] => {
     return LOOP_LEFT_NODE_TYPES_BY_MODE[mode] ?? LOOP_LEFT_NODE_TYPES_BY_MODE[DEFAULT_LOOP_MODE];
 };
 
@@ -527,7 +530,7 @@ interface EditorState {
     // Subgraph actions
     createSubgraph: (name: string, selectedNodeIds: string[]) => string | null;
     enterSubgraphEditor: (subgraphId: string, options?: { createInstanceOnSave?: boolean }) => boolean;
-    exitSubgraphEditor: (save: boolean, nameOverride?: string) => Promise<void>;
+    exitSubgraphEditor: (save: boolean, nameOverride?: string) => Promise<Node<TSLNodeData> | null>;
     updateSubgraphDefinition: (subgraphId: string, updates: Partial<SubgraphDefinition>) => void;
     addSubgraphDefinition: (subgraph: SubgraphDefinition) => void;
     deleteSubgraph: (subgraphId: string) => void;
@@ -2157,7 +2160,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 editorMode: 'main',
                 editingSubgraphId: null,
             });
-            return;
+            return null;
         }
 
         // Pop last item
@@ -2342,7 +2345,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
-                return;
+                return null;
             }
 
             if (originalNodes.length > 0) {
@@ -2410,7 +2413,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
-                return;
+                return instanceNode;
             }
 
             // No original nodes - insert a fresh instance near the current graph
@@ -2449,7 +2452,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     history: stackItem.history, // Restore parent history
                 });
             }, 0);
-            return;
+            return instanceNode;
         }
 
         // Restore graph (fallback for cancel)
@@ -2466,6 +2469,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeIds: [],
             history: stackItem.history, // Restore parent history
         });
+        return null;
     },
 
     updateSubgraphDefinition: (subgraphId: string, updates: Partial<SubgraphDefinition>) => {

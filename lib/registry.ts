@@ -24,6 +24,10 @@ class NodeRegistry {
         return [...this.defs.values()];
     }
 
+    allButExclud(types: NodeType[]): NodeDef[] {
+        return [...this.defs.values()].filter((def) => !types.includes(def.type));
+    }
+
     byCategory(): Record<string, NodeDef[]> {
         const grouped: Record<string, NodeDef[]> = {};
         for (const def of this.defs.values()) {

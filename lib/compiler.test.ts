@@ -2,10 +2,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { compileGraph, compileSubgraphCode, getRequiredImports } from './compiler';
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData, GlobalContextEntry } from '@/lib/types';
+import { TSLNodeData, GlobalContextEntry, NodeType, CodeNodeDefinition, SubgraphDefinition } from '@/lib/types';
 import { registry } from './registry';
 import { NodeDef } from './types';
-import { NodeType } from '@/lib/types';
 
 // Mock registry data - comprehensive set of nodes
 const mockDefs: NodeDef[] = [
@@ -372,7 +371,7 @@ describe('compileGraph', () => {
                 createNode('wgsl-node', 'code/wgsl-test'),
             ];
 
-            const codeNodes = {
+            const codeNodes: Record<string, CodeNodeDefinition> = {
                 'code/wgsl-test': {
                     id: 'code/wgsl-test',
                     name: 'WGSL Test',
@@ -615,7 +614,7 @@ describe('compileSubgraphCode', () => {
     it('should compile a subgraph function with inputs/outputs', () => {
         const addNode = createNode('add1', 'math/add');
 
-        const subgraph = {
+        const subgraph: SubgraphDefinition = {
             id: 'custom/my-subgraph',
             name: 'My Subgraph',
             inputs: [
@@ -1090,7 +1089,7 @@ describe('getRequiredImports', () => {
 
     it('should include wgslFn when WGSL code nodes are used', () => {
         const nodes = [createNode('wgsl-node', 'code/wgsl-test')];
-        const codeNodes = {
+        const codeNodes: Record<string, CodeNodeDefinition> = {
             'code/wgsl-test': {
                 id: 'code/wgsl-test',
                 name: 'WGSL Test',

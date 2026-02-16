@@ -77,6 +77,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         canvasMode,
         copySelection,
         pasteSelection,
+        editingSubgraphId
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -150,13 +151,19 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
     // Snapshot triggers for ReactFlow events
 
-    const { getNodes, getEdges } = useReactFlow<AppNode>();
+    const { getNodes, getEdges, fitView } = useReactFlow<AppNode>();
     const dropNodesIntoGroup = useEditorStore((s) => s.dropNodesIntoGroup);
     const setHoveredGroupId = useEditorStore((s) => s.setHoveredGroupId);
 
     const handlePaneMouseMove = useCallback((event: React.MouseEvent) => {
         lastPanePositionRef.current = { x: event.clientX, y: event.clientY };
     }, []);
+
+    useEffect(() => {
+        if (editingSubgraphId) {
+            fitView();
+        }
+    }, [fitView, editingSubgraphId]);
 
     // 1. Dragging: Snapshot when drag starts to capture original position
     const onNodeDragStart = useCallback(() => {

@@ -1,6 +1,6 @@
 import { BaseNodeDef } from './definitions';
 
-export const utilsNodes: readonly BaseNodeDef[] = [
+export const utilsNodes = [
     {
         type: 'utils/rotation3d',
         label: 'Rotation 3D',
@@ -165,3 +165,5 @@ export const utilsNodes: readonly BaseNodeDef[] = [
         tsl: 'fresnelFull',
     }
 ] as const;
+
+const _utilsNodesCheck: readonly BaseNodeDef[] = utilsNodes;

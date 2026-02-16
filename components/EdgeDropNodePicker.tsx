@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, getAllNodes } from '@/lib/node-picker-utils';
+import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, getAllNodesButExclud } from '@/lib/node-picker-utils';
 import { NodeType, NodeDef, TSLType } from '@/lib/types';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
@@ -35,6 +35,8 @@ interface SubgraphNodeDef extends Omit<NodeDef, 'tsl'> {
     tsl: string;
 }
 
+type EdgeDropNodeDef = NodeDef | CodeNodeDef | SubgraphNodeDef;
+
 export function EdgeDropNodePicker({
     position,
     flowPosition,
@@ -44,6 +46,8 @@ export function EdgeDropNodePicker({
     onClose,
 }: EdgeDropNodePickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+
+    const editorMode = useEditorStore((s) => s.editorMode);
 
     // Close on click outside
     useEffect(() => {
@@ -77,7 +81,8 @@ export function EdgeDropNodePicker({
     // Get compatible nodes
     const compatibleNodes = useMemo(() => {
         if (!sourceDataType && !handleDirection) {
-            return getAllNodes();
+            const excludedNodes: NodeType[] = editorMode === "main" ? ["loop"] : ["loop", "const/uniform"]
+            return getAllNodesButExclud(excludedNodes);
         }
         if (!sourceDataType) {
             return handleDirection === 'output'
@@ -89,7 +94,7 @@ export function EdgeDropNodePicker({
                 ? getCompatibleNodes(sourceDataType)
                 : getNodesWithOutputType(sourceDataType);
         }
-    }, [sourceDataType, handleDirection])
+    }, [sourceDataType, handleDirection, editorMode])
 
 
 
@@ -154,27 +159,27 @@ export function EdgeDropNodePicker({
                 return scope !== 'project';
             })
             .map(template => {
-            const data = template.data as {
-                id: string;
-                inputs: Array<{ id: string; label: string; type: string }>;
-                outputs: Array<{ id: string; label: string; type: string }>;
-            };
-            return {
-                type: `subgraph/${template._id}` as NodeType,
-                label: template.name,
-                category: 'Custom' as const,
-                isSubgraphNode: true as const,
-                inputs: data.inputs.reduce((acc, inp) => {
-                    acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
-                    return acc;
-                }, {} as Record<string, { label: string; type: TSLType }>),
-                outputs: data.outputs.reduce((acc, out) => {
-                    acc[out.id] = { label: out.label, type: out.type as TSLType };
-                    return acc;
-                }, {} as Record<string, { label: string; type: TSLType }>),
-                tsl: data.id,
-            };
-        });
+                const data = template.data as {
+                    id: string;
+                    inputs: Array<{ id: string; label: string; type: string }>;
+                    outputs: Array<{ id: string; label: string; type: string }>;
+                };
+                return {
+                    type: `subgraph/${template._id}` as NodeType,
+                    label: template.name,
+                    category: 'Custom' as const,
+                    isSubgraphNode: true as const,
+                    inputs: data.inputs.reduce((acc, inp) => {
+                        acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
+                        return acc;
+                    }, {} as Record<string, { label: string; type: TSLType }>),
+                    outputs: data.outputs.reduce((acc, out) => {
+                        acc[out.id] = { label: out.label, type: out.type as TSLType };
+                        return acc;
+                    }, {} as Record<string, { label: string; type: TSLType }>),
+                    tsl: data.id,
+                };
+            });
     }, [userSubgraphTemplates]);
 
     const projectSubgraphNodes = useMemo((): SubgraphNodeDef[] => {
@@ -197,11 +202,12 @@ export function EdgeDropNodePicker({
             }));
     }, [subgraphs]);
 
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const groupedNodes = useMemo(() => {
-        const grouped = getGroupedCompatibleNodes(compatibleNodes);
+        const grouped = getGroupedCompatibleNodes<EdgeDropNodeDef>(compatibleNodes as EdgeDropNodeDef[]);
 
         // Add custom nodes to Custom category
-        const customNodes: (CodeNodeDef | SubgraphNodeDef)[] = [
+        const customNodes: EdgeDropNodeDef[] = [
             ...projectSubgraphNodes,
             ...compatibleSubgraphNodes,
             ...compatibleCodeNodes,
