@@ -1171,6 +1171,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             id,
             type,
             position,
+            selected: true,
             data: {
                 type,
                 values: {},
@@ -1178,7 +1179,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 ...data,
             },
         };
-        set({ nodes: [...get().nodes, newNode], graphStructureVersion: get().graphStructureVersion + 1 });
+        const deselectedNodes = get().nodes.map((node) => ({
+            ...node,
+            selected: false,
+        }));
+        console.log({ deselectedNodes, newNode });
+
+        set({
+            nodes: [...deselectedNodes, newNode],
+            selectedNodeIds: [id],
+            selectedNodeId: id,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
         get().markDirty();
 
         posthog.capture('node_added', {

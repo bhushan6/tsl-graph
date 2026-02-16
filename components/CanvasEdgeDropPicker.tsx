@@ -155,28 +155,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         console.warn("Cannot replace material node when extending from it.");
                         return;
                     }
-
-                    // Remove existing material node and its edges via ReactFlow
-                    // We need to use store actions or setNodes/setEdges locally?
-                    // CanvasEdgeDropPicker uses ReactFlow helpers which trigger store updates via onNodesChange.
-                    // But deleting a node via setNodes is state replacement.
-
-                    // We can use the store's deleteNode, but that might interfere with our local addNodes
-                    // if we do them in sequence.
-                    // The cleanest way is to use store actions for everything if we want consistency,
-                    // but we are using useReactFlow hooks here.
-
-                    // Let's filter manually and update via setNodes/setEdges from useReactFlow
-
-                    // Note: We need to filter based on current ReactFlow state which might be slightly different 
-                    // from store if not synced yet, but usually they are 1:1 in this setup.
-                    // However, we accessed `nodes` from store.
-
-                    // Let's use useReactFlow methods for consistency within this component
-                    // But we need the ID of the existing one.
-
                     const existingId = existingMaterial.id;
-
                     // Remove node
                     setNodes((nds) => nds.filter((n) => n.id !== existingId));
                     // Remove connected edges
@@ -385,7 +364,14 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 }
             }
 
-            addNodes(newNode);
+
+            setNodes((nds) => {
+                const deselectedNodes = nds.map((n) => ({
+                    ...n,
+                    selected: false,
+                }));
+                return [...deselectedNodes, newNode];
+            });
 
             // Determine target handle on the new node
             let targetHandleId = '';
@@ -475,13 +461,13 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     if (!isOpen) return null;
 
     return (
-            <EdgeDropNodePicker
-                position={screenPosition}
-                flowPosition={flowPosition}
-                sourceDataType={sourceDataType}
-                handleDirection={handleDirection}
-                onNodeSelect={handleNodeSelect}
-                onClose={close}
-            />
+        <EdgeDropNodePicker
+            position={screenPosition}
+            flowPosition={flowPosition}
+            sourceDataType={sourceDataType}
+            handleDirection={handleDirection}
+            onNodeSelect={handleNodeSelect}
+            onClose={close}
+        />
     );
 });
