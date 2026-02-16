@@ -139,8 +139,8 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'triplanarTexture', type: 'function', detail: 'triplanarTexture(tex, ...)', info: 'Triplanar texture mapping' },
     { label: 'viewportDepthTexture', type: 'function', detail: 'viewportDepthTexture(uv)', info: 'Viewport depth' },
     { label: 'viewportSharedTexture', type: 'function', detail: 'viewportSharedTexture(uv)', info: 'Viewport shared texture' },
-    { label: 'viewportLinearDepth', type: 'function', detail: 'viewportLinearDepth(uv)', info: 'Viewport linear depth' },
-    { label: 'linearDepth', type: 'function', detail: 'linearDepth(depth)', info: 'Convert to linear depth' },
+    { label: 'viewportLinearDepth', type: 'variable', detail: 'float', info: 'Viewport linear depth (current fragment)' },
+    { label: 'linearDepth', type: 'function', detail: 'linearDepth(depth?)', info: 'Convert to linear depth' },
 
     // -- Color utilities --
     { label: 'luminance', type: 'function', detail: 'luminance(color)', info: 'Get luminance of color' },

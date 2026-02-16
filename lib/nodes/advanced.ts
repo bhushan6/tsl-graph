@@ -34,6 +34,7 @@ export const advancedNodes = [
         },
         tsl: 'linearDepth',
         pure: true,
+        callable: true,
     },
     {
         type: 'advanced/linearDepthFrom',
@@ -73,9 +74,6 @@ export const advancedNodes = [
         type: 'advanced/viewportLinearDepth',
         label: 'Viewport Linear Depth',
         category: 'Advanced',
-        inputs: {
-            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
-        },
         outputs: {
             out: { label: 'Out', type: 'float' },
         },

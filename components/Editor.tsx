@@ -16,7 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
-import type { AppNode, TSLType, TSLNodeData } from '@/lib/types';
+import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
 import { TSLNode } from './TSLNode';

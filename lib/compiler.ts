@@ -677,6 +677,9 @@ function compileSubgraphDefinition(
 
         if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
+        } else if (def.type === 'const/color') {
+            const hex = getStringValue(node, 'value', inputs['value']);
+            code = `color("${hex}")`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', internalEdges, compiledNodes, inputs['in'], argsMap);
         } else if (inputKeys.length === 0) {
@@ -1614,6 +1617,9 @@ export function compileGraph(
 
         if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
+        } else if (def.type === 'const/color') {
+            const hex = getStringValue(node, 'value', inputs['value']);
+            code = `color("${hex}")`;
         } else if (def.type === 'geo/uv') {
             const index = Number(node.data.values?.['index'] ?? 0);
             code = `uv(${index})`;
