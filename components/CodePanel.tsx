@@ -7,7 +7,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
-import { compileGraph, compileSubgraphCode, getRequiredImports } from '@/lib/compiler';
+import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports } from '@/lib/compiler';
 import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +32,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const globals = useEditorStore((s) => s.globals);
     const editorMode = useEditorStore((s) => s.editorMode);
     const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
+    const getRootGraph = useEditorStore((s) => s.getRootGraph);
 
     const extensions = useMemo(() => [javascript()], []);
 
@@ -60,8 +61,36 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         if (subgraphDefinition) {
             return compileSubgraphCode(subgraphDefinition, subgraphs, codeNodes, { globals });
         }
-        return compileGraph(nodes, edges, subgraphs, codeNodes, { globals });
-    }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition]);
+        const materialGraph = getRootGraph('material');
+        const postGraph = getRootGraph('post');
+        const materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
+
+        let postCode = '// Post graph could not be compiled.';
+        let postFn: string | null = null;
+        try {
+            const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
+            postCode = postCompiled.code;
+            postFn = postCompiled.functionName;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Post graph could not be compiled.';
+            postCode = `// ${message}`;
+        }
+
+        return [
+            '// Material Graph',
+            materialCode,
+            '',
+            '// Post Graph',
+            postCode,
+            '',
+            '// Pipeline Wiring',
+            'const scenePass = pass(scene, camera);',
+            'const postProcessing = new PostProcessing(renderer);',
+            ...(postFn
+                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode());`, 'postProcessing.render();']
+                : ['renderer.render(scene, camera);']),
+        ].join('\n');
+    }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
 
     const imports = useMemo(() => {
         if (subgraphDefinition) {
@@ -70,18 +99,35 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             importSet.add('Fn');
             return Array.from(importSet).sort();
         }
-        return getRequiredImports(nodes, subgraphs, codeNodes, globals);
-    }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition]);
+        const materialGraph = getRootGraph('material');
+        const postGraph = getRootGraph('post');
+        const importSet = new Set([
+            ...getRequiredImports(materialGraph.nodes, subgraphs, codeNodes, globals),
+            ...getRequiredImports(postGraph.nodes, subgraphs, codeNodes, globals),
+            'pass',
+        ]);
+        return Array.from(importSet).sort();
+    }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+
+    const displayedNodeCount = useMemo(() => {
+        if (subgraphDefinition) return subgraphDefinition.nodes.length;
+        const materialGraph = getRootGraph('material');
+        const postGraph = getRootGraph('post');
+        return materialGraph.nodes.length + postGraph.nodes.length;
+    }, [subgraphDefinition, getRootGraph, nodes, edges]);
 
     const handleCopy = useCallback(async () => {
-        const fullCode = imports.length > 0
+        const importBlock = imports.length > 0
             ? `import { ${imports.join(', ')} } from 'three/tsl';\n\n${compiledCode}`
             : compiledCode;
+        const fullCode = subgraphDefinition
+            ? importBlock
+            : `import { PostProcessing } from 'three/webgpu';\n${importBlock.startsWith('import') ? '\n' : '\n\n'}${importBlock}`;
 
         await navigator.clipboard.writeText(fullCode);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    }, [compiledCode, imports]);
+    }, [compiledCode, imports, subgraphDefinition]);
 
     return (
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
@@ -90,7 +136,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     <DialogTitle className="flex flex-col gap-1">
                         <span>{subgraphDefinition ? 'Subgraph Output' : 'TSL Output'}</span>
                         <span className="text-xs text-muted-foreground font-normal">
-                            ({subgraphDefinition ? subgraphDefinition.nodes.length : nodes.length} node{(subgraphDefinition ? subgraphDefinition.nodes.length : nodes.length) !== 1 ? 's' : ''})
+                            ({displayedNodeCount} node{displayedNodeCount !== 1 ? 's' : ''})
                         </span>
                     </DialogTitle>
                 </DialogHeader>
@@ -100,7 +146,10 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border shrink-0">
                         <span className="text-xs text-muted-foreground font-mono truncate">
                             {imports.length > 0 && (
-                                <>import {'{'} {imports.join(', ')} {'}'} from &apos;three/tsl&apos;;</>
+                                <>
+                                    import {'{'} {imports.join(', ')} {'}'} from &apos;three/tsl&apos;;
+                                    {!subgraphDefinition && ' | import { PostProcessing } from \'three/webgpu\';'}
+                                </>
                             )}
                         </span>
                         <Button

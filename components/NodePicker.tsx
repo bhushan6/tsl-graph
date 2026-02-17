@@ -7,6 +7,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { registry } from '@/lib/registry';
+import { POST_ANCHOR_NODE_TYPES } from '@/lib/nodes';
 import { useEditorStore } from '@/store/editor';
 import { cn, getErrorMessage } from '@/lib/utils';
 import { NodeType, SubgraphPort } from '@/lib/types';
@@ -69,6 +70,7 @@ interface NodePickerProps {
 function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
     const addNode = useEditorStore((s) => s.addNode);
     const editorMode = useEditorStore((s) => s.editorMode);
+    const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
     const nodes = useEditorStore((s) => s.nodes);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const { screenToFlowPosition } = useReactFlow();
@@ -350,6 +352,14 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                 continue;
             }
 
+            if (editorMode === 'main' && activeRootGraph === 'material' && category === 'Post') {
+                continue;
+            }
+
+            if (editorMode === 'main' && activeRootGraph === 'post' && category === 'Material') {
+                continue;
+            }
+
             const filtered = categoryNodes.filter(node => {
                 // Search filter
                 if (query && !node.label.toLowerCase().includes(query)) {
@@ -362,6 +372,14 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                 }
 
                 if (editorMode === 'subgraph' && node.type === 'const/uniform') {
+                    return false;
+                }
+
+                if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(node.type)) {
+                    return false;
+                }
+
+                if (editorMode === 'main' && activeRootGraph === 'post' && node.type === 'texture/viewportShared') {
                     return false;
                 }
 
@@ -387,7 +405,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
         }
 
         return result;
-    }, [nodesByCategory, editorMode, hasInputAnchor, hasOutputAnchor, searchQuery]);
+    }, [nodesByCategory, editorMode, activeRootGraph, hasInputAnchor, hasOutputAnchor, searchQuery]);
 
     // Menu button styles matching shadcn SidebarMenuButton
     const menuButtonStyles = cn(

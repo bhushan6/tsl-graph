@@ -1,6 +1,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { compileGraph, compileSubgraphCode, getRequiredImports } from './compiler';
+import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports } from './compiler';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, GlobalContextEntry, NodeType, CodeNodeDefinition, SubgraphDefinition } from '@/lib/types';
 import { registry } from './registry';
@@ -179,6 +179,17 @@ const mockDefs: NodeDef[] = [
         tsl: 'normalWorld',
         pure: true,
         outputs: { out: { type: 'vec3', label: 'XYZ' } }
+    },
+    {
+        type: 'texture/sampleNode',
+        label: 'Sample Texture Node',
+        category: 'Texture',
+        tsl: 'texture',
+        inputs: {
+            texture: { type: 'any', label: 'Texture', connectionOnly: true },
+            uv: { type: 'vec2', label: 'UV', connectionOnly: true },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } }
     },
     // Logic Nodes
     {
@@ -572,7 +583,7 @@ describe('compileGraph', () => {
             expect(code).toContain('add(_node0.x, 10)');
         });
 
-    it('should handle complex node chains', () => {
+        it('should handle complex node chains', () => {
             const nodes = [
                 createNode('t1', 'geo/time'),
                 createNode('sin1', 'math/sin'),
@@ -607,6 +618,63 @@ describe('compileGraph', () => {
             const code = compileGraph(nodes, []);
             expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), 0.5)');
         });
+    });
+});
+
+describe('compilePostGraph', () => {
+    it('compiles a connected post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'color', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.functionName).toMatch(/^PostGraph/);
+        expect(result.code).toContain('return arg_in_color;');
+    });
+
+    it('compiles post graph texture sampling from scene input', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('uv0', 'geo/uv'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'sceneTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'uv0', sourceHandle: 'out', target: 'sample', targetHandle: 'uv' },
+            { id: 'e3', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_sceneTexture,');
+    });
+
+    it('uses screenUV by default when sample texture uv is not connected', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'sceneTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_sceneTexture, screenUV)');
+    });
+
+    it('throws when post output is disconnected', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+        ];
+
+        expect(() => compilePostGraph(nodes, [])).toThrow('Post output is not connected.');
     });
 });
 
@@ -1031,6 +1099,12 @@ describe('getRequiredImports', () => {
         const nodes = [createNode('add1', 'math/add', { values: { a: [1, 2, 3, 4] } })];
         const imports = getRequiredImports(nodes);
         expect(imports).toContain('vec4');
+    });
+
+    it('should include screenUV for sample texture node default UV', () => {
+        const nodes = [createNode('sample', 'texture/sampleNode')];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toContain('screenUV');
     });
 
     it('should return sorted imports', () => {

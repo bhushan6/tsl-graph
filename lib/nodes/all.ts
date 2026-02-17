@@ -6,3 +6,4 @@ export * from './model';
 export * from './logic';
 export * from './loop';
 export * from './assign';
+export * from './post';

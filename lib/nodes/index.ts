@@ -13,6 +13,7 @@ import { logicNodes } from './logic';
 import { loopNodes } from './loop';
 import { assignNodes } from './assign';
 import { globalNodes } from './globals';
+import { postNodes, POST_ANCHOR_NODE_TYPES } from './post';
 
 
 // Register all nodes
@@ -31,8 +32,9 @@ export function initializeNodes() {
     registry.registerMany(loopNodes);
     registry.registerMany(assignNodes);
     registry.registerMany(globalNodes);
+    registry.registerMany(postNodes);
 }
 
 
 // Re-export for convenience
-export { constantNodes, mathNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes, logicNodes, loopNodes, assignNodes, globalNodes };
+export { constantNodes, mathNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes, logicNodes, loopNodes, assignNodes, globalNodes, postNodes, POST_ANCHOR_NODE_TYPES };

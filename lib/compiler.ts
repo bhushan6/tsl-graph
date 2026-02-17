@@ -1,7 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port, GlobalContextEntry } from '@/lib/types';
 import { registry } from './registry';
-import { MATERIAL_NODE_TYPES } from './nodes';
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
 import { UNIFORM_KINDS, formatUniformValueExpression, getUniformKindFromNode, type UniformKind } from './uniform-utils';
@@ -229,6 +229,11 @@ function getInputValue(
             const swizzle = getSwizzleSuffix(edge.sourceHandle, upstream.singleOutput);
             return `${upstream.varName}${swizzle}`;
         }
+    }
+
+    // Sensible fallback for post texture sampling nodes.
+    if (node.data.type === 'texture/sampleNode' && inputKey === 'uv') {
+        return 'screenUV';
     }
 
     const value = node.data.values?.[inputKey] ?? inputDef.default;
@@ -1096,6 +1101,118 @@ export function compileSubgraphCode(
     return lines.join('\n');
 }
 
+export interface CompiledPostGraph {
+    code: string;
+    functionName: string;
+}
+
+const POST_INPUT_ID = 'post-input';
+const POST_OUTPUT_ID = 'post-output';
+
+/**
+ * Compile the post-processing root graph by mapping post anchors to synthetic
+ * subgraph anchors and reusing the subgraph compiler path.
+ */
+export function compilePostGraph(
+    nodes: Node<TSLNodeData>[],
+    edges: Edge[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    options: CompileOptions = {}
+): CompiledPostGraph {
+    const inputAnchor = nodes.find((node) => node.id === POST_INPUT_ID || node.data.type === 'post/input');
+    const outputAnchor = nodes.find((node) => node.id === POST_OUTPUT_ID || node.data.type === 'post/output');
+
+    if (!inputAnchor || !outputAnchor) {
+        throw new Error('Post graph is missing required post/input or post/output anchors.');
+    }
+
+    const isPostAnchor = (node: Node<TSLNodeData>) =>
+        node.id === POST_INPUT_ID ||
+        node.id === POST_OUTPUT_ID ||
+        (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(node.data.type);
+
+    const nodeIdMap = new Map<string, string>();
+    nodeIdMap.set(inputAnchor.id, 'subgraph-input');
+    nodeIdMap.set(outputAnchor.id, 'subgraph-output');
+
+    const internalNodes = nodes
+        .filter((node) => !isPostAnchor(node))
+        .map((node) => {
+            nodeIdMap.set(node.id, node.id);
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: { ...(node.data.values ?? {}) },
+                    connected: { ...(node.data.connected ?? {}) },
+                    activeInputs: node.data.activeInputs ? [...node.data.activeInputs] : undefined,
+                    dynamicPorts: node.data.dynamicPorts ? node.data.dynamicPorts.map((port) => ({ ...port })) : undefined,
+                    operations: Array.isArray(node.data.operations)
+                        ? node.data.operations.map((op) => ({ ...op }))
+                        : undefined,
+                },
+                style: node.style ? { ...node.style } : undefined,
+            };
+        });
+
+    const syntheticEdges = edges
+        .map((edge) => {
+            const mappedSource = nodeIdMap.get(edge.source);
+            const mappedTarget = nodeIdMap.get(edge.target);
+            if (!mappedSource || !mappedTarget) return null;
+
+            let mappedSourceHandle = edge.sourceHandle;
+            if (mappedSource === 'subgraph-input') {
+                mappedSourceHandle = edge.sourceHandle === 'sceneTexture' ? 'in_sceneTexture' : 'in_color';
+            }
+
+            return {
+                ...edge,
+                source: mappedSource,
+                target: mappedTarget,
+                sourceHandle: mappedSourceHandle,
+                targetHandle: mappedTarget === 'subgraph-output' ? 'out_0' : edge.targetHandle,
+            };
+        })
+        .filter((edge): edge is Edge => edge !== null);
+
+    const hasConnectedOutput = syntheticEdges.some(
+        (edge) => edge.target === 'subgraph-output' && (edge.targetHandle ?? 'out_0') === 'out_0'
+    );
+
+    if (!hasConnectedOutput) {
+        throw new Error('Post output is not connected.');
+    }
+
+    const syntheticSubgraph: SubgraphDefinition = {
+        id: 'custom/post-root',
+        name: 'PostGraph',
+        scope: 'project',
+        inputs: [
+            { id: 'in_color', label: 'Color', type: 'vec4' },
+            { id: 'in_sceneTexture', label: 'Scene Texture', type: 'any' },
+        ],
+        outputs: [{ id: 'out_0', label: 'Output', type: 'vec4' }],
+        nodes: internalNodes,
+        edges: syntheticEdges,
+        inputNodePosition: inputAnchor.position,
+        outputNodePosition: outputAnchor.position,
+        createdAt: 0,
+        updatedAt: 0,
+    };
+
+    const code = compileSubgraphCode(syntheticSubgraph, subgraphs, codeNodes, options);
+    const fnMatches = Array.from(code.matchAll(/const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*Fn\(\(\[/g));
+    const functionName = fnMatches[fnMatches.length - 1]?.[1];
+
+    if (!functionName) {
+        throw new Error('Failed to locate compiled post-processing function.');
+    }
+
+    return { code, functionName };
+}
+
 /**
  * Compile a graph of nodes and edges into TSL code.
  * @param nodes - The nodes in the graph
@@ -1628,6 +1745,20 @@ export function compileGraph(
             code = `int(${count})`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', edgesForInputs, compiledNodes, inputs['in']);
+        } else if (
+            def.type === 'texture/sampleNode' ||
+            (def.tsl === 'texture' && !!inputs['texture'] && !inputs['url'])
+        ) {
+            const texArg = getInputValue(node, 'texture', edgesForInputs, compiledNodes, inputs['texture']);
+            const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');
+
+            if (uvEdge) {
+                const uvArg = getInputValue(node, 'uv', edgesForInputs, compiledNodes, inputs['uv']);
+                code = `texture(${texArg}, ${uvArg})`;
+            } else {
+                // Default to screen UV when no explicit UV input is connected.
+                code = `texture(${texArg}, screenUV)`;
+            }
         } else if (def.type === 'texture/sample') {
             const url = getStringValue(node, 'url', inputs['url']);
 
@@ -2094,6 +2225,10 @@ export function getRequiredImports(
             const ops = getMultiOpOperations(node);
             addMultiOpImports(ops);
             continue;
+        }
+
+        if (node.data.type === 'texture/sampleNode') {
+            imports.add('screenUV');
         }
 
         // Assign nodes require Fn wrapper in main graph

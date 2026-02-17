@@ -13,6 +13,7 @@ import { logicNodes } from './logic';
 import { loopNodes } from './loop';
 import { assignNodes } from './assign';
 import { globalNodes } from './globals';
+import { postNodes } from './post';
 
 
 // Aggregate all nodes
@@ -31,6 +32,7 @@ export const allNodes = [
     ...loopNodes,
     ...assignNodes,
     ...globalNodes,
+    ...postNodes,
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread

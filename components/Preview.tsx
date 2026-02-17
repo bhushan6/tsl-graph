@@ -3,10 +3,11 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useEditorStore, PreviewMeshType } from '@/store/editor';
 import * as THREE from 'three/webgpu'; // Changed to webgpu as per file content
+import { pass } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { buildTSLMaterial } from '@/lib/tsl-builder';
+import { buildTSLMaterial, buildTSLPostOutputNode } from '@/lib/tsl-builder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,6 +43,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const controlsRef = useRef<OrbitControls | null>(null);
+    const postProcessingRef = useRef<THREE.PostProcessing | null>(null);
+    const usePostProcessingRef = useRef(false);
     const meshRef = useRef<THREE.Mesh | null>(null);
     const backdropRef = useRef<THREE.Group | null>(null);
     const gridRef = useRef<THREE.GridHelper | null>(null);
@@ -53,6 +56,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const updatePreviewSettingsDebounced = useEditorStore((state) => state.updatePreviewSettingsDebounced);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isReady, setIsReady] = useState(false);
+    const [postError, setPostError] = useState<string | null>(null);
     const [isGeometryScriptOpen, setIsGeometryScriptOpen] = useState(false);
     const [geometryScriptDraft, setGeometryScriptDraft] = useState(previewSettings.geometryScript ?? '');
     const setPreviewSnapshotProvider = useEditorStore((state) => state.setPreviewSnapshotProvider);
@@ -218,21 +222,17 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
 
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+    const getRootGraph = useEditorStore((state) => state.getRootGraph);
 
 
     // Build material from graph
     const { material, error } = useMemo(() => {
         if (!isReady) return { material: null, error: null };
         try {
-            const { nodes, edges, subgraphs, codeNodes, globals } = useEditorStore.getState();
-            // Pass instanceCount to the builder so it's available in the scope (if needed)
-            // Even though we moved to baking it into the compiled code, 
-            // the builder might still use it for other things or future proofing.
-            // But wait, compileGraph uses the NODE's value. 
-            // buildTSLMaterial calls compileGraph.
-            // So we don't strictly need to pass it to buildTSLMaterial if the nodes are already updated.
+            const { subgraphs, codeNodes, globals } = useEditorStore.getState();
+            const materialGraph = getRootGraph('material');
             return {
-                material: buildTSLMaterial(nodes, edges, subgraphs, codeNodes, globals),
+                material: buildTSLMaterial(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, globals),
                 error: null
             };
         } catch (e) {
@@ -243,7 +243,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             };
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [graphStructureVersion, isReady]);
+    }, [graphStructureVersion, isReady, getRootGraph]);
 
     useEffect(() => {
         if (!rendererRef.current || !sceneRef.current || !cameraRef.current || !meshRef.current) return;
@@ -260,6 +260,53 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             material?.dispose();
         };
     }, [material]);
+
+    useEffect(() => {
+        if (!isReady || !rendererRef.current || !sceneRef.current || !cameraRef.current) {
+            usePostProcessingRef.current = false;
+            return;
+        }
+
+        if (!postProcessingRef.current) {
+            postProcessingRef.current = new THREE.PostProcessing(rendererRef.current);
+        }
+
+        if (!(previewSettings.postEnabled ?? true)) {
+            usePostProcessingRef.current = false;
+            setPostError(null);
+            return;
+        }
+
+        try {
+            const { subgraphs, codeNodes, globals } = useEditorStore.getState();
+            const postGraph = getRootGraph('post');
+            const scenePass = pass(sceneRef.current, cameraRef.current);
+            const outputNode = buildTSLPostOutputNode(
+                scenePass,
+                scenePass.getTextureNode(),
+                postGraph.nodes,
+                postGraph.edges,
+                subgraphs,
+                codeNodes,
+                globals
+            );
+
+            if (!outputNode) {
+                usePostProcessingRef.current = false;
+                setPostError('Post graph output is not connected.');
+                return;
+            }
+
+            postProcessingRef.current.outputNode = outputNode;
+            postProcessingRef.current.needsUpdate = true;
+            usePostProcessingRef.current = true;
+            setPostError(null);
+        } catch (e) {
+            console.error('Post-processing build error:', e);
+            usePostProcessingRef.current = false;
+            setPostError(e instanceof Error ? e.message : 'Failed to build post-processing graph');
+        }
+    }, [graphStructureVersion, isReady, previewSettings.postEnabled, getRootGraph]);
 
     // Get geometry based on selected mesh (high subdivision for smooth shading)
     const { geometry, geometryScriptError } = useMemo(() => {
@@ -393,6 +440,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
+            postProcessingRef.current = new THREE.PostProcessing(renderer);
             // Lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
             scene.add(ambientLight);
@@ -420,7 +468,11 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             const animate = () => {
                 frameIdRef.current = requestAnimationFrame(animate);
                 controls.update();
-                renderer.render(scene, camera);
+                if (usePostProcessingRef.current && postProcessingRef.current) {
+                    postProcessingRef.current.render();
+                } else {
+                    renderer.render(scene, camera);
+                }
             };
             animate();
         }
@@ -464,6 +516,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 if (container.contains(rendererRef.current.domElement)) {
                     container.removeChild(rendererRef.current.domElement);
                 }
+            }
+            if (postProcessingRef.current) {
+                postProcessingRef.current.dispose();
+                postProcessingRef.current = null;
             }
         };
     }, []);
@@ -808,6 +864,16 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                                     />
                                 </div>
 
+                                <div className="flex items-center justify-between">
+                                    <Label>Enable Post-Processing</Label>
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-primary"
+                                        checked={previewSettings.postEnabled ?? true}
+                                        onChange={(e) => updatePreviewSettingsDebounced({ postEnabled: e.target.checked })}
+                                    />
+                                </div>
+
                                 {/* Geometry Specific Controls */}
                                 {previewSettings.mesh === 'box' && (
                                     <>
@@ -1083,9 +1149,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             </div>
 
             {/* Error display */}
-            {(error || geometryScriptError) && (
+            {(error || postError || geometryScriptError) && (
                 <div className="absolute bottom-2 left-2 right-2 z-10 bg-destructive/80 text-destructive-foreground text-xs p-2 rounded space-y-1">
                     {error && <div>{error}</div>}
+                    {postError && <div>Post: {postError}</div>}
                     {geometryScriptError && <div>Geometry Script: {geometryScriptError}</div>}
                 </div>
             )}

@@ -1,4 +1,5 @@
 import type { NodeType, TSLType, TSLValueType, GlobalContextEntry } from '@/lib/types';
+import type { RootGraphMode } from '@/store/editor';
 
 export type ToolName =
   | 'getGraphSnapshot'
@@ -43,6 +44,7 @@ export interface EdgeSummary {
 export interface GraphSnapshot {
   nodes: NodeSummary[];
   edges: EdgeSummary[];
+  activeRootGraph: RootGraphMode;
   materialNodeId: string | null;
   selectedNodeIds: string[];
   globals?: GlobalContextEntry[];
@@ -82,6 +84,7 @@ export type ValidationIssue = {
     | 'unknown-node'
     | 'material-count'
     | 'material-unconnected'
+    | 'post-output-unconnected'
     | 'unused-node';
   message: string;
   nodeId?: string;
