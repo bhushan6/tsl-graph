@@ -79,6 +79,10 @@ export function buildTSLMaterial(
 export function buildTSLPostOutputNode(
     sceneColorNode: unknown,
     sceneTextureNode: unknown,
+    sceneDepthNode: unknown,
+    sceneDepthTextureNode: unknown,
+    sceneCameraNear: number,
+    sceneCameraFar: number,
     postNodes: Node<TSLNodeData>[],
     postEdges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
@@ -95,11 +99,28 @@ export function buildTSLPostOutputNode(
     const scopeValues = Object.values(scope);
     const functionBody = `
         ${compiled.code}
-        return ${compiled.functionName}(sceneColorNode, sceneTextureNode);
+        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode, sceneCameraNear, sceneCameraFar);
     `;
 
-    const fn = new Function(...scopeKeys, 'sceneColorNode', 'sceneTextureNode', functionBody);
-    return fn(...scopeValues, sceneColorNode, sceneTextureNode);
+    const fn = new Function(
+        ...scopeKeys,
+        'sceneColorNode',
+        'sceneTextureNode',
+        'sceneDepthNode',
+        'sceneDepthTextureNode',
+        'sceneCameraNear',
+        'sceneCameraFar',
+        functionBody
+    );
+    return fn(
+        ...scopeValues,
+        sceneColorNode,
+        sceneTextureNode,
+        sceneDepthNode,
+        sceneDepthTextureNode,
+        sceneCameraNear,
+        sceneCameraFar
+    );
 }
 
 /**

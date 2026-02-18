@@ -142,6 +142,18 @@ export const geometryNodes = [
         pure: false,
     },
     {
+        type: 'geo/camera',
+        label: 'Camera',
+        category: 'Geometry',
+        outputs: {
+            near: { label: 'Near', type: 'float' as const },
+            far: { label: 'Far', type: 'float' as const },
+            out: { label: 'Near/Far', type: 'vec2' as const },
+        },
+        tsl: 'camera',
+        pure: true,
+    },
+    {
         type: 'geo/screenUV',
         label: 'Screen UV',
         category: 'Geometry',

@@ -9,6 +9,10 @@ export const postNodes = [
         outputs: {
             color: { label: 'Color', type: 'vec4' },
             sceneTexture: { label: 'Scene Texture', type: 'any' },
+            depth: { label: 'Depth', type: 'float' },
+            depthTexture: { label: 'Depth Texture', type: 'any' },
+            cameraNear: { label: 'Camera Near', type: 'float' },
+            cameraFar: { label: 'Camera Far', type: 'float' },
         },
         tsl: '__post_input__',
         pure: true,

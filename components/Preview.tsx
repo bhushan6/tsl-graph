@@ -284,6 +284,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             const outputNode = buildTSLPostOutputNode(
                 scenePass,
                 scenePass.getTextureNode(),
+                scenePass.getLinearDepthNode(),
+                scenePass.getTextureNode('depth'),
+                cameraRef.current.near,
+                cameraRef.current.far,
                 postGraph.nodes,
                 postGraph.edges,
                 subgraphs,

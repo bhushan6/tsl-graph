@@ -173,6 +173,42 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'float', label: 'Out' } }
     },
     {
+        type: 'geo/camera',
+        label: 'Camera',
+        category: 'Geometry',
+        tsl: 'camera',
+        pure: true,
+        outputs: {
+            near: { type: 'float', label: 'Near' },
+            far: { type: 'float', label: 'Far' },
+            out: { type: 'vec2', label: 'Near/Far' },
+        }
+    },
+    {
+        type: 'advanced/perspectiveDepthToViewZ',
+        label: 'Perspective Depth To View Z',
+        category: 'Advanced',
+        tsl: 'perspectiveDepthToViewZ',
+        inputs: {
+            depth: { type: 'float', default: 0, label: 'Depth' },
+            near: { type: 'float', default: 0.01, label: 'Near' },
+            far: { type: 'float', default: 2000, label: 'Far' },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } }
+    },
+    {
+        type: 'advanced/viewZToOrthographicDepth',
+        label: 'View Z To Orthographic Depth',
+        category: 'Advanced',
+        tsl: 'viewZToOrthographicDepth',
+        inputs: {
+            viewZ: { type: 'float', default: 0, label: 'View Z' },
+            near: { type: 'float', default: 0.01, label: 'Near' },
+            far: { type: 'float', default: 2000, label: 'Far' },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } }
+    },
+    {
         type: 'geo/normalWorld',
         label: 'Normal World',
         category: 'Geometry',
@@ -583,7 +619,50 @@ describe('compileGraph', () => {
             expect(code).toContain('add(_node0.x, 10)');
         });
 
-        it('should handle complex node chains', () => {
+        it('should compile camera near/far handles into perspectiveDepthToViewZ', () => {
+            const nodes = [
+                createNode('cam', 'geo/camera'),
+                createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'cam', sourceHandle: 'near', target: 'depthToViewZ', targetHandle: 'near' },
+                { id: 'e2', source: 'cam', sourceHandle: 'far', target: 'depthToViewZ', targetHandle: 'far' },
+            ];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const _node0 = vec2(cameraNear, cameraFar);');
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, _node0.x, _node0.y)');
+        });
+
+        it('should wrap default near/far literals for perspectiveDepthToViewZ', () => {
+            const nodes = [
+                createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            ];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, float(0.01), float(2000))');
+        });
+
+        it('should compile depth -> viewZ -> linear depth chain', () => {
+            const nodes = [
+                createNode('cam', 'geo/camera'),
+                createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+                createNode('toLinear', 'advanced/viewZToOrthographicDepth'),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'cam', sourceHandle: 'near', target: 'depthToViewZ', targetHandle: 'near' },
+                { id: 'e2', source: 'cam', sourceHandle: 'far', target: 'depthToViewZ', targetHandle: 'far' },
+                { id: 'e3', source: 'depthToViewZ', sourceHandle: 'out', target: 'toLinear', targetHandle: 'viewZ' },
+                { id: 'e4', source: 'cam', sourceHandle: 'near', target: 'toLinear', targetHandle: 'near' },
+                { id: 'e5', source: 'cam', sourceHandle: 'far', target: 'toLinear', targetHandle: 'far' },
+            ];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, _node0.x, _node0.y)');
+            expect(code).toContain('viewZToOrthographicDepth(_node1, _node0.x, _node0.y)');
+        });
+
+    it('should handle complex node chains', () => {
             const nodes = [
                 createNode('t1', 'geo/time'),
                 createNode('sin1', 'math/sin'),
@@ -666,6 +745,84 @@ describe('compilePostGraph', () => {
 
         const result = compilePostGraph(nodes, edges);
         expect(result.code).toContain('texture(arg_in_sceneTexture, screenUV)');
+    });
+
+    it('maps depth input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('add', 'math/add', { values: { b: 1 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'depth', target: 'add', targetHandle: 'a' },
+            { id: 'e2', source: 'add', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('add(arg_in_depth, 1)');
+    });
+
+    it('maps depthTexture input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'depthTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_depthTexture, screenUV)');
+    });
+
+    it('compiles geo/camera in post graph using injected scene camera near/far args', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('cam', 'geo/camera'),
+            createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'cam', sourceHandle: 'near', target: 'depthToViewZ', targetHandle: 'near' },
+            { id: 'e2', source: 'cam', sourceHandle: 'far', target: 'depthToViewZ', targetHandle: 'far' },
+            { id: 'e3', source: 'depthToViewZ', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('vec2(arg_in_cameraNear, arg_in_cameraFar)');
+        expect(result.code).not.toContain(' = camera;');
+    });
+
+    it('maps post cameraNear/cameraFar handles', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('cam', 'geo/camera'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'cameraNear', target: 'cam', targetHandle: 'near' },
+            { id: 'e2', source: 'post-input', sourceHandle: 'cameraFar', target: 'cam', targetHandle: 'far' },
+            { id: 'e3', source: 'cam', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('vec2(arg_in_cameraNear, arg_in_cameraFar)');
+    });
+
+    it('wraps default near/far literals for post perspectiveDepthToViewZ', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'depthToViewZ', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('perspectiveDepthToViewZ(0.5, float(0.01), float(2000))');
     });
 
     it('throws when post output is disconnected', () => {
@@ -1075,6 +1232,22 @@ describe('getRequiredImports', () => {
         const imports = getRequiredImports(nodes);
         expect(imports).toContain('add');
         expect(imports).toContain('sin');
+    });
+
+    it('should include camera/depth conversion imports', () => {
+        const nodes = [
+            createNode('cam', 'geo/camera'),
+            createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ'),
+            createNode('toLinear', 'advanced/viewZToOrthographicDepth'),
+        ];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toEqual(expect.arrayContaining([
+            'cameraNear',
+            'cameraFar',
+            'perspectiveDepthToViewZ',
+            'viewZToOrthographicDepth',
+        ]));
+        expect(imports).not.toContain('camera');
     });
 
     it('should include material type', () => {

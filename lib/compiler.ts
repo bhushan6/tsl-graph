@@ -40,6 +40,8 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
     'r': 'x',
     'g': 'y',
     'b': 'z',
+    'near': 'x',
+    'far': 'y',
 };
 
 const LOOP_INTERNAL_NODE_TYPES = new Set([
@@ -680,13 +682,37 @@ function compileSubgraphDefinition(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.pure && inputKeys.length === 0) {
+        if (def.type === 'geo/camera') {
+            const nearArg = argsMap?.['in_cameraNear'];
+            const farArg = argsMap?.['in_cameraFar'];
+            code = nearArg && farArg
+                ? `vec2(${nearArg}, ${farArg})`
+                : 'vec2(cameraNear, cameraFar)';
+        } else if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
         } else if (def.type === 'const/color') {
             const hex = getStringValue(node, 'value', inputs['value']);
             code = `color("${hex}")`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', internalEdges, compiledNodes, inputs['in'], argsMap);
+        } else if (def.type === 'advanced/perspectiveDepthToViewZ') {
+            const depthArg = getInputValue(node, 'depth', internalEdges, compiledNodes, inputs['depth'], argsMap);
+            const nearRaw = getInputValue(node, 'near', internalEdges, compiledNodes, inputs['near'], argsMap);
+            const farRaw = getInputValue(node, 'far', internalEdges, compiledNodes, inputs['far'], argsMap);
+            const nearConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${depthArg}, ${nearArg}, ${farArg})`;
+        } else if (def.type === 'advanced/viewZToOrthographicDepth') {
+            const viewZArg = getInputValue(node, 'viewZ', internalEdges, compiledNodes, inputs['viewZ'], argsMap);
+            const nearRaw = getInputValue(node, 'near', internalEdges, compiledNodes, inputs['near'], argsMap);
+            const farRaw = getInputValue(node, 'far', internalEdges, compiledNodes, inputs['far'], argsMap);
+            const nearConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${viewZArg}, ${nearArg}, ${farArg})`;
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
@@ -1164,7 +1190,27 @@ export function compilePostGraph(
 
             let mappedSourceHandle = edge.sourceHandle;
             if (mappedSource === 'subgraph-input') {
-                mappedSourceHandle = edge.sourceHandle === 'sceneTexture' ? 'in_sceneTexture' : 'in_color';
+                switch (edge.sourceHandle) {
+                    case 'sceneTexture':
+                        mappedSourceHandle = 'in_sceneTexture';
+                        break;
+                    case 'depth':
+                        mappedSourceHandle = 'in_depth';
+                        break;
+                    case 'depthTexture':
+                        mappedSourceHandle = 'in_depthTexture';
+                        break;
+                    case 'cameraNear':
+                        mappedSourceHandle = 'in_cameraNear';
+                        break;
+                    case 'cameraFar':
+                        mappedSourceHandle = 'in_cameraFar';
+                        break;
+                    case 'color':
+                    default:
+                        mappedSourceHandle = 'in_color';
+                        break;
+                }
             }
 
             return {
@@ -1192,6 +1238,10 @@ export function compilePostGraph(
         inputs: [
             { id: 'in_color', label: 'Color', type: 'vec4' },
             { id: 'in_sceneTexture', label: 'Scene Texture', type: 'any' },
+            { id: 'in_depth', label: 'Depth', type: 'float' },
+            { id: 'in_depthTexture', label: 'Depth Texture', type: 'any' },
+            { id: 'in_cameraNear', label: 'Camera Near', type: 'float' },
+            { id: 'in_cameraFar', label: 'Camera Far', type: 'float' },
         ],
         outputs: [{ id: 'out_0', label: 'Output', type: 'vec4' }],
         nodes: internalNodes,
@@ -1732,7 +1782,9 @@ export function compileGraph(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.pure && inputKeys.length === 0) {
+        if (def.type === 'geo/camera') {
+            code = 'vec2(cameraNear, cameraFar)';
+        } else if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
         } else if (def.type === 'const/color') {
             const hex = getStringValue(node, 'value', inputs['value']);
@@ -1745,6 +1797,24 @@ export function compileGraph(
             code = `int(${count})`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', edgesForInputs, compiledNodes, inputs['in']);
+        } else if (def.type === 'advanced/perspectiveDepthToViewZ') {
+            const depthArg = getInputValue(node, 'depth', edgesForInputs, compiledNodes, inputs['depth']);
+            const nearRaw = getInputValue(node, 'near', edgesForInputs, compiledNodes, inputs['near']);
+            const farRaw = getInputValue(node, 'far', edgesForInputs, compiledNodes, inputs['far']);
+            const nearConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${depthArg}, ${nearArg}, ${farArg})`;
+        } else if (def.type === 'advanced/viewZToOrthographicDepth') {
+            const viewZArg = getInputValue(node, 'viewZ', edgesForInputs, compiledNodes, inputs['viewZ']);
+            const nearRaw = getInputValue(node, 'near', edgesForInputs, compiledNodes, inputs['near']);
+            const farRaw = getInputValue(node, 'far', edgesForInputs, compiledNodes, inputs['far']);
+            const nearConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${viewZArg}, ${nearArg}, ${farArg})`;
         } else if (
             def.type === 'texture/sampleNode' ||
             (def.tsl === 'texture' && !!inputs['texture'] && !inputs['url'])
@@ -2188,6 +2258,10 @@ export function getRequiredImports(
                 if ((codeNode?.language ?? 'tsl') === 'wgsl') {
                     imports.add('wgslFn');
                 }
+            } else if (node.data.type === 'geo/camera') {
+                imports.add('cameraNear');
+                imports.add('cameraFar');
+                imports.add('vec2');
             } else {
                 const def = registry.get(node.data.type);
                 if (def && !def.tsl.startsWith('__')) imports.add(def.tsl);
@@ -2231,6 +2305,12 @@ export function getRequiredImports(
             imports.add('screenUV');
         }
 
+        if (node.data.type === 'geo/camera') {
+            imports.add('cameraNear');
+            imports.add('cameraFar');
+            imports.add('vec2');
+        }
+
         // Assign nodes require Fn wrapper in main graph
         if (ASSIGN_NODE_METHODS[node.data.type]) {
             imports.add('Fn');
@@ -2247,7 +2327,7 @@ export function getRequiredImports(
         }
 
         const def = registry.get(node.data.type);
-        if (def && !def.tsl.startsWith('__')) {
+        if (def && !def.tsl.startsWith('__') && node.data.type !== 'geo/camera') {
             imports.add(def.tsl);
         }
 

@@ -87,7 +87,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             'const scenePass = pass(scene, camera);',
             'const postProcessing = new PostProcessing(renderer);',
             ...(postFn
-                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode());`, 'postProcessing.render();']
+                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), camera.near, camera.far);`, 'postProcessing.render();']
                 : ['renderer.render(scene, camera);']),
         ].join('\n');
     }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
