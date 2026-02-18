@@ -81,13 +81,14 @@ export function buildTSLPostOutputNode(
     sceneTextureNode: unknown,
     sceneDepthNode: unknown,
     sceneDepthTextureNode: unknown,
+    sceneNormalTextureNode: unknown,
     sceneCamera: unknown,
     postNodes: Node<TSLNodeData>[],
     postEdges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
     codeNodes?: Record<string, CodeNodeDefinition>,
     globals?: GlobalContextEntry[]
-): unknown | null {
+): THREE.Node | null {
     const compiled = compilePostGraph(postNodes, postEdges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
 
     // Ensure uniform factory is wired to TSL runtime
@@ -99,7 +100,7 @@ export function buildTSLPostOutputNode(
     const functionBody = `
         ${compiled.code}
         const camera = sceneCamera;
-        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode);
+        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode, sceneNormalTextureNode);
     `;
 
     const fn = new Function(
@@ -108,6 +109,7 @@ export function buildTSLPostOutputNode(
         'sceneTextureNode',
         'sceneDepthNode',
         'sceneDepthTextureNode',
+        'sceneNormalTextureNode',
         'sceneCamera',
         functionBody
     );
@@ -117,8 +119,9 @@ export function buildTSLPostOutputNode(
         sceneTextureNode,
         sceneDepthNode,
         sceneDepthTextureNode,
+        sceneNormalTextureNode,
         sceneCamera
-    );
+    ) as THREE.Node;
 }
 
 /**

@@ -38,6 +38,7 @@ export interface PreviewRootGraph {
 }
 
 export interface PreviewCanvas3DProps {
+    layoutMode: 'inline' | 'fullscreen';
     previewSettings: PreviewSettings;
     graphStructureVersion: number;
     materialGraph: PreviewRootGraph;

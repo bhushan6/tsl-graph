@@ -17,6 +17,7 @@ interface CompiledNode {
 export interface CompileOptions {
     uniformMode?: 'inline' | 'runtime';
     globals?: GlobalContextEntry[];
+    runtimeCameraFromScope?: boolean;
 }
 
 function wrapWgslTemplateLiteral(code: string): string {
@@ -358,7 +359,8 @@ function compileSubgraphDefinition(
     usedCodeNodes?: Map<string, string>,
     codeNodesMap?: Record<string, CodeNodeDefinition>,
     globalVarMap?: Map<string, string>,
-    globalReservedNames?: Set<string>
+    globalReservedNames?: Set<string>,
+    options: CompileOptions = {}
 ): string[] {
     if (subgraph.nodes.some((n) => n.data.type === 'const/uniform')) {
         throw new Error('Uniform nodes are not supported inside subgraphs yet.');
@@ -683,7 +685,7 @@ function compileSubgraphDefinition(
         let code: string;
 
         if (def.type === 'geo/camera') {
-            code = subgraph.id === 'custom/post-root'
+            code = options.runtimeCameraFromScope
                 ? 'vec2(camera.near, camera.far)'
                 : 'vec2(cameraNear, cameraFar)';
         } else if (def.pure && inputKeys.length === 0) {
@@ -1090,7 +1092,8 @@ export function compileSubgraphCode(
                 usedCodeNodes,
                 codeNodes,
                 globalVarMap,
-                globalReservedNames
+                globalReservedNames,
+                options
             );
             lines.push(...defLines);
             lines.push('');
@@ -1118,7 +1121,8 @@ export function compileSubgraphCode(
         usedCodeNodes,
         codeNodes,
         globalVarMap,
-        globalReservedNames
+        globalReservedNames,
+        options
     );
     lines.push(...linesForSubgraph);
 
@@ -1198,6 +1202,9 @@ export function compilePostGraph(
                     case 'depthTexture':
                         mappedSourceHandle = 'in_depthTexture';
                         break;
+                    case 'normal':
+                        mappedSourceHandle = 'in_normal';
+                        break;
                     case 'cameraNear':
                     case 'cameraFar':
                         return null;
@@ -1235,6 +1242,7 @@ export function compilePostGraph(
             { id: 'in_sceneTexture', label: 'Scene Texture', type: 'any' },
             { id: 'in_depth', label: 'Depth', type: 'float' },
             { id: 'in_depthTexture', label: 'Depth Texture', type: 'any' },
+            { id: 'in_normal', label: 'Normal Texture', type: 'any' },
         ],
         outputs: [{ id: 'out_0', label: 'Output', type: 'vec4' }],
         nodes: internalNodes,
@@ -1245,7 +1253,12 @@ export function compilePostGraph(
         updatedAt: 0,
     };
 
-    const code = compileSubgraphCode(syntheticSubgraph, subgraphs, codeNodes, options);
+    const code = compileSubgraphCode(
+        syntheticSubgraph,
+        subgraphs,
+        codeNodes,
+        { ...options, runtimeCameraFromScope: true }
+    );
     const fnMatches = Array.from(code.matchAll(/const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*Fn\(\(\[/g));
     const functionName = fnMatches[fnMatches.length - 1]?.[1];
 
@@ -1406,7 +1419,8 @@ export function compileGraph(
                 usedCodeNodes,
                 codeNodes,
                 globalVarMap,
-                globalReservedNames
+                globalReservedNames,
+                options
             );
             lines.push(...defLines);
             lines.push('');

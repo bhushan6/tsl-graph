@@ -11,6 +11,7 @@ export const postNodes = [
             sceneTexture: { label: 'Scene Texture', type: 'any' },
             depth: { label: 'Depth', type: 'float' },
             depthTexture: { label: 'Depth Texture', type: 'any' },
+            normal: { label: 'Normal Texture', type: 'any' },
         },
         tsl: '__post_input__',
         pure: true,

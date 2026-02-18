@@ -85,9 +85,10 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             '',
             '// Pipeline Wiring',
             'const scenePass = pass(scene, camera);',
+            'scenePass.setMRT(mrt({ output, normal: normalView }));',
             'const postProcessing = new PostProcessing(renderer);',
             ...(postFn
-                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'));`, 'postProcessing.render();']
+                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`, 'postProcessing.render();']
                 : ['renderer.render(scene, camera);']),
         ].join('\n');
     }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
@@ -105,6 +106,9 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             ...getRequiredImports(materialGraph.nodes, subgraphs, codeNodes, globals),
             ...getRequiredImports(postGraph.nodes, subgraphs, codeNodes, globals),
             'pass',
+            'mrt',
+            'output',
+            'normalView',
         ]);
         return Array.from(importSet).sort();
     }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);

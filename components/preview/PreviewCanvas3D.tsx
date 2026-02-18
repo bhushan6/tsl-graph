@@ -10,7 +10,7 @@ import {
     useState,
 } from 'react';
 import * as THREE from 'three/webgpu';
-import { pass } from 'three/tsl';
+import { pass, mrt, output, normalView } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -28,6 +28,7 @@ interface CapturedFrame {
 
 export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DProps>(function PreviewCanvas3D(
     {
+        layoutMode,
         previewSettings,
         graphStructureVersion,
         materialGraph,
@@ -169,11 +170,13 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
         try {
             const scenePass = pass(sceneRef.current, cameraRef.current);
+            scenePass.setMRT(mrt({ output, normal: normalView }));
             const outputNode = buildTSLPostOutputNode(
                 scenePass,
                 scenePass.getTextureNode(),
                 scenePass.getLinearDepthNode(),
                 scenePass.getTextureNode('depth'),
+                scenePass.getTextureNode('normal'),
                 cameraRef.current,
                 postGraph.nodes,
                 postGraph.edges,
@@ -217,6 +220,11 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         cameraRef.current.updateProjectionMatrix();
         rendererRef.current.setSize(w, h);
     }, []);
+
+    useEffect(() => {
+        const id = requestAnimationFrame(() => handleResize());
+        return () => cancelAnimationFrame(id);
+    }, [layoutMode, handleResize]);
 
     useEffect(() => {
         if (!containerRef.current || initRef.current) return;

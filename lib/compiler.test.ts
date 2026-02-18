@@ -777,6 +777,21 @@ describe('compilePostGraph', () => {
         expect(result.code).toContain('texture(arg_in_depthTexture, screenUV)');
     });
 
+    it('maps normal input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'normal', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_normal, screenUV)');
+    });
+
     it('compiles geo/camera in post graph using camera.near/camera.far', () => {
         const nodes = [
             createNode('post-input', 'post/input'),

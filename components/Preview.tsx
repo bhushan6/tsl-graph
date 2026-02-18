@@ -249,6 +249,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
             <PreviewCanvas3D
                 ref={canvasRef}
+                layoutMode={isFullScreen ? 'fullscreen' : 'inline'}
                 previewSettings={previewSettings}
                 graphStructureVersion={graphStructureVersion}
                 materialGraph={materialGraph}
