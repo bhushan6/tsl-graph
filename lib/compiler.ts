@@ -683,10 +683,8 @@ function compileSubgraphDefinition(
         let code: string;
 
         if (def.type === 'geo/camera') {
-            const nearArg = argsMap?.['in_cameraNear'];
-            const farArg = argsMap?.['in_cameraFar'];
-            code = nearArg && farArg
-                ? `vec2(${nearArg}, ${farArg})`
+            code = subgraph.id === 'custom/post-root'
+                ? 'vec2(camera.near, camera.far)'
                 : 'vec2(cameraNear, cameraFar)';
         } else if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
@@ -1201,11 +1199,8 @@ export function compilePostGraph(
                         mappedSourceHandle = 'in_depthTexture';
                         break;
                     case 'cameraNear':
-                        mappedSourceHandle = 'in_cameraNear';
-                        break;
                     case 'cameraFar':
-                        mappedSourceHandle = 'in_cameraFar';
-                        break;
+                        return null;
                     case 'color':
                     default:
                         mappedSourceHandle = 'in_color';
@@ -1240,8 +1235,6 @@ export function compilePostGraph(
             { id: 'in_sceneTexture', label: 'Scene Texture', type: 'any' },
             { id: 'in_depth', label: 'Depth', type: 'float' },
             { id: 'in_depthTexture', label: 'Depth Texture', type: 'any' },
-            { id: 'in_cameraNear', label: 'Camera Near', type: 'float' },
-            { id: 'in_cameraFar', label: 'Camera Far', type: 'float' },
         ],
         outputs: [{ id: 'out_0', label: 'Output', type: 'vec4' }],
         nodes: internalNodes,

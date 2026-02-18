@@ -777,7 +777,7 @@ describe('compilePostGraph', () => {
         expect(result.code).toContain('texture(arg_in_depthTexture, screenUV)');
     });
 
-    it('compiles geo/camera in post graph using injected scene camera near/far args', () => {
+    it('compiles geo/camera in post graph using camera.near/camera.far', () => {
         const nodes = [
             createNode('post-input', 'post/input'),
             createNode('cam', 'geo/camera'),
@@ -791,24 +791,10 @@ describe('compilePostGraph', () => {
         ];
 
         const result = compilePostGraph(nodes, edges);
-        expect(result.code).toContain('vec2(arg_in_cameraNear, arg_in_cameraFar)');
+        expect(result.code).toContain('vec2(camera.near, camera.far)');
         expect(result.code).not.toContain(' = camera;');
-    });
-
-    it('maps post cameraNear/cameraFar handles', () => {
-        const nodes = [
-            createNode('post-input', 'post/input'),
-            createNode('cam', 'geo/camera'),
-            createNode('post-output', 'post/output'),
-        ];
-        const edges: Edge[] = [
-            { id: 'e1', source: 'post-input', sourceHandle: 'cameraNear', target: 'cam', targetHandle: 'near' },
-            { id: 'e2', source: 'post-input', sourceHandle: 'cameraFar', target: 'cam', targetHandle: 'far' },
-            { id: 'e3', source: 'cam', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
-        ];
-
-        const result = compilePostGraph(nodes, edges);
-        expect(result.code).toContain('vec2(arg_in_cameraNear, arg_in_cameraFar)');
+        expect(result.code).not.toContain('arg_in_cameraNear');
+        expect(result.code).not.toContain('arg_in_cameraFar');
     });
 
     it('wraps default near/far literals for post perspectiveDepthToViewZ', () => {

@@ -81,8 +81,7 @@ export function buildTSLPostOutputNode(
     sceneTextureNode: unknown,
     sceneDepthNode: unknown,
     sceneDepthTextureNode: unknown,
-    sceneCameraNear: number,
-    sceneCameraFar: number,
+    sceneCamera: unknown,
     postNodes: Node<TSLNodeData>[],
     postEdges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
@@ -99,7 +98,8 @@ export function buildTSLPostOutputNode(
     const scopeValues = Object.values(scope);
     const functionBody = `
         ${compiled.code}
-        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode, sceneCameraNear, sceneCameraFar);
+        const camera = sceneCamera;
+        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode);
     `;
 
     const fn = new Function(
@@ -108,8 +108,7 @@ export function buildTSLPostOutputNode(
         'sceneTextureNode',
         'sceneDepthNode',
         'sceneDepthTextureNode',
-        'sceneCameraNear',
-        'sceneCameraFar',
+        'sceneCamera',
         functionBody
     );
     return fn(
@@ -118,8 +117,7 @@ export function buildTSLPostOutputNode(
         sceneTextureNode,
         sceneDepthNode,
         sceneDepthTextureNode,
-        sceneCameraNear,
-        sceneCameraFar
+        sceneCamera
     );
 }
 
