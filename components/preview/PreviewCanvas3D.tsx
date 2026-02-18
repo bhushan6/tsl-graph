@@ -1,0 +1,434 @@
+'use client';
+
+import {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+import * as THREE from 'three/webgpu';
+import { pass } from 'three/tsl';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { buildTSLMaterial, buildTSLPostOutputNode } from '@/lib/tsl-builder';
+import { buildPreviewGeometry } from './geometry';
+import type { PreviewCanvas3DProps, PreviewCanvasHandle, PreviewCaptureOptions } from './types';
+
+interface CapturedFrame {
+    blob: Blob;
+    mimeType: string;
+    width: number;
+    height: number;
+    format: string;
+}
+
+export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DProps>(function PreviewCanvas3D(
+    {
+        previewSettings,
+        graphStructureVersion,
+        materialGraph,
+        postGraph,
+        subgraphs,
+        codeNodes,
+        globals,
+        onUploadPreviewBlob,
+        onMaterialErrorChange,
+        onPostErrorChange,
+        onGeometryScriptErrorChange,
+        onReadyChange,
+    },
+    ref
+) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const controlsRef = useRef<OrbitControls | null>(null);
+    const postProcessingRef = useRef<THREE.PostProcessing | null>(null);
+    const usePostProcessingRef = useRef(false);
+    const meshRef = useRef<THREE.Mesh | null>(null);
+    const backdropRef = useRef<THREE.Group | null>(null);
+    const gridRef = useRef<THREE.GridHelper | null>(null);
+    const frameIdRef = useRef<number>(0);
+    const initRef = useRef<boolean>(false);
+    const [isReady, setIsReady] = useState(false);
+
+    const captureBlob = useCallback((options?: PreviewCaptureOptions): Promise<CapturedFrame> => {
+        const renderer = rendererRef.current;
+        if (!renderer) {
+            return Promise.reject(new Error('Preview renderer not ready'));
+        }
+
+        const canvas = renderer.domElement;
+        const format = options?.format === 'jpeg' ? 'jpeg' : 'png';
+        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        const quality = format === 'jpeg' ? options?.quality ?? 0.85 : undefined;
+
+        return new Promise<CapturedFrame>((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error('Failed to capture preview image'));
+                    return;
+                }
+                resolve({
+                    blob,
+                    mimeType,
+                    width: canvas.width,
+                    height: canvas.height,
+                    format: mimeType,
+                });
+            }, mimeType, quality);
+        });
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+        downloadSnapshot: () => {
+            const renderer = rendererRef.current;
+            if (!renderer) return;
+
+            const canvas = renderer.domElement;
+            const link = document.createElement('a');
+            link.download = `snapshot-${new Date().toISOString()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        },
+        capturePreviewForAi: async (options) => {
+            const captured = await captureBlob(options);
+            return onUploadPreviewBlob({
+                ...captured,
+                purpose: options?.purpose ?? 'ai',
+            });
+        },
+    }), [captureBlob, onUploadPreviewBlob]);
+
+    const { material, materialError } = useMemo(() => {
+        void graphStructureVersion;
+        if (!isReady) return { material: null as THREE.Material | null, materialError: null as string | null };
+        try {
+            return {
+                material: buildTSLMaterial(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, globals),
+                materialError: null,
+            };
+        } catch (e) {
+            console.error('Material build error:', e);
+            return {
+                material: new THREE.MeshStandardMaterial({ color: 0x888888 }),
+                materialError: e instanceof Error ? e.message : 'Failed to build material',
+            };
+        }
+    }, [graphStructureVersion, isReady, materialGraph, subgraphs, codeNodes, globals]);
+
+    useEffect(() => {
+        onMaterialErrorChange(materialError);
+    }, [materialError, onMaterialErrorChange]);
+
+    useEffect(() => {
+        return () => {
+            material?.dispose();
+        };
+    }, [material]);
+
+    const { geometry, geometryScriptError } = useMemo(
+        () => buildPreviewGeometry(previewSettings),
+        [previewSettings]
+    );
+
+    useEffect(() => {
+        onGeometryScriptErrorChange(geometryScriptError);
+    }, [geometryScriptError, onGeometryScriptErrorChange]);
+
+    useEffect(() => {
+        return () => {
+            geometry.dispose();
+        };
+    }, [geometry]);
+
+    useEffect(() => {
+        onReadyChange(isReady);
+    }, [isReady, onReadyChange]);
+
+    useEffect(() => {
+        if (!isReady || !rendererRef.current || !sceneRef.current || !cameraRef.current) {
+            usePostProcessingRef.current = false;
+            return;
+        }
+
+        if (!postProcessingRef.current) {
+            postProcessingRef.current = new THREE.PostProcessing(rendererRef.current);
+        }
+
+        if (!(previewSettings.postEnabled ?? true)) {
+            usePostProcessingRef.current = false;
+            onPostErrorChange(null);
+            return;
+        }
+
+        try {
+            const scenePass = pass(sceneRef.current, cameraRef.current);
+            const outputNode = buildTSLPostOutputNode(
+                scenePass,
+                scenePass.getTextureNode(),
+                scenePass.getLinearDepthNode(),
+                scenePass.getTextureNode('depth'),
+                cameraRef.current.near,
+                cameraRef.current.far,
+                postGraph.nodes,
+                postGraph.edges,
+                subgraphs,
+                codeNodes,
+                globals
+            );
+
+            if (!outputNode) {
+                usePostProcessingRef.current = false;
+                onPostErrorChange('Post graph output is not connected.');
+                return;
+            }
+
+            postProcessingRef.current.outputNode = outputNode;
+            postProcessingRef.current.needsUpdate = true;
+            usePostProcessingRef.current = true;
+            onPostErrorChange(null);
+        } catch (e) {
+            console.error('Post-processing build error:', e);
+            usePostProcessingRef.current = false;
+            onPostErrorChange(e instanceof Error ? e.message : 'Failed to build post-processing graph');
+        }
+    }, [
+        graphStructureVersion,
+        isReady,
+        previewSettings.postEnabled,
+        postGraph,
+        subgraphs,
+        codeNodes,
+        globals,
+        onPostErrorChange,
+    ]);
+
+    const handleResize = useCallback(() => {
+        if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (w <= 0 || h <= 0) return;
+        cameraRef.current.aspect = w / h;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(w, h);
+    }, []);
+
+    useEffect(() => {
+        if (!containerRef.current || initRef.current) return;
+        initRef.current = true;
+
+        const container = containerRef.current;
+
+        async function init() {
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            sceneRef.current = scene;
+
+            const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 2000);
+            camera.position.set(3.6, 2, 2);
+            camera.lookAt(0, 0, 0);
+            cameraRef.current = camera;
+
+            const renderer = new THREE.WebGPURenderer({ antialias: true });
+            await renderer.init();
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            rendererRef.current = renderer;
+            postProcessingRef.current = new THREE.PostProcessing(renderer);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            const gridHelper = new THREE.GridHelper(10, 10, 0x333333, 0x333333);
+            scene.add(gridHelper);
+            gridRef.current = gridHelper;
+
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 0, 0);
+            controls.update();
+            controlsRef.current = controls;
+
+            setIsReady(true);
+
+            const animate = () => {
+                frameIdRef.current = requestAnimationFrame(animate);
+                controls.update();
+                if (usePostProcessingRef.current && postProcessingRef.current) {
+                    postProcessingRef.current.render();
+                } else {
+                    renderer.render(scene, camera);
+                }
+            };
+            animate();
+        }
+
+        init().catch(console.error);
+
+        const resizeObserver = new ResizeObserver(handleResize);
+        resizeObserver.observe(container);
+
+        return () => {
+            cancelAnimationFrame(frameIdRef.current);
+            resizeObserver.disconnect();
+            setIsReady(false);
+
+            if (controlsRef.current) {
+                controlsRef.current.dispose();
+            }
+
+            if (sceneRef.current) {
+                sceneRef.current.traverse((object) => {
+                    if (object instanceof THREE.Mesh) {
+                        object.geometry?.dispose();
+                        if (Array.isArray(object.material)) {
+                            object.material.forEach((m) => m.dispose());
+                        } else {
+                            object.material?.dispose();
+                        }
+                    }
+                    if (object instanceof THREE.GridHelper) {
+                        object.dispose();
+                    }
+                });
+                sceneRef.current.clear();
+            }
+
+            if (rendererRef.current) {
+                rendererRef.current.dispose();
+                if (container.contains(rendererRef.current.domElement)) {
+                    container.removeChild(rendererRef.current.domElement);
+                }
+            }
+
+            if (postProcessingRef.current) {
+                postProcessingRef.current.dispose();
+                postProcessingRef.current = null;
+            }
+        };
+    }, [handleResize]);
+
+    useEffect(() => {
+        if (!sceneRef.current || !material) return;
+
+        if (meshRef.current) {
+            sceneRef.current.remove(meshRef.current);
+            if (meshRef.current instanceof THREE.InstancedMesh) {
+                meshRef.current.dispose();
+            }
+        }
+
+        let mesh: THREE.Mesh;
+        if (previewSettings.isInstanced) {
+            mesh = new THREE.InstancedMesh(geometry, material, previewSettings.instanceCount);
+            mesh.position.set(0, 0, 0);
+        } else {
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, 0, 0);
+        }
+
+        sceneRef.current.add(mesh);
+        meshRef.current = mesh;
+    }, [geometry, material, previewSettings.isInstanced, previewSettings.instanceCount]);
+
+    useEffect(() => {
+        if (!sceneRef.current || !isReady) return;
+
+        const scene = sceneRef.current;
+        const envName = previewSettings.environment;
+
+        if (!envName || envName === 'none') {
+            scene.environment = null;
+            scene.background = new THREE.Color(0x1a1a1a);
+            return;
+        }
+
+        const loader = new RGBELoader();
+        const url = `https://raw.githubusercontent.com/pmndrs/assets/main/src/hdri/${envName}.hdr`;
+
+        loader.load(
+            url,
+            (texture) => {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.environment = texture;
+                scene.environmentIntensity = previewSettings.environmentIntensity ?? 1;
+                if (previewSettings.showEnvironmentBackground) {
+                    scene.background = texture;
+                } else {
+                    scene.background = new THREE.Color(0x1a1a1a);
+                }
+            },
+            undefined,
+            (err) => {
+                console.error('Failed to load HDRI:', err);
+            }
+        );
+    }, [
+        isReady,
+        previewSettings.environment,
+        previewSettings.environmentIntensity,
+        previewSettings.showEnvironmentBackground,
+    ]);
+
+    useEffect(() => {
+        if (!sceneRef.current || !isReady) return;
+
+        const scene = sceneRef.current;
+
+        if (backdropRef.current) {
+            scene.remove(backdropRef.current);
+            backdropRef.current.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    child.geometry?.dispose();
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((m) => m.dispose());
+                    } else {
+                        child.material?.dispose();
+                    }
+                }
+            });
+            backdropRef.current = null;
+        }
+
+        if (!previewSettings.showBackdrop) return;
+
+        const loader = new GLTFLoader();
+        loader.load(
+            '/clothe-backdrop.glb',
+            (gltf) => {
+                const model = gltf.scene;
+                model.position.set(0, 0, -2);
+                model.scale.setScalar(40);
+                scene.add(model);
+                backdropRef.current = model;
+            },
+            undefined,
+            (err) => {
+                console.error('Failed to load backdrop model:', err);
+            }
+        );
+    }, [isReady, previewSettings.showBackdrop]);
+
+    useEffect(() => {
+        if (gridRef.current) {
+            gridRef.current.visible = !!previewSettings.showGrid;
+        }
+    }, [previewSettings.showGrid, isReady]);
+
+    return <div ref={containerRef} className="w-full h-full" />;
+});
