@@ -143,6 +143,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             const isPostAnchorType = (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(nodeType as typeof POST_ANCHOR_NODE_TYPES[number]);
             const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(nodeType);
             const isViewportSharedNode = nodeType === 'texture/viewportShared';
+            const isUniformNode = nodeType === 'const/uniform';
             const { nodes } = useEditorStore.getState();
 
             if (isPostAnchorType) {
@@ -156,6 +157,11 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             }
 
             if (activeRootGraph === 'post' && isViewportSharedNode) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'post' && isUniformNode) {
                 close();
                 return;
             }

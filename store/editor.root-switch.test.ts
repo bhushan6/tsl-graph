@@ -59,4 +59,13 @@ describe('Editor root graph switching', () => {
         expect(added).toBe(false);
         expect(useEditorStore.getState().nodes.some((node) => node.data.type === 'texture/viewportShared')).toBe(false);
     });
+
+    it('blocks uniform node in post root', () => {
+        const store = useEditorStore.getState();
+        store.setActiveRootGraph('post');
+
+        const added = store.addNode('const/uniform', { x: 20, y: 20 });
+        expect(added).toBe(false);
+        expect(useEditorStore.getState().nodes.some((node) => node.data.type === 'const/uniform')).toBe(false);
+    });
 });

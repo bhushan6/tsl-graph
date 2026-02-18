@@ -1299,6 +1299,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             toast.error('Use post/input + texture sampling in post graph instead of viewport shared texture.');
             return false;
         }
+        if (activeRootGraph === 'post' && type === 'const/uniform') {
+            toast.error('Uniform nodes are not supported in the post graph yet.');
+            return false;
+        }
 
         // If trying to add a material node, check if one already exists
         if (activeRootGraph === 'material' && isMaterialNode) {
@@ -1757,6 +1761,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             }
 
+            if (isPostRoot && node.data.type === 'const/uniform') {
+                skippedUniform = true;
+                continue;
+            }
+
             if (isMaterialNode(node)) {
                 if (isPostRoot) {
                     skippedMaterial = true;
@@ -1791,6 +1800,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         if (skippedUniform && isSubgraphMode) {
             toast.error('Uniform nodes cannot be pasted inside subgraphs.');
+        }
+        if (skippedUniform && isPostRoot) {
+            toast.error('Uniform nodes cannot be pasted into the post graph.');
         }
 
         if (skippedPostFx && isMaterialRoot) {
