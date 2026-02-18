@@ -7,7 +7,7 @@ import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, 
 import { NodeType, NodeDef, TSLType } from '@/lib/types';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
-import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from '@/lib/nodes';
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import {
     Command,
     CommandEmpty,
@@ -86,6 +86,7 @@ export function EdgeDropNodePicker({
             if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(type)) return true;
             if (activeRootGraph === 'post' && (MATERIAL_NODE_TYPES as readonly string[]).includes(type)) return true;
             if (activeRootGraph === 'post' && type === 'texture/viewportShared') return true;
+            if (activeRootGraph === 'material' && (POST_FX_NODE_TYPES as readonly string[]).includes(type)) return true;
             return false;
         };
 

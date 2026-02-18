@@ -1,0 +1,222 @@
+import { BaseNodeDef } from './definitions';
+
+export const postEffectNodes = [
+    {
+        type: 'postfx/afterImage',
+        label: 'After Image',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            damp: { label: 'Damp', type: 'float', default: 0.96 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'afterImage',
+        importFrom: 'three/addons/tsl/display/AfterImageNode.js',
+    },
+    {
+        type: 'postfx/anamorphic',
+        label: 'Anamorphic',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            threshold: { label: 'Threshold', type: 'float', default: 0.9 },
+            scale: { label: 'Scale', type: 'float', default: 3 },
+            samples: { label: 'Samples', type: 'int', default: 32 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'anamorphic',
+        importFrom: 'three/addons/tsl/display/AnamorphicNode.js',
+    },
+    {
+        type: 'postfx/bloom',
+        label: 'Bloom',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            strength: { label: 'Strength', type: 'float', default: 1 },
+            radius: { label: 'Radius', type: 'float', default: 0 },
+            threshold: { label: 'Threshold', type: 'float', default: 0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'bloom',
+        importFrom: 'three/addons/tsl/display/BloomNode.js',
+    },
+    {
+        type: 'postfx/boxBlur',
+        label: 'Box Blur',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'boxBlur',
+        importFrom: 'three/addons/tsl/display/boxBlur.js',
+    },
+    {
+        type: 'postfx/chromaticAberration',
+        label: 'Chromatic Aberration',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            strength: { label: 'Strength', type: 'float', default: 1 },
+            center: { label: 'Center', type: 'vec2', default: [0.5, 0.5] },
+            scale: { label: 'Scale', type: 'float', default: 1.1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'chromaticAberration',
+        importFrom: 'three/addons/tsl/display/ChromaticAberrationNode.js',
+    },
+    {
+        type: 'postfx/dof',
+        label: 'Depth Of Field',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            viewZ: { label: 'View Z', type: 'float', connectionOnly: true },
+            focusDistance: { label: 'Focus', type: 'float', default: 1 },
+            focalLength: { label: 'Focal Length', type: 'float', default: 1 },
+            bokehScale: { label: 'Bokeh Scale', type: 'float', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'dof',
+        importFrom: 'three/addons/tsl/display/DepthOfFieldNode.js',
+    },
+    {
+        type: 'postfx/dotScreen',
+        label: 'Dot Screen',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            angle: { label: 'Angle', type: 'float', default: 1.57 },
+            scale: { label: 'Scale', type: 'float', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'dotScreen',
+        importFrom: 'three/addons/tsl/display/DotScreenNode.js',
+    },
+    {
+        type: 'postfx/film',
+        label: 'Film',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            intensity: { label: 'Intensity', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'film',
+        importFrom: 'three/addons/tsl/display/FilmNode.js',
+    },
+    {
+        type: 'postfx/fxaa',
+        label: 'FXAA',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'fxaa',
+        importFrom: 'three/addons/tsl/display/FXAANode.js',
+    },
+    {
+        type: 'postfx/gaussianBlur',
+        label: 'Gaussian Blur',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            direction: { label: 'Direction', type: 'vec2', default: [1, 0] },
+            sigma: { label: 'Sigma', type: 'float', default: 4 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'gaussianBlur',
+        importFrom: 'three/addons/tsl/display/GaussianBlurNode.js',
+    },
+    {
+        type: 'postfx/grayscale',
+        label: 'Grayscale',
+        category: 'Post FX',
+        inputs: {
+            color: { label: 'Color', type: 'vec3', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'float' } },
+        tsl: 'grayscale',
+    },
+    {
+        type: 'postfx/hashBlur',
+        label: 'Hash Blur',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            radius: { label: 'Radius', type: 'float', default: 0.1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'hashBlur',
+        importFrom: 'three/addons/tsl/display/hashBlur.js',
+    },
+    {
+        type: 'postfx/rgbShift',
+        label: 'RGB Shift',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+            amount: { label: 'Amount', type: 'float', default: 0.005 },
+            angle: { label: 'Angle', type: 'float', default: 0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'rgbShift',
+        importFrom: 'three/addons/tsl/display/RGBShiftNode.js',
+    },
+    {
+        type: 'postfx/sepia',
+        label: 'Sepia',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'sepia',
+        importFrom: 'three/addons/tsl/display/Sepia.js',
+    },
+    {
+        type: 'postfx/smaa',
+        label: 'SMAA',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'smaa',
+        importFrom: 'three/addons/tsl/display/SMAANode.js',
+    },
+    {
+        type: 'postfx/sobel',
+        label: 'Sobel',
+        category: 'Post FX',
+        inputs: {
+            input: { label: 'Input', type: 'any', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'sobel',
+        importFrom: 'three/addons/tsl/display/SobelOperatorNode.js',
+    },
+    {
+        type: 'postfx/transition',
+        label: 'Transition',
+        category: 'Post FX',
+        inputs: {
+            nodeA: { label: 'A', type: 'any', connectionOnly: true },
+            nodeB: { label: 'B', type: 'any', connectionOnly: true },
+            mixTexture: { label: 'Mix Texture', type: 'any', connectionOnly: true },
+            mixRatio: { label: 'Ratio', type: 'float', default: 0.5 },
+            threshold: { label: 'Threshold', type: 'float', default: 0.1 },
+            useTexture: { label: 'Use Texture', type: 'bool', default: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'transition',
+        importFrom: 'three/addons/tsl/display/TransitionNode.js',
+    },
+] as const;
+
+export const POST_FX_NODE_TYPES = postEffectNodes.map((node) => node.type) as readonly string[];
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _postEffectNodesCheck: readonly BaseNodeDef[] = postEffectNodes;

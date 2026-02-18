@@ -38,6 +38,7 @@ export interface BaseNodeDef {
     readonly inputs?: Record<string, Port>;
     readonly outputs?: Record<string, Port>;
     readonly tsl: string;           // TSL function name
+    readonly importFrom?: string;   // Override import source module (default: "three/tsl")
     readonly pure?: boolean;        // No inputs = source node
     readonly callable?: boolean;    // If true, pure node needs to be called as function (e.g., uv())
     readonly defaultActiveInputs?: readonly string[]; // If set, inputs that are active by default (material nodes)

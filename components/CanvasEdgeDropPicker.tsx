@@ -7,7 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { EdgeDropNodePicker } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
 import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
-import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from "@/lib/nodes";
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
 import { CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
@@ -141,6 +141,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             // Validation: Only one material node allowed
             const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
             const isPostAnchorType = (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(nodeType as typeof POST_ANCHOR_NODE_TYPES[number]);
+            const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(nodeType);
             const isViewportSharedNode = nodeType === 'texture/viewportShared';
             const { nodes } = useEditorStore.getState();
 
@@ -155,6 +156,11 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             }
 
             if (activeRootGraph === 'post' && isViewportSharedNode) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'material' && isPostFxNode) {
                 close();
                 return;
             }

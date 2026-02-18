@@ -7,7 +7,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
-import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports } from '@/lib/compiler';
+import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
 import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +20,21 @@ import {
 interface CodePanelProps {
     isOpen: boolean;
     onClose: () => void;
+}
+
+export function mergeImportGroups(groups: ImportGroup[]): ImportGroup[] {
+    const grouped = new Map<string, Set<string>>();
+
+    for (const group of groups) {
+        const current = grouped.get(group.from) ?? new Set<string>();
+        for (const item of group.imports) current.add(item);
+        grouped.set(group.from, current);
+    }
+
+    return Array.from(grouped.entries())
+        .map(([from, importSet]) => ({ from, imports: Array.from(importSet).sort() }))
+        .filter((group) => group.imports.length > 0)
+        .sort((a, b) => a.from.localeCompare(b.from));
 }
 
 export function CodePanel({ isOpen, onClose }: CodePanelProps) {
@@ -93,25 +108,32 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         ].join('\n');
     }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
 
-    const imports = useMemo(() => {
+    const importGroups = useMemo<ImportGroup[]>(() => {
         if (subgraphDefinition) {
-            const subgraphImports = getRequiredImports(subgraphDefinition.nodes, subgraphs, codeNodes, globals);
-            const importSet = new Set(subgraphImports);
-            importSet.add('Fn');
-            return Array.from(importSet).sort();
+            return mergeImportGroups(
+                getRequiredImportsByModule(subgraphDefinition.nodes, subgraphs, codeNodes, globals)
+            );
         }
         const materialGraph = getRootGraph('material');
         const postGraph = getRootGraph('post');
-        const importSet = new Set([
-            ...getRequiredImports(materialGraph.nodes, subgraphs, codeNodes, globals),
-            ...getRequiredImports(postGraph.nodes, subgraphs, codeNodes, globals),
-            'pass',
-            'mrt',
-            'output',
-            'normalView',
+        return mergeImportGroups([
+            ...getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals),
+            ...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals),
+            { from: 'three/tsl', imports: ['pass', 'mrt', 'output', 'normalView'] },
         ]);
-        return Array.from(importSet).sort();
     }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+
+    const importBlock = useMemo(() => {
+        return importGroups
+            .map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`)
+            .join('\n');
+    }, [importGroups]);
+
+    const importPreview = useMemo(() => {
+        return importGroups
+            .map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`)
+            .join(' | ');
+    }, [importGroups]);
 
     const displayedNodeCount = useMemo(() => {
         if (subgraphDefinition) return subgraphDefinition.nodes.length;
@@ -121,17 +143,17 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     }, [subgraphDefinition, getRootGraph, nodes, edges]);
 
     const handleCopy = useCallback(async () => {
-        const importBlock = imports.length > 0
-            ? `import { ${imports.join(', ')} } from 'three/tsl';\n\n${compiledCode}`
+        const codeWithImports = importBlock
+            ? `${importBlock}\n\n${compiledCode}`
             : compiledCode;
         const fullCode = subgraphDefinition
-            ? importBlock
-            : `import { PostProcessing } from 'three/webgpu';\n${importBlock.startsWith('import') ? '\n' : '\n\n'}${importBlock}`;
+            ? codeWithImports
+            : `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`;
 
         await navigator.clipboard.writeText(fullCode);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    }, [compiledCode, imports, subgraphDefinition]);
+    }, [compiledCode, importBlock, subgraphDefinition]);
 
     return (
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
@@ -149,9 +171,9 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     {/* Imports line */}
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border shrink-0">
                         <span className="text-xs text-muted-foreground font-mono truncate">
-                            {imports.length > 0 && (
+                            {importPreview.length > 0 && (
                                 <>
-                                    import {'{'} {imports.join(', ')} {'}'} from &apos;three/tsl&apos;;
+                                    {importPreview}
                                     {!subgraphDefinition && ' | import { PostProcessing } from \'three/webgpu\';'}
                                 </>
                             )}

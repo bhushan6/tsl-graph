@@ -352,7 +352,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                 continue;
             }
 
-            if (editorMode === 'main' && activeRootGraph === 'material' && category === 'Post') {
+            if (editorMode === 'main' && activeRootGraph === 'material' && (category === 'Post' || category === 'Post FX')) {
                 continue;
             }
 

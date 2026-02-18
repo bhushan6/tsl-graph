@@ -418,7 +418,7 @@ function compileSubgraphDefinition(
     // Map inputs to argument names
     // input.id maps to the sourceHandle of edges coming from 'subgraph-input'
     const argsMap: Record<string, string> = {};
-    const argNames = subgraph.inputs.map((input, i) => {
+    const argNames = subgraph.inputs.map((input) => {
         const argName = `arg_${input.id}`;
         argsMap[input.id] = argName;
         return argName;
@@ -2364,4 +2364,63 @@ export function getRequiredImports(
     }
 
     return Array.from(imports).sort();
+}
+
+const DEFAULT_TSL_IMPORT_SOURCE = 'three/tsl';
+
+export interface ImportGroup {
+    from: string;
+    imports: string[];
+}
+
+function collectImportSourceOverrides(
+    nodes: Node<TSLNodeData>[],
+    subgraphs: Record<string, SubgraphDefinition> | undefined,
+    byModule: Map<string, Set<string>>,
+    visitedSubgraphs: Set<string>
+) {
+    for (const node of nodes) {
+        if (node.data.type.startsWith('custom/') && subgraphs) {
+            const subgraph = subgraphs[node.data.type];
+            if (subgraph && !visitedSubgraphs.has(subgraph.id)) {
+                visitedSubgraphs.add(subgraph.id);
+                collectImportSourceOverrides(subgraph.nodes, subgraphs, byModule, visitedSubgraphs);
+            }
+        }
+
+        const def = registry.get(node.data.type);
+        if (!def || !def.importFrom || def.tsl.startsWith('__')) {
+            continue;
+        }
+
+        const moduleImports = byModule.get(def.importFrom) ?? new Set<string>();
+        moduleImports.add(def.tsl);
+        byModule.set(def.importFrom, moduleImports);
+
+        if (def.importFrom !== DEFAULT_TSL_IMPORT_SOURCE) {
+            const defaultImports = byModule.get(DEFAULT_TSL_IMPORT_SOURCE);
+            defaultImports?.delete(def.tsl);
+        }
+    }
+}
+
+export function getRequiredImportsByModule(
+    nodes: Node<TSLNodeData>[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    globals: GlobalContextEntry[] = []
+): ImportGroup[] {
+    const flatImports = getRequiredImports(nodes, subgraphs, codeNodes, globals);
+    const byModule = new Map<string, Set<string>>();
+
+    if (flatImports.length > 0) {
+        byModule.set(DEFAULT_TSL_IMPORT_SOURCE, new Set(flatImports));
+    }
+
+    collectImportSourceOverrides(nodes, subgraphs, byModule, new Set<string>());
+
+    return Array.from(byModule.entries())
+        .map(([from, importSet]) => ({ from, imports: Array.from(importSet).sort() }))
+        .filter((entry) => entry.imports.length > 0)
+        .sort((a, b) => a.from.localeCompare(b.from));
 }

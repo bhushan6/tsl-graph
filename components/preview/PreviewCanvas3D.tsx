@@ -15,6 +15,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildTSLMaterial, buildTSLPostOutputNode } from '@/lib/tsl-builder';
+import { useEditorStore } from '@/store/editor';
 import { buildPreviewGeometry } from './geometry';
 import type { PreviewCanvas3DProps, PreviewCanvasHandle, PreviewCaptureOptions } from './types';
 
@@ -29,13 +30,6 @@ interface CapturedFrame {
 export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DProps>(function PreviewCanvas3D(
     {
         layoutMode,
-        previewSettings,
-        graphStructureVersion,
-        materialGraph,
-        postGraph,
-        subgraphs,
-        codeNodes,
-        globals,
         onUploadPreviewBlob,
         onMaterialErrorChange,
         onPostErrorChange,
@@ -57,6 +51,9 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     const frameIdRef = useRef<number>(0);
     const initRef = useRef<boolean>(false);
     const [isReady, setIsReady] = useState(false);
+
+    const previewSettings = useEditorStore((state) => state.previewSettings);
+    const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
 
     const captureBlob = useCallback((options?: PreviewCaptureOptions): Promise<CapturedFrame> => {
         const renderer = rendererRef.current;
@@ -107,9 +104,10 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     }), [captureBlob, onUploadPreviewBlob]);
 
     const { material, materialError } = useMemo(() => {
-        void graphStructureVersion;
         if (!isReady) return { material: null as THREE.Material | null, materialError: null as string | null };
         try {
+            const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
+            const materialGraph = getRootGraph('material');
             return {
                 material: buildTSLMaterial(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, globals),
                 materialError: null,
@@ -121,7 +119,9 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 materialError: e instanceof Error ? e.message : 'Failed to build material',
             };
         }
-    }, [graphStructureVersion, isReady, materialGraph, subgraphs, codeNodes, globals]);
+        // Recompile material only when graph structure changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [graphStructureVersion, isReady]);
 
     useEffect(() => {
         onMaterialErrorChange(materialError);
@@ -169,6 +169,8 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         }
 
         try {
+            const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
+            const postGraph = getRootGraph('post');
             const scenePass = pass(sceneRef.current, cameraRef.current);
             scenePass.setMRT(mrt({ output, normal: normalView }));
             const outputNode = buildTSLPostOutputNode(
@@ -204,10 +206,6 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         graphStructureVersion,
         isReady,
         previewSettings.postEnabled,
-        postGraph,
-        subgraphs,
-        codeNodes,
-        globals,
         onPostErrorChange,
     ]);
 

@@ -13,7 +13,7 @@ import {
     getNodesBounds,
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
-import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from '@/lib/nodes';
+import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
@@ -705,7 +705,7 @@ interface EditorState {
     // Reset entire store
     resetEditor: () => void;
     // Track event helper
-    trackEvent: (event: string, properties?: Record<string, any>) => void;
+    trackEvent: (event: string, properties?: Record<string, unknown>) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -1286,8 +1286,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const { activeRootGraph } = get();
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
+        const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(type);
         if (activeRootGraph === 'post' && isMaterialNode) {
             toast.error('Material nodes are not allowed in the post graph.');
+            return false;
+        }
+        if (activeRootGraph === 'material' && isPostFxNode) {
+            toast.error('Post FX nodes are only allowed in the post graph.');
             return false;
         }
         if (activeRootGraph === 'post' && type === 'texture/viewportShared') {
@@ -1724,11 +1729,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const existingMaterial = nodes.some((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
         const isSubgraphMode = editorMode === 'subgraph';
         const isPostRoot = activeRootGraph === 'post' && editorMode === 'main';
+        const isMaterialRoot = activeRootGraph === 'material' && editorMode === 'main';
         const isMaterialNode = (node: Node<TSLNodeData>) =>
             (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+        const isPostFxNode = (node: Node<TSLNodeData>) =>
+            (POST_FX_NODE_TYPES as readonly string[]).includes(node.data.type);
 
         const nodesToPaste: Node<TSLNodeData>[] = [];
         let skippedMaterial = false;
+        let skippedPostFx = false;
         let skippedUniform = false;
         let materialIncluded = false;
 
@@ -1760,6 +1769,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 materialIncluded = true;
             }
 
+            if (isMaterialRoot && isPostFxNode(node)) {
+                skippedPostFx = true;
+                continue;
+            }
+
             nodesToPaste.push(node);
         }
 
@@ -1777,6 +1791,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         if (skippedUniform && isSubgraphMode) {
             toast.error('Uniform nodes cannot be pasted inside subgraphs.');
+        }
+
+        if (skippedPostFx && isMaterialRoot) {
+            toast.error('Post FX nodes cannot be pasted into the material graph.');
         }
 
         if (nodesToPaste.length === 0) {

@@ -18,12 +18,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const updatePreviewSettingsDebounced = useEditorStore((state) => state.updatePreviewSettingsDebounced);
     const setPreviewSnapshotProvider = useEditorStore((state) => state.setPreviewSnapshotProvider);
-    const nodes = useEditorStore((state) => state.nodes);
-    const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
-    const getRootGraph = useEditorStore((state) => state.getRootGraph);
-    const subgraphs = useEditorStore((state) => state.subgraphs);
-    const codeNodes = useEditorStore((state) => state.codeNodes);
-    const globals = useEditorStore((state) => state.globals);
+    const nodeCount = useEditorStore((state) => state.nodes.length);
 
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isReady, setIsReady] = useState(false);
@@ -38,7 +33,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const updateThumbnail = useMutation(api.projects.updateThumbnail);
     const generatePreviewUploadUrl = useMutation(api.ai.generatePreviewUploadUrl);
 
-    const lastSnapshotNodeCount = useRef(nodes.length);
+    const lastSnapshotNodeCount = useRef(nodeCount);
     const initialSnapshotTaken = useRef(false);
     const lastGeometryScriptError = useRef<string | null>(null);
 
@@ -52,9 +47,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             lastGeometryScriptError.current = null;
         }
     }, [geometryScriptError]);
-
-    const materialGraph = getRootGraph('material');
-    const postGraph = getRootGraph('post');
 
     const handleUploadPreviewBlob = useCallback(async ({
         blob,
@@ -173,19 +165,19 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     useEffect(() => {
         if (!isReady || !props.projectId) return;
 
-        if (nodes.length < lastSnapshotNodeCount.current) {
-            lastSnapshotNodeCount.current = nodes.length;
+        if (nodeCount < lastSnapshotNodeCount.current) {
+            lastSnapshotNodeCount.current = nodeCount;
             return;
         }
 
-        if (nodes.length - lastSnapshotNodeCount.current >= 5) {
+        if (nodeCount - lastSnapshotNodeCount.current >= 5) {
             const timeout = setTimeout(() => {
                 captureSnapshot();
-                lastSnapshotNodeCount.current = nodes.length;
+                lastSnapshotNodeCount.current = nodeCount;
             }, 1000);
             return () => clearTimeout(timeout);
         }
-    }, [nodes.length, isReady, props.projectId, captureSnapshot]);
+    }, [nodeCount, isReady, props.projectId, captureSnapshot]);
 
     useEffect(() => {
         const { nodes: currentNodes, updateNodeValue } = useEditorStore.getState();
@@ -250,13 +242,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             <PreviewCanvas3D
                 ref={canvasRef}
                 layoutMode={isFullScreen ? 'fullscreen' : 'inline'}
-                previewSettings={previewSettings}
-                graphStructureVersion={graphStructureVersion}
-                materialGraph={materialGraph}
-                postGraph={postGraph}
-                subgraphs={subgraphs}
-                codeNodes={codeNodes}
-                globals={globals}
                 onUploadPreviewBlob={handleUploadPreviewBlob}
                 onMaterialErrorChange={setMaterialError}
                 onPostErrorChange={setPostError}

@@ -1,6 +1,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports } from './compiler';
+import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports, getRequiredImportsByModule } from './compiler';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, GlobalContextEntry, NodeType, CodeNodeDefinition, SubgraphDefinition } from '@/lib/types';
 import { registry } from './registry';
@@ -226,6 +226,42 @@ const mockDefs: NodeDef[] = [
             uv: { type: 'vec2', label: 'UV', connectionOnly: true },
         },
         outputs: { out: { type: 'vec4', label: 'Out' } }
+    },
+    {
+        type: 'advanced/hashBlur',
+        label: 'Hash Blur',
+        category: 'Advanced',
+        tsl: 'hashBlur',
+        importFrom: 'three/addons/tsl/display/hashBlur.js',
+        inputs: {
+            texture: { type: 'any', label: 'Texture', connectionOnly: true },
+            radius: { type: 'float', default: 0.1, label: 'Radius' },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } },
+    },
+    {
+        type: 'postfx/bloom',
+        label: 'Bloom',
+        category: 'Post FX',
+        tsl: 'bloom',
+        importFrom: 'three/addons/tsl/display/BloomNode.js',
+        inputs: {
+            input: { type: 'any', label: 'Input', connectionOnly: true },
+            strength: { type: 'float', default: 1, label: 'Strength' },
+            radius: { type: 'float', default: 0, label: 'Radius' },
+            threshold: { type: 'float', default: 0, label: 'Threshold' },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } },
+    },
+    {
+        type: 'postfx/grayscale',
+        label: 'Grayscale',
+        category: 'Post FX',
+        tsl: 'grayscale',
+        inputs: {
+            color: { type: 'vec3', label: 'Color', connectionOnly: true },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } },
     },
     // Logic Nodes
     {
@@ -713,6 +749,21 @@ describe('compilePostGraph', () => {
         const result = compilePostGraph(nodes, edges);
         expect(result.functionName).toMatch(/^PostGraph/);
         expect(result.code).toContain('return arg_in_color;');
+    });
+
+    it('compiles post fx nodes in post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('bloomFx', 'postfx/bloom'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'color', target: 'bloomFx', targetHandle: 'input' },
+            { id: 'e2', source: 'bloomFx', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('bloom(arg_in_color, 1, 0, 0)');
     });
 
     it('compiles post graph texture sampling from scene input', () => {
@@ -1372,5 +1423,22 @@ describe('getRequiredImports', () => {
         ];
         const imports = getRequiredImports(nodes, undefined, undefined, globals);
         expect(imports).toEqual(expect.arrayContaining(['uniform', 'varying', 'float', 'vec2', 'color']));
+    });
+
+    it('should group addon imports by module', () => {
+        const nodes = [
+            createNode('sample', 'texture/sampleNode'),
+            createNode('bloomFx', 'postfx/bloom'),
+            createNode('hash', 'advanced/hashBlur'),
+        ];
+
+        const groups = getRequiredImportsByModule(nodes);
+        const byModule = new Map(groups.map((group) => [group.from, group.imports]));
+
+        expect(byModule.get('three/tsl')).toEqual(expect.arrayContaining(['texture', 'screenUV']));
+        expect(byModule.get('three/addons/tsl/display/BloomNode.js')).toEqual(['bloom']);
+        expect(byModule.get('three/addons/tsl/display/hashBlur.js')).toEqual(['hashBlur']);
+        expect(byModule.get('three/tsl')).not.toContain('bloom');
+        expect(byModule.get('three/tsl')).not.toContain('hashBlur');
     });
 });

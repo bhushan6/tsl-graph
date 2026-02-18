@@ -1,5 +1,3 @@
-import type { Edge, Node } from '@xyflow/react';
-import type { CodeNodeDefinition, GlobalContextEntry, SubgraphDefinition, TSLNodeData } from '@/lib/types';
 import type { PreviewSettings } from '@/store/editor';
 
 export type PreviewCapturePurpose = 'ai' | 'thumbnail';
@@ -32,20 +30,8 @@ export interface PreviewCanvasHandle {
     capturePreviewForAi: (options?: PreviewCaptureOptions) => Promise<PreviewCaptureResult>;
 }
 
-export interface PreviewRootGraph {
-    nodes: Node<TSLNodeData>[];
-    edges: Edge[];
-}
-
 export interface PreviewCanvas3DProps {
     layoutMode: 'inline' | 'fullscreen';
-    previewSettings: PreviewSettings;
-    graphStructureVersion: number;
-    materialGraph: PreviewRootGraph;
-    postGraph: PreviewRootGraph;
-    subgraphs: Record<string, SubgraphDefinition>;
-    codeNodes: Record<string, CodeNodeDefinition>;
-    globals: GlobalContextEntry[];
     onUploadPreviewBlob: (args: PreviewCaptureUploadArgs) => Promise<PreviewCaptureResult>;
     onMaterialErrorChange: (error: string | null) => void;
     onPostErrorChange: (error: string | null) => void;

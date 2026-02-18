@@ -4,7 +4,22 @@ import * as TSL from 'three/tsl'; // For TSL functions
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, GlobalContextEntry } from '@/lib/types';
 import { compileGraph, compilePostGraph } from './compiler';
 import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
+import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
+import { anamorphic } from 'three/addons/tsl/display/AnamorphicNode.js';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { boxBlur } from 'three/addons/tsl/display/boxBlur.js';
+import { chromaticAberration } from 'three/addons/tsl/display/ChromaticAberrationNode.js';
+import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
+import { dotScreen } from 'three/addons/tsl/display/DotScreenNode.js';
+import { film } from 'three/addons/tsl/display/FilmNode.js';
+import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
+import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { hashBlur } from 'three/addons/tsl/display/hashBlur.js';
+import { rgbShift } from 'three/addons/tsl/display/RGBShiftNode.js';
+import { sepia } from 'three/addons/tsl/display/Sepia.js';
+import { smaa } from 'three/addons/tsl/display/SMAANode.js';
+import { sobel } from 'three/addons/tsl/display/SobelOperatorNode.js';
+import { transition } from 'three/addons/tsl/display/TransitionNode.js';
 import { ensureUniform, setUniformFactory } from './uniform-store';
 
 function createTSLRuntimeScope() {
@@ -22,8 +37,23 @@ function createTSLRuntimeScope() {
         rotate2D,
         uvTransform,
         fresnelFull,
+        afterImage,
+        anamorphic,
+        bloom,
+        boxBlur,
+        chromaticAberration,
+        dof,
+        dotScreen,
+        film,
+        fxaa,
+        gaussianBlur,
         node_normalize: TSL.normalize,
         hashBlur,
+        rgbShift,
+        sepia,
+        smaa,
+        sobel,
+        transition,
         __uniform: ensureUniform,
     };
 }

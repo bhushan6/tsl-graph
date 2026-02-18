@@ -121,6 +121,7 @@ export const advancedNodes = [
             out: { label: 'Out', type: 'vec4' },
         },
         tsl: 'hashBlur',
+        importFrom: 'three/addons/tsl/display/hashBlur.js',
     },
 ] as const;
 
