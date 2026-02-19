@@ -1223,7 +1223,7 @@ export function compilePostGraph(
                 targetHandle: mappedTarget === 'subgraph-output' ? 'out_0' : edge.targetHandle,
             };
         })
-        .filter((edge): edge is Edge => edge !== null);
+        .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
 
     const hasConnectedOutput = syntheticEdges.some(
         (edge) => edge.target === 'subgraph-output' && (edge.targetHandle ?? 'out_0') === 'out_0'
