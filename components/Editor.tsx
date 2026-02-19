@@ -77,7 +77,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         canvasMode,
         copySelection,
         pasteSelection,
-        editingSubgraphId
+        editingSubgraphId,
+        activeRootGraph,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -164,6 +165,18 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
             fitView();
         }
     }, [fitView, editingSubgraphId]);
+
+    useEffect(() => {
+        const frameId = requestAnimationFrame(() => {
+            fitView({
+                padding: 0.2,
+                duration: 250,
+                includeHiddenNodes: false,
+            });
+        });
+
+        return () => cancelAnimationFrame(frameId);
+    }, [activeRootGraph, fitView]);
 
     // 1. Dragging: Snapshot when drag starts to capture original position
     const onNodeDragStart = useCallback(() => {
