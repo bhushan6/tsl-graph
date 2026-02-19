@@ -129,7 +129,12 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
     useEffect(() => {
         return () => {
-            material?.dispose();
+            if (!material) return;
+            try {
+                material.dispose();
+            } catch (error) {
+                console.warn('Preview material dispose failed:', error);
+            }
         };
     }, [material]);
 
@@ -144,7 +149,11 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
     useEffect(() => {
         return () => {
-            geometry.dispose();
+            try {
+                geometry.dispose();
+            } catch (error) {
+                console.warn('Preview geometry dispose failed:', error);
+            }
         };
     }, [geometry]);
 
@@ -227,6 +236,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     useEffect(() => {
         if (!containerRef.current || initRef.current) return;
         initRef.current = true;
+        let isUnmounted = false;
 
         const container = containerRef.current;
 
@@ -245,6 +255,10 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
             const renderer = new THREE.WebGPURenderer({ antialias: true });
             await renderer.init();
+            if (isUnmounted) {
+                renderer.dispose();
+                return;
+            }
             renderer.setSize(width, height);
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
@@ -269,9 +283,11 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             controls.update();
             controlsRef.current = controls;
 
+            if (isUnmounted) return;
             setIsReady(true);
 
             const animate = () => {
+                if (isUnmounted) return;
                 frameIdRef.current = requestAnimationFrame(animate);
                 controls.update();
                 if (usePostProcessingRef.current && postProcessingRef.current) {
@@ -289,42 +305,112 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         resizeObserver.observe(container);
 
         return () => {
+            isUnmounted = true;
             cancelAnimationFrame(frameIdRef.current);
             resizeObserver.disconnect();
             setIsReady(false);
+            usePostProcessingRef.current = false;
 
-            if (controlsRef.current) {
-                controlsRef.current.dispose();
+            const controls = controlsRef.current;
+            if (controls) {
+                controls.dispose();
+                controlsRef.current = null;
             }
 
-            if (sceneRef.current) {
-                sceneRef.current.traverse((object) => {
-                    if (object instanceof THREE.Mesh) {
-                        object.geometry?.dispose();
-                        if (Array.isArray(object.material)) {
-                            object.material.forEach((m) => m.dispose());
+            const scene = sceneRef.current;
+
+            const mesh = meshRef.current;
+            if (scene && mesh) {
+                scene.remove(mesh);
+                if (mesh instanceof THREE.InstancedMesh) {
+                    try {
+                        mesh.dispose();
+                    } catch (error) {
+                        console.warn('Preview mesh dispose failed:', error);
+                    }
+                }
+                meshRef.current = null;
+            }
+
+            const backdrop = backdropRef.current;
+            if (scene && backdrop) {
+                scene.remove(backdrop);
+                backdrop.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        try {
+                            child.geometry?.dispose();
+                        } catch (error) {
+                            console.warn('Preview backdrop geometry dispose failed:', error);
+                        }
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((m) => {
+                                try {
+                                    m.dispose();
+                                } catch (error) {
+                                    console.warn('Preview backdrop material dispose failed:', error);
+                                }
+                            });
                         } else {
-                            object.material?.dispose();
+                            try {
+                                child.material?.dispose();
+                            } catch (error) {
+                                console.warn('Preview backdrop material dispose failed:', error);
+                            }
                         }
                     }
-                    if (object instanceof THREE.GridHelper) {
-                        object.dispose();
-                    }
                 });
-                sceneRef.current.clear();
+                backdropRef.current = null;
             }
 
-            if (rendererRef.current) {
-                rendererRef.current.dispose();
-                if (container.contains(rendererRef.current.domElement)) {
-                    container.removeChild(rendererRef.current.domElement);
+            const grid = gridRef.current;
+            if (scene && grid) {
+                scene.remove(grid);
+                try {
+                    grid.dispose();
+                } catch (error) {
+                    console.warn('Preview grid dispose failed:', error);
                 }
+                gridRef.current = null;
             }
 
-            if (postProcessingRef.current) {
-                postProcessingRef.current.dispose();
+            const postProcessing = postProcessingRef.current;
+            if (postProcessing) {
+                try {
+                    postProcessing.dispose();
+                } catch (error) {
+                    console.warn('Preview post-processing dispose failed:', error);
+                }
                 postProcessingRef.current = null;
             }
+
+            if (scene) {
+                const disposedTextures = new Set<THREE.Texture>();
+                const disposeTexture = (value: THREE.Texture | THREE.Color | null) => {
+                    if (!(value instanceof THREE.Texture) || disposedTextures.has(value)) return;
+                    disposedTextures.add(value);
+                    value.dispose();
+                };
+                disposeTexture(scene.environment);
+                disposeTexture(scene.background);
+                scene.clear();
+                sceneRef.current = null;
+            }
+
+            const renderer = rendererRef.current;
+            if (renderer) {
+                try {
+                    renderer.dispose();
+                } catch (error) {
+                    console.warn('Preview renderer dispose failed:', error);
+                }
+                if (container.contains(renderer.domElement)) {
+                    container.removeChild(renderer.domElement);
+                }
+                rendererRef.current = null;
+            }
+
+            cameraRef.current = null;
+            initRef.current = false;
         };
     }, [handleResize]);
 
