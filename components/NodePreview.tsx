@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import { useEditorStore } from '@/store/editor';
 import * as THREE from 'three/webgpu';
 import { buildNodePreviewMaterial } from '@/lib/tsl-builder';
-import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from '@/lib/nodes';
 
 /**
  * NodePreview - Shows a live preview of the selected node's output.
@@ -40,6 +40,7 @@ export function NodePreview() {
         // Don't show preview for material nodes or anchor nodes
         if ((MATERIAL_NODE_TYPES as readonly string[]).includes(selectedNode.data.type)) return false;
         if (selectedNode.data.type === 'subgraph/input' || selectedNode.data.type === 'subgraph/output') return false;
+        if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(selectedNode.data.type)) return false;
         if (selectedNode.type === 'group' || selectedNode.type === 'loop') return false;
         if (selectedNode.data.type.startsWith('loop/')) return false;
         return true;

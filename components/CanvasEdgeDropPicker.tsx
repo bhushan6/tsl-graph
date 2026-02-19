@@ -7,7 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { EdgeDropNodePicker } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
 import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
-import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
 import { CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
@@ -25,6 +25,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     const sourceHandleId = useEdgeDropPickerStore(state => state.sourceHandleId);
     const handleDirection = useEdgeDropPickerStore(state => state.handleDirection);
     const close = useEdgeDropPickerStore(state => state.close);
+    const activeRootGraph = useEditorStore(state => state.activeRootGraph);
 
     // Fetch templates (cached by Convex, no extra network request if NodePicker already subscribed)
     const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
@@ -139,9 +140,38 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             // Validation: Only one material node allowed
             const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
+            const isPostAnchorType = (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(nodeType as typeof POST_ANCHOR_NODE_TYPES[number]);
+            const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(nodeType);
+            const isViewportSharedNode = nodeType === 'texture/viewportShared';
+            const isUniformNode = nodeType === 'const/uniform';
             const { nodes } = useEditorStore.getState();
 
-            if (isMaterialNode && sourceNodeId) {
+            if (isPostAnchorType) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'post' && isMaterialNode) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'post' && isViewportSharedNode) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'post' && isUniformNode) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'material' && isPostFxNode) {
+                close();
+                return;
+            }
+
+            if (activeRootGraph === 'material' && isMaterialNode && sourceNodeId) {
                 const existingMaterial = nodes.find(n =>
                     (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
                 );
@@ -455,7 +485,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             close();
         },
-        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates]
+        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates, activeRootGraph]
     );
 
     if (!isOpen) return null;

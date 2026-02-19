@@ -48,6 +48,34 @@ export const advancedNodes = [
         },
         tsl: 'linearDepth',
     },
+    {
+        type: 'advanced/perspectiveDepthToViewZ',
+        label: 'Perspective Depth To View Z',
+        category: 'Advanced',
+        inputs: {
+            depth: { label: 'Depth', type: 'float', default: 0 },
+            near: { label: 'Near', type: 'float', default: 0.01 },
+            far: { label: 'Far', type: 'float', default: 2000 },
+        },
+        outputs: {
+            out: { label: 'Out', type: 'float' },
+        },
+        tsl: 'perspectiveDepthToViewZ',
+    },
+    {
+        type: 'advanced/viewZToOrthographicDepth',
+        label: 'View Z To Orthographic Depth',
+        category: 'Advanced',
+        inputs: {
+            viewZ: { label: 'View Z', type: 'float', default: 0 },
+            near: { label: 'Near', type: 'float', default: 0.01 },
+            far: { label: 'Far', type: 'float', default: 2000 },
+        },
+        outputs: {
+            out: { label: 'Out', type: 'float' },
+        },
+        tsl: 'viewZToOrthographicDepth',
+    },
     // Fragment properties
     {
         type: 'advanced/output',
@@ -93,6 +121,7 @@ export const advancedNodes = [
             out: { label: 'Out', type: 'vec4' },
         },
         tsl: 'hashBlur',
+        importFrom: 'three/addons/tsl/display/hashBlur.js',
     },
 ] as const;
 

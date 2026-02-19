@@ -14,7 +14,8 @@ describe('Editor Store Persistence', () => {
         const newSettings = {
             mesh: 'torus' as const,
             isInstanced: true,
-            instanceCount: 42
+            instanceCount: 42,
+            postEnabled: false,
         };
 
         store.updatePreviewSettings(newSettings);
@@ -46,7 +47,7 @@ describe('Editor Store Persistence', () => {
         expect(restoredSettings.config).toBeDefined();
     });
 
-    it('should use default settings if missing in JSON', () => {
+    it('should migrate v1 data by creating post anchors and material root mode', () => {
         const store = useEditorStore.getState();
 
         // Create JSON without previewSettings
@@ -55,17 +56,56 @@ describe('Editor Store Persistence', () => {
             nodes: [],
             edges: [],
             subgraphs: {},
-            codeNodes: {}
+            codeNodes: {},
         };
         const json = JSON.stringify(data);
 
         // Load
-        store.loadFromJSON(json);
+        const success = store.loadFromJSON(json);
+        expect(success).toBe(true);
 
-        // Verify defaults
-        const currentSettings = useEditorStore.getState().previewSettings;
-        expect(currentSettings.mesh).toBe('sphere');
-        expect(currentSettings.isInstanced).toBe(false);
-        expect(currentSettings.instanceCount).toBe(100);
+        const state = useEditorStore.getState();
+        const postGraph = state.getRootGraph('post');
+
+        expect(state.activeRootGraph).toBe('material');
+        expect(postGraph.nodes.some((node) => node.id === 'post-input')).toBe(true);
+        expect(postGraph.nodes.some((node) => node.id === 'post-output')).toBe(true);
+    });
+
+    it('should save and load v2 root graphs and active mode', () => {
+        const store = useEditorStore.getState();
+
+        // Material root content
+        store.addNode('math/add', { x: 0, y: 0 });
+        const materialGraphBefore = store.getRootGraph('material');
+        expect(materialGraphBefore.nodes.length).toBeGreaterThan(0);
+
+        // Post root content
+        store.setActiveRootGraph('post');
+        store.addNode('math/mul', { x: 120, y: 0 });
+        store.updatePreviewSettings({ postEnabled: false });
+
+        const postGraphBefore = store.getRootGraph('post');
+        expect(postGraphBefore.nodes.some((node) => node.data.type === 'math/mul')).toBe(true);
+
+        const json = store.saveToJSON();
+        const parsed = JSON.parse(json);
+        expect(parsed.version).toBe(2);
+        expect(parsed.activeRootGraph).toBe('post');
+        expect(Array.isArray(parsed.postNodes)).toBe(true);
+        expect(Array.isArray(parsed.postEdges)).toBe(true);
+        expect(parsed.previewSettings.postEnabled).toBe(false);
+
+        store.resetEditor();
+        const success = store.loadFromJSON(json);
+        expect(success).toBe(true);
+
+        const restored = useEditorStore.getState();
+        expect(restored.activeRootGraph).toBe('post');
+        expect(restored.previewSettings.postEnabled).toBe(false);
+        expect(restored.getRootGraph('material').nodes.length).toBe(materialGraphBefore.nodes.length);
+        expect(
+            restored.getRootGraph('post').nodes.some((node) => node.data.type === 'math/mul')
+        ).toBe(true);
     });
 });

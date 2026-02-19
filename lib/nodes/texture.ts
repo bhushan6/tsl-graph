@@ -2,6 +2,17 @@ import { BaseNodeDef } from './definitions';
 
 export const textureNodes = [
     {
+        type: 'texture/sampleNode',
+        label: 'Sample Texture Node',
+        category: 'Texture',
+        inputs: {
+            texture: { label: 'Texture', type: 'any', connectionOnly: true },
+            uv: { label: 'UV', type: 'vec2', connectionOnly: true },
+        },
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'texture',
+    },
+    {
         type: 'texture/sample',
         label: 'Texture',
         category: 'Texture',

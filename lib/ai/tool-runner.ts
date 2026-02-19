@@ -14,7 +14,7 @@ import type {
 import type { NodeType } from '@/lib/types';
 import { autoLayoutNodes } from './auto-layout';
 import { getAvailableNodes, getGraphSnapshot, getNodeDefinition, validateGraph } from './graph';
-import { compileGraph, getRequiredImports } from '@/lib/compiler';
+import { compileGraph, getRequiredImports, getRequiredImportsByModule } from '@/lib/compiler';
 import { logTrace } from '@/lib/ai/trace';
 
 const DEFAULT_POSITION = { x: 0, y: 0 };
@@ -85,10 +85,11 @@ export async function runToolCall(call: ToolCall): Promise<ToolResult> {
         const input = call.input as CompileGraphInput;
         const state = useEditorStore.getState();
         const imports = getRequiredImports(state.nodes, state.subgraphs, state.codeNodes, state.globals);
+        const importGroups = getRequiredImportsByModule(state.nodes, state.subgraphs, state.codeNodes, state.globals);
         const codeBody = compileGraph(state.nodes, state.edges, state.subgraphs, state.codeNodes, { globals: state.globals });
         const includeImports = input.includeImports !== false;
-        const header = includeImports && imports.length > 0
-          ? `import { ${imports.join(', ')} } from 'three/tsl';\n\n`
+        const header = includeImports && importGroups.length > 0
+          ? `${importGroups.map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`).join('\n')}\n\n`
           : '';
         const combined = `${header}${codeBody}`;
         const maxChars = Number.isFinite(input.maxChars) ? Math.max(0, input.maxChars as number) : DEFAULT_MAX_CHARS;
@@ -100,6 +101,7 @@ export async function runToolCall(call: ToolCall): Promise<ToolResult> {
           output: {
             code,
             imports,
+            importGroups,
             truncated,
             nodeCount: state.nodes.length,
           },

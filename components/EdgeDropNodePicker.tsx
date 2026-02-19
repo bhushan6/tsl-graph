@@ -7,6 +7,7 @@ import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, 
 import { NodeType, NodeDef, TSLType } from '@/lib/types';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import {
     Command,
     CommandEmpty,
@@ -48,6 +49,7 @@ export function EdgeDropNodePicker({
     const containerRef = useRef<HTMLDivElement>(null);
 
     const editorMode = useEditorStore((s) => s.editorMode);
+    const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
 
     // Close on click outside
     useEffect(() => {
@@ -80,21 +82,32 @@ export function EdgeDropNodePicker({
 
     // Get compatible nodes
     const compatibleNodes = useMemo(() => {
+        const shouldExclude = (type: NodeType) => {
+            if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(type)) return true;
+            if (activeRootGraph === 'post' && (MATERIAL_NODE_TYPES as readonly string[]).includes(type)) return true;
+            if (activeRootGraph === 'post' && type === 'texture/viewportShared') return true;
+            if (activeRootGraph === 'post' && type === 'const/uniform') return true;
+            if (activeRootGraph === 'material' && (POST_FX_NODE_TYPES as readonly string[]).includes(type)) return true;
+            return false;
+        };
+
         if (!sourceDataType && !handleDirection) {
-            const excludedNodes: NodeType[] = editorMode === "main" ? ["loop"] : ["loop", "const/uniform"]
-            return getAllNodesButExclud(excludedNodes);
+            const excludedNodes: NodeType[] = editorMode === "main" ? ["loop"] : ["loop", "const/uniform"];
+            return getAllNodesButExclud(excludedNodes).filter((node) => !shouldExclude(node.type));
         }
         if (!sourceDataType) {
-            return handleDirection === 'output'
+            const nodes = handleDirection === 'output'
                 ? getCompatibleNodes(sourceDataType as string)
                 : getNodesWithOutputType(sourceDataType as string);
+            return nodes.filter((node) => !shouldExclude(node.type));
         } else {
             // Case where sourceDataType is provided
-            return handleDirection === 'output'
+            const nodes = handleDirection === 'output'
                 ? getCompatibleNodes(sourceDataType)
                 : getNodesWithOutputType(sourceDataType);
+            return nodes.filter((node) => !shouldExclude(node.type));
         }
-    }, [sourceDataType, handleDirection, editorMode])
+    }, [sourceDataType, handleDirection, editorMode, activeRootGraph])
 
 
 

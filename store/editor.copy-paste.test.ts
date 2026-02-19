@@ -187,4 +187,50 @@ describe('Editor copy/paste', () => {
             pastedNodes.some((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type))
         ).toBe(false);
     });
+
+    it('does not copy or paste post anchor nodes', () => {
+        const postInput = createNode('post-input', 'post/input', { x: 0, y: 0 });
+        const postOutput = createNode('post-output', 'post/output', { x: 220, y: 0 });
+        const addNode = createNode('add-1', 'math/add', { x: 120, y: 0 });
+
+        useEditorStore.setState({
+            nodes: [postInput, postOutput, addNode],
+            edges: [],
+            selectedNodeIds: ['post-input', 'add-1'],
+            selectedNodeId: null,
+            activeRootGraph: 'post',
+        });
+
+        const store = useEditorStore.getState();
+        store.copySelection();
+        store.pasteSelection({ x: 400, y: 400 });
+
+        const state = useEditorStore.getState();
+        const postAnchors = state.nodes.filter((node) => node.data.type === 'post/input' || node.data.type === 'post/output');
+        const pastedNodes = state.nodes.filter((node) => !['post-input', 'post-output', 'add-1'].includes(node.id));
+
+        expect(postAnchors).toHaveLength(2);
+        expect(pastedNodes).toHaveLength(1);
+        expect(pastedNodes[0].data.type).toBe('math/add');
+    });
+
+    it('prevents deleting post anchors', () => {
+        useEditorStore.setState({
+            nodes: [
+                createNode('post-input', 'post/input'),
+                createNode('post-output', 'post/output'),
+                createNode('add-1', 'math/add'),
+            ],
+            edges: [],
+            activeRootGraph: 'post',
+        });
+
+        const store = useEditorStore.getState();
+        store.deleteNode('post-input');
+        store.deleteNode('post-output');
+
+        const state = useEditorStore.getState();
+        expect(state.nodes.some((node) => node.id === 'post-input')).toBe(true);
+        expect(state.nodes.some((node) => node.id === 'post-output')).toBe(true);
+    });
 });

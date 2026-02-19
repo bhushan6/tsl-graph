@@ -7,7 +7,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
-import { compileGraph, compileSubgraphCode, getRequiredImports } from '@/lib/compiler';
+import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
 import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,21 @@ interface CodePanelProps {
     onClose: () => void;
 }
 
+export function mergeImportGroups(groups: ImportGroup[]): ImportGroup[] {
+    const grouped = new Map<string, Set<string>>();
+
+    for (const group of groups) {
+        const current = grouped.get(group.from) ?? new Set<string>();
+        for (const item of group.imports) current.add(item);
+        grouped.set(group.from, current);
+    }
+
+    return Array.from(grouped.entries())
+        .map(([from, importSet]) => ({ from, imports: Array.from(importSet).sort() }))
+        .filter((group) => group.imports.length > 0)
+        .sort((a, b) => a.from.localeCompare(b.from));
+}
+
 export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const [copied, setCopied] = useState(false);
     const { resolvedTheme } = useTheme();
@@ -32,6 +47,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const globals = useEditorStore((s) => s.globals);
     const editorMode = useEditorStore((s) => s.editorMode);
     const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
+    const getRootGraph = useEditorStore((s) => s.getRootGraph);
 
     const extensions = useMemo(() => [javascript()], []);
 
@@ -60,28 +76,84 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         if (subgraphDefinition) {
             return compileSubgraphCode(subgraphDefinition, subgraphs, codeNodes, { globals });
         }
-        return compileGraph(nodes, edges, subgraphs, codeNodes, { globals });
-    }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition]);
+        const materialGraph = getRootGraph('material');
+        const postGraph = getRootGraph('post');
+        const materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
 
-    const imports = useMemo(() => {
-        if (subgraphDefinition) {
-            const subgraphImports = getRequiredImports(subgraphDefinition.nodes, subgraphs, codeNodes, globals);
-            const importSet = new Set(subgraphImports);
-            importSet.add('Fn');
-            return Array.from(importSet).sort();
+        let postCode = '// Post graph could not be compiled.';
+        let postFn: string | null = null;
+        try {
+            const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
+            postCode = postCompiled.code;
+            postFn = postCompiled.functionName;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Post graph could not be compiled.';
+            postCode = `// ${message}`;
         }
-        return getRequiredImports(nodes, subgraphs, codeNodes, globals);
-    }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition]);
+
+        return [
+            '// Material Graph',
+            materialCode,
+            '',
+            '// Post Graph',
+            postCode,
+            '',
+            '// Pipeline Wiring',
+            'const scenePass = pass(scene, camera);',
+            'scenePass.setMRT(mrt({ output, normal: normalView }));',
+            'const postProcessing = new PostProcessing(renderer);',
+            ...(postFn
+                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`, 'postProcessing.render();']
+                : ['renderer.render(scene, camera);']),
+        ].join('\n');
+    }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+
+    const importGroups = useMemo<ImportGroup[]>(() => {
+        if (subgraphDefinition) {
+            return mergeImportGroups(
+                getRequiredImportsByModule(subgraphDefinition.nodes, subgraphs, codeNodes, globals)
+            );
+        }
+        const materialGraph = getRootGraph('material');
+        const postGraph = getRootGraph('post');
+        return mergeImportGroups([
+            ...getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals),
+            ...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals),
+            { from: 'three/tsl', imports: ['pass', 'mrt', 'output', 'normalView'] },
+        ]);
+    }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+
+    const importBlock = useMemo(() => {
+        return importGroups
+            .map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`)
+            .join('\n');
+    }, [importGroups]);
+
+    const importPreview = useMemo(() => {
+        return importGroups
+            .map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`)
+            .join(' | ');
+    }, [importGroups]);
+
+    const displayedNodeCount = useMemo(() => {
+        if (subgraphDefinition) return subgraphDefinition.nodes.length;
+        const materialGraph = getRootGraph('material');
+        const postGraph = getRootGraph('post');
+        return materialGraph.nodes.length + postGraph.nodes.length;
+    }, [subgraphDefinition, getRootGraph, nodes, edges]);
 
     const handleCopy = useCallback(async () => {
-        const fullCode = imports.length > 0
-            ? `import { ${imports.join(', ')} } from 'three/tsl';\n\n${compiledCode}`
+        const codeWithImports = importBlock
+            ? `${importBlock}\n\n${compiledCode}`
             : compiledCode;
+        const fullCode = subgraphDefinition
+            ? codeWithImports
+            : `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`;
 
         await navigator.clipboard.writeText(fullCode);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    }, [compiledCode, imports]);
+    }, [compiledCode, importBlock, subgraphDefinition]);
 
     return (
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
@@ -90,7 +162,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     <DialogTitle className="flex flex-col gap-1">
                         <span>{subgraphDefinition ? 'Subgraph Output' : 'TSL Output'}</span>
                         <span className="text-xs text-muted-foreground font-normal">
-                            ({subgraphDefinition ? subgraphDefinition.nodes.length : nodes.length} node{(subgraphDefinition ? subgraphDefinition.nodes.length : nodes.length) !== 1 ? 's' : ''})
+                            ({displayedNodeCount} node{displayedNodeCount !== 1 ? 's' : ''})
                         </span>
                     </DialogTitle>
                 </DialogHeader>
@@ -99,8 +171,11 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     {/* Imports line */}
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border shrink-0">
                         <span className="text-xs text-muted-foreground font-mono truncate">
-                            {imports.length > 0 && (
-                                <>import {'{'} {imports.join(', ')} {'}'} from &apos;three/tsl&apos;;</>
+                            {importPreview.length > 0 && (
+                                <>
+                                    {importPreview}
+                                    {!subgraphDefinition && ' | import { PostProcessing } from \'three/webgpu\';'}
+                                </>
                             )}
                         </span>
                         <Button

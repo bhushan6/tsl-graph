@@ -2,10 +2,61 @@ import { Node, Edge } from '@xyflow/react';
 import * as THREE from 'three/webgpu'; // For Material classes
 import * as TSL from 'three/tsl'; // For TSL functions
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, GlobalContextEntry } from '@/lib/types';
-import { compileGraph } from './compiler';
+import { compileGraph, compilePostGraph } from './compiler';
 import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
+import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
+import { anamorphic } from 'three/addons/tsl/display/AnamorphicNode.js';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { boxBlur } from 'three/addons/tsl/display/boxBlur.js';
+import { chromaticAberration } from 'three/addons/tsl/display/ChromaticAberrationNode.js';
+import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
+import { dotScreen } from 'three/addons/tsl/display/DotScreenNode.js';
+import { film } from 'three/addons/tsl/display/FilmNode.js';
+import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
+import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { hashBlur } from 'three/addons/tsl/display/hashBlur.js';
+import { rgbShift } from 'three/addons/tsl/display/RGBShiftNode.js';
+import { sepia } from 'three/addons/tsl/display/Sepia.js';
+import { smaa } from 'three/addons/tsl/display/SMAANode.js';
+import { sobel } from 'three/addons/tsl/display/SobelOperatorNode.js';
+import { transition } from 'three/addons/tsl/display/TransitionNode.js';
 import { ensureUniform, setUniformFactory } from './uniform-store';
+
+function createTSLRuntimeScope() {
+    return {
+        ...TSL,
+        wgslFn: TSL.wgslFn,
+        MeshStandardNodeMaterial: THREE.MeshStandardNodeMaterial,
+        MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
+        MeshPhysicalNodeMaterial: THREE.MeshPhysicalNodeMaterial,
+        MeshPhongNodeMaterial: THREE.MeshPhongNodeMaterial,
+        SpriteNodeMaterial: THREE.SpriteNodeMaterial,
+        NodeMaterial: THREE.NodeMaterial,
+        THREE: THREE,
+        rotation3d,
+        rotate2D,
+        uvTransform,
+        fresnelFull,
+        afterImage,
+        anamorphic,
+        bloom,
+        boxBlur,
+        chromaticAberration,
+        dof,
+        dotScreen,
+        film,
+        fxaa,
+        gaussianBlur,
+        node_normalize: TSL.normalize,
+        hashBlur,
+        rgbShift,
+        sepia,
+        smaa,
+        sobel,
+        transition,
+        __uniform: ensureUniform,
+    };
+}
 
 /**
  * Build a Three.js material from the node graph by compiling to TSL and evaluating it.
@@ -26,25 +77,7 @@ export function buildTSLMaterial(
 
     // 2. Prepare the execution scope
     // We need all TSL functions (float, vec3, Fn, etc.) and Material classes available
-    const scope = {
-        ...TSL,
-        wgslFn: TSL.wgslFn,
-        // Ensure Material classes are available if not in TSL
-        MeshStandardNodeMaterial: THREE.MeshStandardNodeMaterial,
-        MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
-        MeshPhysicalNodeMaterial: THREE.MeshPhysicalNodeMaterial,
-        MeshPhongNodeMaterial: THREE.MeshPhongNodeMaterial,
-        SpriteNodeMaterial: THREE.SpriteNodeMaterial,
-        NodeMaterial: THREE.NodeMaterial,
-        THREE: THREE, // Expose THREE namespace for TextureLoader
-        rotation3d,
-        rotate2D,
-        uvTransform,
-        fresnelFull,
-        node_normalize: TSL.normalize,
-        hashBlur,
-        __uniform: ensureUniform,
-    };
+    const scope = createTSLRuntimeScope();
 
     const scopeKeys = Object.keys(scope);
     const scopeValues = Object.values(scope);
@@ -71,6 +104,54 @@ export function buildTSLMaterial(
         console.log('Generated Code:', functionBody);
         throw err;
     }
+}
+
+export function buildTSLPostOutputNode(
+    sceneColorNode: unknown,
+    sceneTextureNode: unknown,
+    sceneDepthNode: unknown,
+    sceneDepthTextureNode: unknown,
+    sceneNormalTextureNode: unknown,
+    sceneCamera: unknown,
+    postNodes: Node<TSLNodeData>[],
+    postEdges: Edge[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    globals?: GlobalContextEntry[]
+): THREE.Node | null {
+    const compiled = compilePostGraph(postNodes, postEdges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
+
+    // Ensure uniform factory is wired to TSL runtime
+    setUniformFactory(TSL.uniform);
+
+    const scope = createTSLRuntimeScope();
+    const scopeKeys = Object.keys(scope);
+    const scopeValues = Object.values(scope);
+    const functionBody = `
+        ${compiled.code}
+        const camera = sceneCamera;
+        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode, sceneNormalTextureNode);
+    `;
+
+    const fn = new Function(
+        ...scopeKeys,
+        'sceneColorNode',
+        'sceneTextureNode',
+        'sceneDepthNode',
+        'sceneDepthTextureNode',
+        'sceneNormalTextureNode',
+        'sceneCamera',
+        functionBody
+    );
+    return fn(
+        ...scopeValues,
+        sceneColorNode,
+        sceneTextureNode,
+        sceneDepthNode,
+        sceneDepthTextureNode,
+        sceneNormalTextureNode,
+        sceneCamera
+    ) as THREE.Node;
 }
 
 /**

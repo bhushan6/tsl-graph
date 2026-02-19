@@ -1,7 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port, GlobalContextEntry } from '@/lib/types';
 import { registry } from './registry';
-import { MATERIAL_NODE_TYPES } from './nodes';
+import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
 import { UNIFORM_KINDS, formatUniformValueExpression, getUniformKindFromNode, type UniformKind } from './uniform-utils';
@@ -17,6 +17,7 @@ interface CompiledNode {
 export interface CompileOptions {
     uniformMode?: 'inline' | 'runtime';
     globals?: GlobalContextEntry[];
+    runtimeCameraFromScope?: boolean;
 }
 
 function wrapWgslTemplateLiteral(code: string): string {
@@ -40,6 +41,8 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
     'r': 'x',
     'g': 'y',
     'b': 'z',
+    'near': 'x',
+    'far': 'y',
 };
 
 const LOOP_INTERNAL_NODE_TYPES = new Set([
@@ -231,6 +234,11 @@ function getInputValue(
         }
     }
 
+    // Sensible fallback for post texture sampling nodes.
+    if (node.data.type === 'texture/sampleNode' && inputKey === 'uv') {
+        return 'screenUV';
+    }
+
     const value = node.data.values?.[inputKey] ?? inputDef.default;
 
     if (inputDef.type === 'color') {
@@ -351,7 +359,8 @@ function compileSubgraphDefinition(
     usedCodeNodes?: Map<string, string>,
     codeNodesMap?: Record<string, CodeNodeDefinition>,
     globalVarMap?: Map<string, string>,
-    globalReservedNames?: Set<string>
+    globalReservedNames?: Set<string>,
+    options: CompileOptions = {}
 ): string[] {
     if (subgraph.nodes.some((n) => n.data.type === 'const/uniform')) {
         throw new Error('Uniform nodes are not supported inside subgraphs yet.');
@@ -409,7 +418,7 @@ function compileSubgraphDefinition(
     // Map inputs to argument names
     // input.id maps to the sourceHandle of edges coming from 'subgraph-input'
     const argsMap: Record<string, string> = {};
-    const argNames = subgraph.inputs.map((input, i) => {
+    const argNames = subgraph.inputs.map((input) => {
         const argName = `arg_${input.id}`;
         argsMap[input.id] = argName;
         return argName;
@@ -675,13 +684,35 @@ function compileSubgraphDefinition(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.pure && inputKeys.length === 0) {
+        if (def.type === 'geo/camera') {
+            code = options.runtimeCameraFromScope
+                ? 'vec2(camera.near, camera.far)'
+                : 'vec2(cameraNear, cameraFar)';
+        } else if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
         } else if (def.type === 'const/color') {
             const hex = getStringValue(node, 'value', inputs['value']);
             code = `color("${hex}")`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', internalEdges, compiledNodes, inputs['in'], argsMap);
+        } else if (def.type === 'advanced/perspectiveDepthToViewZ') {
+            const depthArg = getInputValue(node, 'depth', internalEdges, compiledNodes, inputs['depth'], argsMap);
+            const nearRaw = getInputValue(node, 'near', internalEdges, compiledNodes, inputs['near'], argsMap);
+            const farRaw = getInputValue(node, 'far', internalEdges, compiledNodes, inputs['far'], argsMap);
+            const nearConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${depthArg}, ${nearArg}, ${farArg})`;
+        } else if (def.type === 'advanced/viewZToOrthographicDepth') {
+            const viewZArg = getInputValue(node, 'viewZ', internalEdges, compiledNodes, inputs['viewZ'], argsMap);
+            const nearRaw = getInputValue(node, 'near', internalEdges, compiledNodes, inputs['near'], argsMap);
+            const farRaw = getInputValue(node, 'far', internalEdges, compiledNodes, inputs['far'], argsMap);
+            const nearConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = internalEdges.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${viewZArg}, ${nearArg}, ${farArg})`;
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
@@ -1061,7 +1092,8 @@ export function compileSubgraphCode(
                 usedCodeNodes,
                 codeNodes,
                 globalVarMap,
-                globalReservedNames
+                globalReservedNames,
+                options
             );
             lines.push(...defLines);
             lines.push('');
@@ -1089,11 +1121,152 @@ export function compileSubgraphCode(
         usedCodeNodes,
         codeNodes,
         globalVarMap,
-        globalReservedNames
+        globalReservedNames,
+        options
     );
     lines.push(...linesForSubgraph);
 
     return lines.join('\n');
+}
+
+export interface CompiledPostGraph {
+    code: string;
+    functionName: string;
+}
+
+const POST_INPUT_ID = 'post-input';
+const POST_OUTPUT_ID = 'post-output';
+
+/**
+ * Compile the post-processing root graph by mapping post anchors to synthetic
+ * subgraph anchors and reusing the subgraph compiler path.
+ */
+export function compilePostGraph(
+    nodes: Node<TSLNodeData>[],
+    edges: Edge[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    options: CompileOptions = {}
+): CompiledPostGraph {
+    const inputAnchor = nodes.find((node) => node.id === POST_INPUT_ID || node.data.type === 'post/input');
+    const outputAnchor = nodes.find((node) => node.id === POST_OUTPUT_ID || node.data.type === 'post/output');
+
+    if (!inputAnchor || !outputAnchor) {
+        throw new Error('Post graph is missing required post/input or post/output anchors.');
+    }
+
+    const isPostAnchor = (node: Node<TSLNodeData>) =>
+        node.id === POST_INPUT_ID ||
+        node.id === POST_OUTPUT_ID ||
+        (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(node.data.type);
+
+    const nodeIdMap = new Map<string, string>();
+    nodeIdMap.set(inputAnchor.id, 'subgraph-input');
+    nodeIdMap.set(outputAnchor.id, 'subgraph-output');
+
+    const internalNodes = nodes
+        .filter((node) => !isPostAnchor(node))
+        .map((node) => {
+            nodeIdMap.set(node.id, node.id);
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: { ...(node.data.values ?? {}) },
+                    connected: { ...(node.data.connected ?? {}) },
+                    activeInputs: node.data.activeInputs ? [...node.data.activeInputs] : undefined,
+                    dynamicPorts: node.data.dynamicPorts ? node.data.dynamicPorts.map((port) => ({ ...port })) : undefined,
+                    operations: Array.isArray(node.data.operations)
+                        ? node.data.operations.map((op) => ({ ...op }))
+                        : undefined,
+                },
+                style: node.style ? { ...node.style } : undefined,
+            };
+        });
+
+    const syntheticEdges = edges
+        .map((edge) => {
+            const mappedSource = nodeIdMap.get(edge.source);
+            const mappedTarget = nodeIdMap.get(edge.target);
+            if (!mappedSource || !mappedTarget) return null;
+
+            let mappedSourceHandle = edge.sourceHandle;
+            if (mappedSource === 'subgraph-input') {
+                switch (edge.sourceHandle) {
+                    case 'sceneTexture':
+                        mappedSourceHandle = 'in_sceneTexture';
+                        break;
+                    case 'depth':
+                        mappedSourceHandle = 'in_depth';
+                        break;
+                    case 'depthTexture':
+                        mappedSourceHandle = 'in_depthTexture';
+                        break;
+                    case 'normal':
+                        mappedSourceHandle = 'in_normal';
+                        break;
+                    case 'cameraNear':
+                    case 'cameraFar':
+                        return null;
+                    case 'color':
+                    default:
+                        mappedSourceHandle = 'in_color';
+                        break;
+                }
+            }
+
+            return {
+                ...edge,
+                source: mappedSource,
+                target: mappedTarget,
+                sourceHandle: mappedSourceHandle,
+                targetHandle: mappedTarget === 'subgraph-output' ? 'out_0' : edge.targetHandle,
+            };
+        })
+        .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
+
+    const hasConnectedOutput = syntheticEdges.some(
+        (edge) => edge.target === 'subgraph-output' && (edge.targetHandle ?? 'out_0') === 'out_0'
+    );
+
+    if (!hasConnectedOutput) {
+        throw new Error('Post output is not connected.');
+    }
+
+    const syntheticSubgraph: SubgraphDefinition = {
+        id: 'custom/post-root',
+        name: 'PostGraph',
+        scope: 'project',
+        inputs: [
+            { id: 'in_color', label: 'Color', type: 'vec4' },
+            { id: 'in_sceneTexture', label: 'Scene Texture', type: 'any' },
+            { id: 'in_depth', label: 'Depth', type: 'float' },
+            { id: 'in_depthTexture', label: 'Depth Texture', type: 'any' },
+            { id: 'in_normal', label: 'Normal Texture', type: 'any' },
+        ],
+        outputs: [{ id: 'out_0', label: 'Output', type: 'vec4' }],
+        nodes: internalNodes,
+        edges: syntheticEdges,
+        inputNodePosition: inputAnchor.position,
+        outputNodePosition: outputAnchor.position,
+        createdAt: 0,
+        updatedAt: 0,
+    };
+
+    const code = compileSubgraphCode(
+        syntheticSubgraph,
+        subgraphs,
+        codeNodes,
+        { ...options, runtimeCameraFromScope: true }
+    );
+    const fnMatches = Array.from(code.matchAll(/const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*Fn\(\(\[/g));
+    const functionName = fnMatches[fnMatches.length - 1]?.[1];
+
+    if (!functionName) {
+        throw new Error('Failed to locate compiled post-processing function.');
+    }
+
+    return { code, functionName };
 }
 
 /**
@@ -1246,7 +1419,8 @@ export function compileGraph(
                 usedCodeNodes,
                 codeNodes,
                 globalVarMap,
-                globalReservedNames
+                globalReservedNames,
+                options
             );
             lines.push(...defLines);
             lines.push('');
@@ -1615,7 +1789,9 @@ export function compileGraph(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.pure && inputKeys.length === 0) {
+        if (def.type === 'geo/camera') {
+            code = 'vec2(cameraNear, cameraFar)';
+        } else if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;
         } else if (def.type === 'const/color') {
             const hex = getStringValue(node, 'value', inputs['value']);
@@ -1628,6 +1804,38 @@ export function compileGraph(
             code = `int(${count})`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', edgesForInputs, compiledNodes, inputs['in']);
+        } else if (def.type === 'advanced/perspectiveDepthToViewZ') {
+            const depthArg = getInputValue(node, 'depth', edgesForInputs, compiledNodes, inputs['depth']);
+            const nearRaw = getInputValue(node, 'near', edgesForInputs, compiledNodes, inputs['near']);
+            const farRaw = getInputValue(node, 'far', edgesForInputs, compiledNodes, inputs['far']);
+            const nearConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${depthArg}, ${nearArg}, ${farArg})`;
+        } else if (def.type === 'advanced/viewZToOrthographicDepth') {
+            const viewZArg = getInputValue(node, 'viewZ', edgesForInputs, compiledNodes, inputs['viewZ']);
+            const nearRaw = getInputValue(node, 'near', edgesForInputs, compiledNodes, inputs['near']);
+            const farRaw = getInputValue(node, 'far', edgesForInputs, compiledNodes, inputs['far']);
+            const nearConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'near');
+            const farConnected = edgesForInputs.some((e) => e.target === node.id && e.targetHandle === 'far');
+            const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
+            const farArg = farConnected ? farRaw : `float(${farRaw})`;
+            code = `${def.tsl}(${viewZArg}, ${nearArg}, ${farArg})`;
+        } else if (
+            def.type === 'texture/sampleNode' ||
+            (def.tsl === 'texture' && !!inputs['texture'] && !inputs['url'])
+        ) {
+            const texArg = getInputValue(node, 'texture', edgesForInputs, compiledNodes, inputs['texture']);
+            const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');
+
+            if (uvEdge) {
+                const uvArg = getInputValue(node, 'uv', edgesForInputs, compiledNodes, inputs['uv']);
+                code = `texture(${texArg}, ${uvArg})`;
+            } else {
+                // Default to screen UV when no explicit UV input is connected.
+                code = `texture(${texArg}, screenUV)`;
+            }
         } else if (def.type === 'texture/sample') {
             const url = getStringValue(node, 'url', inputs['url']);
 
@@ -2057,6 +2265,10 @@ export function getRequiredImports(
                 if ((codeNode?.language ?? 'tsl') === 'wgsl') {
                     imports.add('wgslFn');
                 }
+            } else if (node.data.type === 'geo/camera') {
+                imports.add('cameraNear');
+                imports.add('cameraFar');
+                imports.add('vec2');
             } else {
                 const def = registry.get(node.data.type);
                 if (def && !def.tsl.startsWith('__')) imports.add(def.tsl);
@@ -2096,6 +2308,16 @@ export function getRequiredImports(
             continue;
         }
 
+        if (node.data.type === 'texture/sampleNode') {
+            imports.add('screenUV');
+        }
+
+        if (node.data.type === 'geo/camera') {
+            imports.add('cameraNear');
+            imports.add('cameraFar');
+            imports.add('vec2');
+        }
+
         // Assign nodes require Fn wrapper in main graph
         if (ASSIGN_NODE_METHODS[node.data.type]) {
             imports.add('Fn');
@@ -2112,7 +2334,7 @@ export function getRequiredImports(
         }
 
         const def = registry.get(node.data.type);
-        if (def && !def.tsl.startsWith('__')) {
+        if (def && !def.tsl.startsWith('__') && node.data.type !== 'geo/camera') {
             imports.add(def.tsl);
         }
 
@@ -2142,4 +2364,63 @@ export function getRequiredImports(
     }
 
     return Array.from(imports).sort();
+}
+
+const DEFAULT_TSL_IMPORT_SOURCE = 'three/tsl';
+
+export interface ImportGroup {
+    from: string;
+    imports: string[];
+}
+
+function collectImportSourceOverrides(
+    nodes: Node<TSLNodeData>[],
+    subgraphs: Record<string, SubgraphDefinition> | undefined,
+    byModule: Map<string, Set<string>>,
+    visitedSubgraphs: Set<string>
+) {
+    for (const node of nodes) {
+        if (node.data.type.startsWith('custom/') && subgraphs) {
+            const subgraph = subgraphs[node.data.type];
+            if (subgraph && !visitedSubgraphs.has(subgraph.id)) {
+                visitedSubgraphs.add(subgraph.id);
+                collectImportSourceOverrides(subgraph.nodes, subgraphs, byModule, visitedSubgraphs);
+            }
+        }
+
+        const def = registry.get(node.data.type);
+        if (!def || !def.importFrom || def.tsl.startsWith('__')) {
+            continue;
+        }
+
+        const moduleImports = byModule.get(def.importFrom) ?? new Set<string>();
+        moduleImports.add(def.tsl);
+        byModule.set(def.importFrom, moduleImports);
+
+        if (def.importFrom !== DEFAULT_TSL_IMPORT_SOURCE) {
+            const defaultImports = byModule.get(DEFAULT_TSL_IMPORT_SOURCE);
+            defaultImports?.delete(def.tsl);
+        }
+    }
+}
+
+export function getRequiredImportsByModule(
+    nodes: Node<TSLNodeData>[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    globals: GlobalContextEntry[] = []
+): ImportGroup[] {
+    const flatImports = getRequiredImports(nodes, subgraphs, codeNodes, globals);
+    const byModule = new Map<string, Set<string>>();
+
+    if (flatImports.length > 0) {
+        byModule.set(DEFAULT_TSL_IMPORT_SOURCE, new Set(flatImports));
+    }
+
+    collectImportSourceOverrides(nodes, subgraphs, byModule, new Set<string>());
+
+    return Array.from(byModule.entries())
+        .map(([from, importSet]) => ({ from, imports: Array.from(importSet).sort() }))
+        .filter((entry) => entry.imports.length > 0)
+        .sort((a, b) => a.from.localeCompare(b.from));
 }

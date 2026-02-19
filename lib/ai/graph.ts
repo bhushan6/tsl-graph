@@ -51,7 +51,7 @@ function getCustomNodeDefinition(
 }
 
 export function getGraphSnapshot(): GraphSnapshot {
-  const { nodes, edges, selectedNodeIds, globals } = useEditorStore.getState();
+  const { nodes, edges, selectedNodeIds, globals, activeRootGraph } = useEditorStore.getState();
   const materialNode = nodes.find((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
 
   const summarizedNodes: NodeSummary[] = nodes.map((node) => ({
@@ -71,6 +71,7 @@ export function getGraphSnapshot(): GraphSnapshot {
   return {
     nodes: summarizedNodes,
     edges: summarizedEdges,
+    activeRootGraph,
     materialNodeId: materialNode?.id ?? null,
     selectedNodeIds,
     globals,
@@ -201,7 +202,7 @@ function getPortSets(node: Node<TSLNodeData>, def: NodeDefinition | null): PortS
 }
 
 export function validateGraph(): ValidationReport {
-  const { nodes, edges, globals } = useEditorStore.getState();
+  const { nodes, edges, globals, activeRootGraph } = useEditorStore.getState();
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
@@ -291,24 +292,38 @@ export function validateGraph(): ValidationReport {
     (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)
   );
 
-  if (materialNodes.length === 0) {
-    warnings.push({
-      type: 'material-count',
-      message: 'No material node found. The preview may be empty.',
-    });
-  } else if (materialNodes.length > 1) {
-    errors.push({
-      type: 'material-count',
-      message: `Multiple material nodes found (${materialNodes.length}). Keep exactly one.`,
-    });
-  } else {
-    const materialNode = materialNodes[0];
-    const hasMaterialInput = edges.some((edge) => edge.target === materialNode.id);
-    if (!hasMaterialInput) {
+  if (activeRootGraph === 'material') {
+    if (materialNodes.length === 0) {
       warnings.push({
-        type: 'material-unconnected',
-        nodeId: materialNode.id,
-        message: 'Material node has no incoming connections.',
+        type: 'material-count',
+        message: 'No material node found. The preview may be empty.',
+      });
+    } else if (materialNodes.length > 1) {
+      errors.push({
+        type: 'material-count',
+        message: `Multiple material nodes found (${materialNodes.length}). Keep exactly one.`,
+      });
+    } else {
+      const materialNode = materialNodes[0];
+      const hasMaterialInput = edges.some((edge) => edge.target === materialNode.id);
+      if (!hasMaterialInput) {
+        warnings.push({
+          type: 'material-unconnected',
+          nodeId: materialNode.id,
+          message: 'Material node has no incoming connections.',
+        });
+      }
+    }
+  } else {
+    const postOutputNode = nodes.find((node) => node.id === 'post-output' || node.data.type === 'post/output');
+    const hasConnectedPostOutput = !!postOutputNode && edges.some(
+      (edge) => edge.target === postOutputNode.id
+    );
+    if (!hasConnectedPostOutput) {
+      errors.push({
+        type: 'post-output-unconnected',
+        nodeId: postOutputNode?.id,
+        message: 'Post graph output must be connected to post/output.color.',
       });
     }
   }
@@ -337,4 +352,3 @@ export function validateGraph(): ValidationReport {
     },
   };
 }
-

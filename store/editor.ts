@@ -13,7 +13,7 @@ import {
     getNodesBounds,
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
-import { loopNodes, MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
@@ -25,6 +25,7 @@ import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-
 
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
+export type RootGraphMode = 'material' | 'post';
 
 // Geometry configuration
 export interface GeometryConfig {
@@ -76,13 +77,17 @@ export interface PreviewSettings {
     showEnvironmentBackground?: boolean;
     showBackdrop?: boolean;
     showGrid?: boolean;
+    postEnabled?: boolean;
 }
 
 // Graph save format
 export interface GraphData {
     version: number;
+    activeRootGraph?: RootGraphMode;
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
+    postNodes?: Node<TSLNodeData>[];
+    postEdges?: Edge[];
     globals?: GlobalContextEntry[];
     // Subgraph definitions
     subgraphs?: Record<string, SubgraphDefinition>;
@@ -95,8 +100,15 @@ export interface GraphData {
 // Editor mode - main graph or editing a subgraph
 export type EditorMode = 'main' | 'subgraph';
 
-const GRAPH_VERSION = 1;
+const GRAPH_VERSION = 2;
 const STORAGE_KEY = 'tsl-editor-graph';
+
+const SUBGRAPH_INPUT_ID = 'subgraph-input';
+const SUBGRAPH_OUTPUT_ID = 'subgraph-output';
+const POST_INPUT_ID = 'post-input';
+const POST_OUTPUT_ID = 'post-output';
+const POST_INPUT_POSITION = { x: -400, y: 200 };
+const POST_OUTPUT_POSITION = { x: 400, y: 200 };
 
 type LoopMode = 'count' | 'range' | 'reverse' | 'nested' | 'condition';
 
@@ -140,11 +152,23 @@ const isGroupLikeNode = (node: Node<TSLNodeData>) => node.type === 'group' || is
 
 const isLoopInternalNode = (node: Node<TSLNodeData>) => LOOP_INTERNAL_NODE_TYPES.has(node.data.type);
 
-const isAnchorNode = (node: Node<TSLNodeData>) =>
-    node.id === 'subgraph-input' ||
-    node.id === 'subgraph-output' ||
+const isPostAnchorNodeType = (type: string) =>
+    (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(type);
+
+const isSubgraphAnchorNode = (node: Node<TSLNodeData>) =>
+    node.id === SUBGRAPH_INPUT_ID ||
+    node.id === SUBGRAPH_OUTPUT_ID ||
     node.data.type === 'subgraph/input' ||
     node.data.type === 'subgraph/output';
+
+const isPostAnchorNode = (node: Node<TSLNodeData>) =>
+    node.id === POST_INPUT_ID ||
+    node.id === POST_OUTPUT_ID ||
+    isPostAnchorNodeType(node.data.type);
+
+const isAnchorNode = (node: Node<TSLNodeData>) =>
+    isSubgraphAnchorNode(node) ||
+    isPostAnchorNode(node);
 
 const cloneNode = (node: Node<TSLNodeData>): Node<TSLNodeData> => ({
     ...node,
@@ -166,6 +190,108 @@ const cloneEdge = (edge: Edge): Edge => ({
     data: edge.data ? { ...(edge.data as Record<string, unknown>) } : edge.data,
     style: edge.style ? { ...edge.style } : edge.style,
 });
+
+const cloneNodes = (nodes: Node<TSLNodeData>[]): Node<TSLNodeData>[] => nodes.map(cloneNode);
+
+const cloneEdges = (edges: Edge[]): Edge[] => edges.map(cloneEdge);
+
+const createDefaultPreviewSettings = (): PreviewSettings => ({
+    mesh: 'sphere',
+    isInstanced: false,
+    instanceCount: 100,
+    geometryScript: '',
+    codeMode: 'generated',
+    customCode: '',
+    environment: 'studio',
+    environmentIntensity: 1,
+    showEnvironmentBackground: false,
+    showBackdrop: false,
+    showGrid: true,
+    postEnabled: true,
+    config: {
+        width: 1.5,
+        height: 1.5,
+        depth: 1.5,
+        widthSegments: 1,
+        heightSegments: 1,
+        depthSegments: 1,
+        radius: 1,
+        widthSegmentsSphere: 32,
+        heightSegmentsSphere: 16,
+        radiusTorus: 0.8,
+        tube: 0.3,
+        radialSegments: 16,
+        tubularSegments: 32,
+        widthPlane: 1,
+        heightPlane: 1,
+        widthSegmentsPlane: 1,
+        heightSegmentsPlane: 1,
+        radiusTop: 1,
+        radiusBottom: 1,
+        heightCylinder: 1,
+        radialSegmentsCylinder: 20,
+        heightSegmentsCylinder: 20,
+        openEnded: true,
+    },
+});
+
+const createPostInputAnchorNode = (position = POST_INPUT_POSITION): Node<TSLNodeData> => ({
+    id: POST_INPUT_ID,
+    type: 'post/input',
+    position: { ...position },
+    data: {
+        type: 'post/input',
+        values: {},
+        connected: {},
+    },
+});
+
+const createPostOutputAnchorNode = (position = POST_OUTPUT_POSITION): Node<TSLNodeData> => ({
+    id: POST_OUTPUT_ID,
+    type: 'post/output',
+    position: { ...position },
+    data: {
+        type: 'post/output',
+        values: {},
+        connected: {},
+    },
+});
+
+const normalizePostGraph = (
+    inputNodes: Node<TSLNodeData>[] | undefined,
+    inputEdges: Edge[] | undefined
+): { nodes: Node<TSLNodeData>[]; edges: Edge[] } => {
+    const nodes = Array.isArray(inputNodes) ? cloneNodes(inputNodes) : [];
+    const edges = Array.isArray(inputEdges) ? cloneEdges(inputEdges) : [];
+
+    const inputAlias = nodes.find((node) => node.id === POST_INPUT_ID || node.data.type === 'post/input');
+    const outputAlias = nodes.find((node) => node.id === POST_OUTPUT_ID || node.data.type === 'post/output');
+
+    const aliases = new Map<string, string>();
+    if (inputAlias) aliases.set(inputAlias.id, POST_INPUT_ID);
+    if (outputAlias) aliases.set(outputAlias.id, POST_OUTPUT_ID);
+
+    const internalNodes = nodes.filter((node) => !isPostAnchorNode(node));
+    const normalizedNodes: Node<TSLNodeData>[] = [
+        createPostInputAnchorNode(inputAlias?.position ?? POST_INPUT_POSITION),
+        createPostOutputAnchorNode(outputAlias?.position ?? POST_OUTPUT_POSITION),
+        ...internalNodes,
+    ];
+
+    const validNodeIds = new Set(normalizedNodes.map((node) => node.id));
+    const normalizedEdges = edges
+        .map((edge) => ({
+            ...edge,
+            source: aliases.get(edge.source) ?? edge.source,
+            target: aliases.get(edge.target) ?? edge.target,
+        }))
+        .filter((edge) => validNodeIds.has(edge.source) && validNodeIds.has(edge.target));
+
+    return {
+        nodes: normalizedNodes,
+        edges: normalizedEdges,
+    };
+};
 
 const isLoopMode = (value: string): value is LoopMode => {
     return LOOP_MODES.includes(value as LoopMode);
@@ -368,6 +494,14 @@ interface HistoryState {
     future: Snapshot[];
 }
 
+interface RootGraphSnapshot {
+    nodes: Node<TSLNodeData>[];
+    edges: Edge[];
+    history: HistoryState;
+    selectedNodeId: string | null;
+    selectedNodeIds: string[];
+}
+
 type ClipboardData = {
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
@@ -384,16 +518,31 @@ const stripTransientFields = (nodes: Node<TSLNodeData>[]): Node<TSLNodeData>[] =
     }));
 };
 
+const createEmptyHistoryState = (): HistoryState => ({ past: [], future: [] });
+
+const createRootGraphSnapshot = (snapshot?: Partial<RootGraphSnapshot>): RootGraphSnapshot => ({
+    nodes: cloneNodes(snapshot?.nodes ?? []),
+    edges: cloneEdges(snapshot?.edges ?? []),
+    history: snapshot?.history ?? createEmptyHistoryState(),
+    selectedNodeId: snapshot?.selectedNodeId ?? null,
+    selectedNodeIds: snapshot?.selectedNodeIds ? [...snapshot.selectedNodeIds] : [],
+});
+
 
 interface EditorState {
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
+    activeRootGraph: RootGraphMode;
+    materialRootGraph: RootGraphSnapshot;
+    postRootGraph: RootGraphSnapshot;
     selectedNodeId: string | null;
     selectedNodeIds: string[]; // For multi-selection
     clipboard: ClipboardData | null;
     graphStructureVersion: number;
     hoveredGroupId: string | null;
     setHoveredGroupId: (groupId: string | null) => void;
+    setActiveRootGraph: (mode: RootGraphMode) => void;
+    getRootGraph: (mode: RootGraphMode) => { nodes: Node<TSLNodeData>[]; edges: Edge[] };
 
     // Global context
     globals: GlobalContextEntry[];
@@ -556,7 +705,7 @@ interface EditorState {
     // Reset entire store
     resetEditor: () => void;
     // Track event helper
-    trackEvent: (event: string, properties?: Record<string, any>) => void;
+    trackEvent: (event: string, properties?: Record<string, unknown>) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -565,12 +714,58 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
     nodes: [],
     edges: [],
+    activeRootGraph: 'material',
+    materialRootGraph: createRootGraphSnapshot(),
+    postRootGraph: createRootGraphSnapshot(normalizePostGraph(undefined, undefined)),
     selectedNodeId: null,
     selectedNodeIds: [],
     clipboard: null,
     graphStructureVersion: 0,
     hoveredGroupId: null,
     setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
+    setActiveRootGraph: (mode) => {
+        const state = get();
+        if (state.activeRootGraph === mode) return;
+        if (state.editorMode === 'subgraph') return;
+
+        const currentSnapshot = createRootGraphSnapshot({
+            nodes: state.nodes,
+            edges: state.edges,
+            history: state.history,
+            selectedNodeId: state.selectedNodeId,
+            selectedNodeIds: state.selectedNodeIds,
+        });
+
+        const targetSnapshot = mode === 'material'
+            ? state.materialRootGraph
+            : state.postRootGraph;
+
+        set({
+            materialRootGraph: state.activeRootGraph === 'material' ? currentSnapshot : state.materialRootGraph,
+            postRootGraph: state.activeRootGraph === 'post' ? currentSnapshot : state.postRootGraph,
+            activeRootGraph: mode,
+            nodes: cloneNodes(targetSnapshot.nodes),
+            edges: cloneEdges(targetSnapshot.edges),
+            history: targetSnapshot.history,
+            selectedNodeId: targetSnapshot.selectedNodeId,
+            selectedNodeIds: [...targetSnapshot.selectedNodeIds],
+            graphStructureVersion: state.graphStructureVersion + 1,
+        });
+    },
+    getRootGraph: (mode) => {
+        const state = get();
+        if (state.editorMode === 'main' && state.activeRootGraph === mode) {
+            return {
+                nodes: state.nodes,
+                edges: state.edges,
+            };
+        }
+        const snapshot = mode === 'material' ? state.materialRootGraph : state.postRootGraph;
+        return {
+            nodes: snapshot.nodes,
+            edges: snapshot.edges,
+        };
+    },
     globals: [],
 
     addGlobal: (entry = {}) => {
@@ -709,54 +904,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     // Preview settings
-    previewSettings: {
-        mesh: 'sphere' as PreviewMeshType,
-        isInstanced: false,
-        instanceCount: 100,
-        geometryScript: '',
-        codeMode: 'generated',
-        customCode: '',
-        environment: 'studio',
-        environmentIntensity: 1,
-        showEnvironmentBackground: false,
-        showBackdrop: false,
-        showGrid: true,
-        config: {
-            // Defaults with low resolution as requested
-            // Box
-            width: 1.5,
-            height: 1.5,
-            depth: 1.5,
-            widthSegments: 1,
-            heightSegments: 1,
-            depthSegments: 1,
-
-            // Sphere
-            radius: 1,
-            widthSegmentsSphere: 32,
-            heightSegmentsSphere: 16,
-
-            // Torus
-            radiusTorus: 0.8,
-            tube: 0.3,
-            radialSegments: 16,
-            tubularSegments: 32,
-
-            // Plane
-            widthPlane: 1,
-            heightPlane: 1,
-            widthSegmentsPlane: 1,
-            heightSegmentsPlane: 1,
-
-            // Cylinder
-            radiusTop: 1,
-            radiusBottom: 1,
-            heightCylinder: 1,
-            radialSegmentsCylinder: 20,
-            heightSegmentsCylinder: 20,
-            openEnded: true,
-        }
-    },
+    previewSettings: createDefaultPreviewSettings(),
     updatePreviewSettings: (updates) => {
         set({ previewSettings: { ...get().previewSettings, ...updates } });
         get().markDirty();
@@ -809,7 +957,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     setDebugMode: (mode) => set({ debugMode: mode }),
 
     // History initialization
-    history: { past: [], future: [] },
+    history: createEmptyHistoryState(),
     isUndoRedoInProgress: false,
 
     // Auto-save methods
@@ -925,14 +1073,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const currentNodes = get().nodes;
 
-        // Prevent deletion of subgraph anchor nodes and loop internal nodes
+        // Prevent deletion of anchor nodes and loop internal nodes
         let filteredChanges = changes.filter(change => {
             if (change.type === 'remove') {
                 const nodeId = change.id;
-                if (nodeId === 'subgraph-input' || nodeId === 'subgraph-output') {
+                const node = currentNodes.find(n => n.id === nodeId);
+                if (
+                    nodeId === SUBGRAPH_INPUT_ID ||
+                    nodeId === SUBGRAPH_OUTPUT_ID ||
+                    nodeId === POST_INPUT_ID ||
+                    nodeId === POST_OUTPUT_ID ||
+                    (node && isAnchorNode(node))
+                ) {
                     return false; // Block deletion of anchor nodes
                 }
-                const node = currentNodes.find(n => n.id === nodeId);
                 if (node && isLoopInternalNode(node)) {
                     return false; // Block deletion of loop internal nodes
                 }
@@ -1126,10 +1280,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             toast.error('Loop nodes can only be created via Create Loop.');
             return false;
         }
+        if (isPostAnchorNodeType(type)) {
+            return false;
+        }
+
+        const { activeRootGraph } = get();
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
+        const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(type);
+        if (activeRootGraph === 'post' && isMaterialNode) {
+            toast.error('Material nodes are not allowed in the post graph.');
+            return false;
+        }
+        if (activeRootGraph === 'material' && isPostFxNode) {
+            toast.error('Post FX nodes are only allowed in the post graph.');
+            return false;
+        }
+        if (activeRootGraph === 'post' && type === 'texture/viewportShared') {
+            toast.error('Use post/input + texture sampling in post graph instead of viewport shared texture.');
+            return false;
+        }
+        if (activeRootGraph === 'post' && type === 'const/uniform') {
+            toast.error('Uniform nodes are not supported in the post graph yet.');
+            return false;
+        }
 
         // If trying to add a material node, check if one already exists
-        if (isMaterialNode) {
+        if (activeRootGraph === 'material' && isMaterialNode) {
             const existingMaterial = get().nodes.find(n =>
                 (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
             );
@@ -1186,7 +1362,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...node,
             selected: false,
         }));
-        console.log({ deselectedNodes, newNode });
 
         set({
             nodes: [...deselectedNodes, newNode],
@@ -1414,6 +1589,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const target = nodes.find(n => n.id === nodeId);
         if (!target) return;
 
+        if (isAnchorNode(target)) {
+            return;
+        }
+
         if (isLoopInternalNode(target)) {
             return;
         }
@@ -1548,16 +1727,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     pasteSelection: (pastePosition) => {
-        const { clipboard, nodes, edges, subgraphs, codeNodes, editorMode } = get();
+        const { clipboard, nodes, edges, subgraphs, codeNodes, editorMode, activeRootGraph } = get();
         if (!clipboard || clipboard.nodes.length === 0) return;
 
         const existingMaterial = nodes.some((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type));
         const isSubgraphMode = editorMode === 'subgraph';
+        const isPostRoot = activeRootGraph === 'post' && editorMode === 'main';
+        const isMaterialRoot = activeRootGraph === 'material' && editorMode === 'main';
         const isMaterialNode = (node: Node<TSLNodeData>) =>
             (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+        const isPostFxNode = (node: Node<TSLNodeData>) =>
+            (POST_FX_NODE_TYPES as readonly string[]).includes(node.data.type);
 
         const nodesToPaste: Node<TSLNodeData>[] = [];
         let skippedMaterial = false;
+        let skippedPostFx = false;
         let skippedUniform = false;
         let materialIncluded = false;
 
@@ -1577,12 +1761,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             }
 
+            if (isPostRoot && node.data.type === 'const/uniform') {
+                skippedUniform = true;
+                continue;
+            }
+
             if (isMaterialNode(node)) {
+                if (isPostRoot) {
+                    skippedMaterial = true;
+                    continue;
+                }
                 if (existingMaterial || materialIncluded) {
                     skippedMaterial = true;
                     continue;
                 }
                 materialIncluded = true;
+            }
+
+            if (isMaterialRoot && isPostFxNode(node)) {
+                skippedPostFx = true;
+                continue;
             }
 
             nodesToPaste.push(node);
@@ -1591,6 +1789,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (skippedMaterial) {
             if (isSubgraphMode) {
                 toast.error('Material nodes cannot be pasted inside subgraphs.');
+            } else if (isPostRoot) {
+                toast.error('Material nodes cannot be pasted into the post graph.');
             } else if (existingMaterial) {
                 toast.error('Material node not pasted because one already exists in this graph.');
             } else {
@@ -1600,6 +1800,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         if (skippedUniform && isSubgraphMode) {
             toast.error('Uniform nodes cannot be pasted inside subgraphs.');
+        }
+        if (skippedUniform && isPostRoot) {
+            toast.error('Uniform nodes cannot be pasted into the post graph.');
+        }
+
+        if (skippedPostFx && isMaterialRoot) {
+            toast.error('Post FX nodes cannot be pasted into the material graph.');
         }
 
         if (nodesToPaste.length === 0) {
@@ -1722,10 +1929,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Save graph to JSON string
     saveToJSON: () => {
-        const { nodes, edges, subgraphs, codeNodes, globals, editorMode, subgraphStack, editingSubgraphId } = get();
+        const {
+            nodes,
+            edges,
+            subgraphs,
+            codeNodes,
+            globals,
+            editorMode,
+            subgraphStack,
+            editingSubgraphId,
+            activeRootGraph,
+            materialRootGraph,
+            postRootGraph,
+        } = get();
 
-        let nodesToSave = nodes;
-        let edgesToSave = edges;
+        let activeRootNodesToSave = nodes;
+        let activeRootEdgesToSave = edges;
         const subgraphsToSave = { ...subgraphs };
 
         // If we are in subgraph mode, we need to:
@@ -1736,12 +1955,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (editingSubgraphId) {
                 // Filter out anchor nodes for the definition
                 const internalNodes = nodes.filter(
-                    n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output'
+                    n => n.id !== SUBGRAPH_INPUT_ID && n.id !== SUBGRAPH_OUTPUT_ID
                 );
 
                 // Get input/output ports from anchor nodes
-                const inputNode = nodes.find(n => n.id === 'subgraph-input');
-                const outputNode = nodes.find(n => n.id === 'subgraph-output');
+                const inputNode = nodes.find(n => n.id === SUBGRAPH_INPUT_ID);
+                const outputNode = nodes.find(n => n.id === SUBGRAPH_OUTPUT_ID);
 
                 subgraphsToSave[editingSubgraphId] = {
                     ...subgraphsToSave[editingSubgraphId],
@@ -1768,10 +1987,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 if (item.subgraphId) {
                     // This stack item represents a subgraph we were editing
                     const internalNodes = item.nodes.filter(
-                        n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output'
+                        n => n.id !== SUBGRAPH_INPUT_ID && n.id !== SUBGRAPH_OUTPUT_ID
                     );
-                    const inputNode = item.nodes.find(n => n.id === 'subgraph-input');
-                    const outputNode = item.nodes.find(n => n.id === 'subgraph-output');
+                    const inputNode = item.nodes.find(n => n.id === SUBGRAPH_INPUT_ID);
+                    const outputNode = item.nodes.find(n => n.id === SUBGRAPH_OUTPUT_ID);
 
                     subgraphsToSave[item.subgraphId] = {
                         ...subgraphsToSave[item.subgraphId],
@@ -1787,14 +2006,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             });
 
             // The root graph is at index 0 of the stack
-            nodesToSave = subgraphStack[0].nodes;
-            edgesToSave = subgraphStack[0].edges;
+            activeRootNodesToSave = subgraphStack[0].nodes;
+            activeRootEdgesToSave = subgraphStack[0].edges;
         }
+
+        const materialGraph = activeRootGraph === 'material'
+            ? { nodes: activeRootNodesToSave, edges: activeRootEdgesToSave }
+            : { nodes: materialRootGraph.nodes, edges: materialRootGraph.edges };
+
+        const postGraphRaw = activeRootGraph === 'post'
+            ? { nodes: activeRootNodesToSave, edges: activeRootEdgesToSave }
+            : { nodes: postRootGraph.nodes, edges: postRootGraph.edges };
+        const postGraph = normalizePostGraph(postGraphRaw.nodes, postGraphRaw.edges);
 
         const graphData: GraphData = {
             version: GRAPH_VERSION,
-            nodes: nodesToSave,
-            edges: edgesToSave,
+            activeRootGraph,
+            nodes: materialGraph.nodes,
+            edges: materialGraph.edges,
+            postNodes: postGraph.nodes,
+            postEdges: postGraph.edges,
             globals,
             subgraphs: subgraphsToSave,
             codeNodes: codeNodes,
@@ -1823,45 +2054,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             if (nodes && edges) {
                 clearUniforms();
-
-                const defaultPreviewSettings: PreviewSettings = {
-                    mesh: 'sphere',
-                    isInstanced: false,
-                    instanceCount: 100,
-                    geometryScript: '',
-                    environment: 'studio',
-                    environmentIntensity: 1,
-                    showEnvironmentBackground: false,
-                    showBackdrop: false,
-                    showGrid: true,
-                    codeMode: 'generated',
-                    customCode: '',
-                    config: {
-                        width: 1.5,
-                        height: 1.5,
-                        depth: 1.5,
-                        widthSegments: 1,
-                        heightSegments: 1,
-                        depthSegments: 1,
-                        radius: 1,
-                        widthSegmentsSphere: 32,
-                        heightSegmentsSphere: 16,
-                        radiusTorus: 0.8,
-                        tube: 0.3,
-                        radialSegments: 16,
-                        tubularSegments: 32,
-                        widthPlane: 1,
-                        heightPlane: 1,
-                        widthSegmentsPlane: 1,
-                        heightSegmentsPlane: 1,
-                        radiusTop: 1,
-                        radiusBottom: 1,
-                        heightCylinder: 1,
-                        radialSegmentsCylinder: 20,
-                        heightSegmentsCylinder: 20,
-                        openEnded: true,
-                    },
-                };
+                const defaultPreviewSettings = createDefaultPreviewSettings();
 
                 const persistedPreview = data.previewSettings ?? data.graph?.previewSettings;
                 const mergedPreviewSettings: PreviewSettings = {
@@ -1873,9 +2066,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     },
                 };
 
+                const rawPostNodes = Array.isArray(data.postNodes)
+                    ? data.postNodes
+                    : Array.isArray(data.graph?.postNodes)
+                        ? data.graph?.postNodes
+                        : undefined;
+                const rawPostEdges = Array.isArray(data.postEdges)
+                    ? data.postEdges
+                    : Array.isArray(data.graph?.postEdges)
+                        ? data.graph?.postEdges
+                        : undefined;
+                const postGraph = normalizePostGraph(rawPostNodes, rawPostEdges);
+
+                const loadedActiveRootGraph = data.activeRootGraph ?? data.graph?.activeRootGraph;
+                const activeRootGraph: RootGraphMode = loadedActiveRootGraph === 'post' ? 'post' : 'material';
+
+                const initialGraph = activeRootGraph === 'post'
+                    ? postGraph
+                    : { nodes: cloneNodes(nodes), edges: cloneEdges(edges) };
+
                 set({
-                    nodes,
-                    edges,
+                    nodes: initialGraph.nodes,
+                    edges: initialGraph.edges,
+                    activeRootGraph,
+                    materialRootGraph: createRootGraphSnapshot({ nodes, edges }),
+                    postRootGraph: createRootGraphSnapshot(postGraph),
+                    selectedNodeId: null,
+                    selectedNodeIds: [],
+                    clipboard: null,
                     globals: data.globals ?? data.graph?.globals ?? [],
                     subgraphs: data.subgraphs ?? data.graph?.subgraphs ?? {},
                     codeNodes: data.codeNodes ?? data.graph?.codeNodes ?? {},
@@ -1886,7 +2104,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     editorMode: 'main',
                     editingSubgraphId: null,
                     subgraphStack: [],
-                    history: { past: [], future: [] },
+                    history: createEmptyHistoryState(),
                 });
                 return true;
             }
@@ -1907,7 +2125,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const json = localStorage.getItem(STORAGE_KEY);
         if (json) {
             const parsed = JSON.parse(json);
-            if (parsed.nodes && parsed.nodes.length < 1 && parsed.edges && parsed.edges.length < 1 && parsed.subgraphs && Object.keys(parsed.subgraphs).length < 1) {
+            const hasMaterialGraph = Array.isArray(parsed.nodes) && parsed.nodes.length > 0;
+            const hasPostGraph = Array.isArray(parsed.postNodes) && parsed.postNodes.length > 2;
+            if (!hasMaterialGraph && !hasPostGraph && parsed.edges && parsed.edges.length < 1 && parsed.subgraphs && Object.keys(parsed.subgraphs).length < 1) {
                 return false;
             }
             return get().loadFromJSON(json);
@@ -1920,10 +2140,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     clearGraph: () => {
         get().takeSnapshot();
         clearUniforms();
+        const postGraph = normalizePostGraph(undefined, undefined);
         set({
             nodes: [],
             edges: [],
+            activeRootGraph: 'material',
+            materialRootGraph: createRootGraphSnapshot(),
+            postRootGraph: createRootGraphSnapshot(postGraph),
             globals: [],
+            selectedNodeId: null,
+            selectedNodeIds: [],
+            clipboard: null,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
@@ -2095,7 +2322,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (!subgraph) return false;
 
         // Backup current context to stack
-        const { nodes, edges, editingSubgraphId, subgraphStack } = get();
+        const state = get();
+        const { nodes, edges, editingSubgraphId, subgraphStack } = state;
+
+        const shouldPersistRootSnapshot = state.editorMode === 'main';
+        const activeSnapshot = shouldPersistRootSnapshot
+            ? createRootGraphSnapshot({
+                nodes,
+                edges,
+                history: state.history,
+                selectedNodeId: state.selectedNodeId,
+                selectedNodeIds: state.selectedNodeIds,
+            })
+            : null;
 
         // Get the IDs of the original nodes that might be replaced
         // Note: This logic assumes we are entering from a "create subgraph" flow where 
@@ -2114,7 +2353,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // Create input anchor node (use stored position or calculate fallback)
         const inputNode: Node<TSLNodeData> = {
-            id: 'subgraph-input',
+            id: SUBGRAPH_INPUT_ID,
             type: 'subgraph/input',
             position: subgraph.inputNodePosition || { x: 0, y: 200 },
             data: {
@@ -2127,7 +2366,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // Create output anchor node (use stored position or calculate fallback)
         const outputNode: Node<TSLNodeData> = {
-            id: 'subgraph-output',
+            id: SUBGRAPH_OUTPUT_ID,
             type: 'subgraph/output',
             position: subgraph.outputNodePosition || { x: 600, y: 200 },
             data: {
@@ -2139,6 +2378,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         };
 
         set({
+            materialRootGraph: shouldPersistRootSnapshot && state.activeRootGraph === 'material' && activeSnapshot
+                ? activeSnapshot
+                : state.materialRootGraph,
+            postRootGraph: shouldPersistRootSnapshot && state.activeRootGraph === 'post' && activeSnapshot
+                ? activeSnapshot
+                : state.postRootGraph,
             subgraphStack: [...subgraphStack, stackItem],
             editorMode: 'subgraph',
             editingSubgraphId: subgraphId,
@@ -2169,8 +2414,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         if (save) {
             // Save the current editor state back to subgraph definition
-            const inputNode = nodes.find(n => n.id === 'subgraph-input');
-            const outputNode = nodes.find(n => n.id === 'subgraph-output');
+            const inputNode = nodes.find(n => n.id === SUBGRAPH_INPUT_ID);
+            const outputNode = nodes.find(n => n.id === SUBGRAPH_OUTPUT_ID);
 
             const inputPorts = inputNode?.data.dynamicPorts || [];
             const outputPorts = outputNode?.data.dynamicPorts || [];
@@ -2185,10 +2430,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             // Check which ports are connected
             const connectedInputPorts = new Set(
-                edges.filter(e => e.source === 'subgraph-input').map(e => e.sourceHandle)
+                edges.filter(e => e.source === SUBGRAPH_INPUT_ID).map(e => e.sourceHandle)
             );
             const connectedOutputPorts = new Set(
-                edges.filter(e => e.target === 'subgraph-output').map(e => e.targetHandle)
+                edges.filter(e => e.target === SUBGRAPH_OUTPUT_ID).map(e => e.targetHandle)
             );
 
             // Warn about unconnected ports
@@ -2205,7 +2450,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             // Filter out anchor nodes from internal nodes
             const internalNodes = nodes.filter(
-                n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output'
+                n => n.id !== SUBGRAPH_INPUT_ID && n.id !== SUBGRAPH_OUTPUT_ID
             );
 
             // Keep all edges including those connected to anchor nodes so we preserve inputs/outputs wiring
@@ -3532,9 +3777,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     resetEditor: () => {
+        clearUniforms();
+        const postGraph = normalizePostGraph(undefined, undefined);
         set({
             nodes: [],
             edges: [],
+            activeRootGraph: 'material',
+            materialRootGraph: createRootGraphSnapshot(),
+            postRootGraph: createRootGraphSnapshot(postGraph),
             selectedNodeId: null,
             selectedNodeIds: [],
             clipboard: null,
@@ -3547,47 +3797,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             autoSaveCallback: null,
             isSaving: false,
             isDirty: false,
-            history: { past: [], future: [] },
+            history: createEmptyHistoryState(),
             canvasMode: 'pan',
             codeNodes: {},
-            previewSettings: {
-                mesh: 'sphere',
-                isInstanced: false,
-                instanceCount: 100,
-                geometryScript: '',
-                codeMode: 'generated',
-                customCode: '',
-                environment: 'none',
-                environmentIntensity: 1,
-                showEnvironmentBackground: false,
-                showBackdrop: false,
-                showGrid: true,
-                config: {
-                    width: 1.5,
-                    height: 1.5,
-                    depth: 1.5,
-                    widthSegments: 1,
-                    heightSegments: 1,
-                    depthSegments: 1,
-                    radius: 1,
-                    widthSegmentsSphere: 32,
-                    heightSegmentsSphere: 16,
-                    radiusTorus: 0.8,
-                    tube: 0.3,
-                    radialSegments: 16,
-                    tubularSegments: 32,
-                    widthPlane: 1,
-                    heightPlane: 1,
-                    widthSegmentsPlane: 1,
-                    heightSegmentsPlane: 1,
-                    radiusTop: 1,
-                    radiusBottom: 1,
-                    heightCylinder: 1,
-                    radialSegmentsCylinder: 20,
-                    heightSegmentsCylinder: 20,
-                    openEnded: true,
-                }
-            },
+            previewSettings: createDefaultPreviewSettings(),
         });
     },
 }));

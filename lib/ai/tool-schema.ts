@@ -8,7 +8,7 @@ const emptySchema = jsonSchema({
 
 export const TOOL_SET = {
   getGraphSnapshot: tool({
-    description: 'Get a compact snapshot of the current graph (nodes, edges, selection, material node).',
+    description: 'Get a compact snapshot of the current graph (nodes, edges, selection, active root graph mode, material node).',
     inputSchema: emptySchema,
   }),
   getAvailableNodes: tool({
@@ -38,11 +38,11 @@ export const TOOL_SET = {
     }),
   }),
   validateGraph: tool({
-    description: 'Validate the current graph for missing nodes/handles and material node issues.',
+    description: 'Validate the current graph for missing nodes/handles and mode-specific issues (material root checks vs post output connection checks).',
     inputSchema: emptySchema,
   }),
   addNode: tool({
-    description: 'Add a node with optional position and initial values.',
+    description: 'Add a node with optional position and initial values, respecting the active root graph mode constraints.',
     inputSchema: jsonSchema({
       type: 'object',
       properties: {

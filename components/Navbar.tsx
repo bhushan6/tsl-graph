@@ -45,6 +45,9 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
         nodes,
         isSaving,
         isDirty,
+        activeRootGraph,
+        setActiveRootGraph,
+        editorMode,
     } = useEditorStore();
 
     const updateProject = useMutation(api.projects.update);
@@ -183,6 +186,27 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
                         </div>
                     )
                 )}
+
+                <div className="flex items-center rounded-md border border-border p-0.5">
+                    <Button
+                        variant={activeRootGraph === 'material' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="h-6 px-2 text-[11px]"
+                        disabled={editorMode === 'subgraph' || !!isReadOnly}
+                        onClick={() => setActiveRootGraph('material')}
+                    >
+                        Material
+                    </Button>
+                    <Button
+                        variant={activeRootGraph === 'post' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="h-6 px-2 text-[11px]"
+                        disabled={editorMode === 'subgraph' || !!isReadOnly}
+                        onClick={() => setActiveRootGraph('post')}
+                    >
+                        Post
+                    </Button>
+                </div>
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>

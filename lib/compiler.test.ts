@@ -1,6 +1,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { compileGraph, compileSubgraphCode, getRequiredImports } from './compiler';
+import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports, getRequiredImportsByModule } from './compiler';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, GlobalContextEntry, NodeType, CodeNodeDefinition, SubgraphDefinition } from '@/lib/types';
 import { registry } from './registry';
@@ -173,12 +173,95 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'float', label: 'Out' } }
     },
     {
+        type: 'geo/camera',
+        label: 'Camera',
+        category: 'Geometry',
+        tsl: 'camera',
+        pure: true,
+        outputs: {
+            near: { type: 'float', label: 'Near' },
+            far: { type: 'float', label: 'Far' },
+            out: { type: 'vec2', label: 'Near/Far' },
+        }
+    },
+    {
+        type: 'advanced/perspectiveDepthToViewZ',
+        label: 'Perspective Depth To View Z',
+        category: 'Advanced',
+        tsl: 'perspectiveDepthToViewZ',
+        inputs: {
+            depth: { type: 'float', default: 0, label: 'Depth' },
+            near: { type: 'float', default: 0.01, label: 'Near' },
+            far: { type: 'float', default: 2000, label: 'Far' },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } }
+    },
+    {
+        type: 'advanced/viewZToOrthographicDepth',
+        label: 'View Z To Orthographic Depth',
+        category: 'Advanced',
+        tsl: 'viewZToOrthographicDepth',
+        inputs: {
+            viewZ: { type: 'float', default: 0, label: 'View Z' },
+            near: { type: 'float', default: 0.01, label: 'Near' },
+            far: { type: 'float', default: 2000, label: 'Far' },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } }
+    },
+    {
         type: 'geo/normalWorld',
         label: 'Normal World',
         category: 'Geometry',
         tsl: 'normalWorld',
         pure: true,
         outputs: { out: { type: 'vec3', label: 'XYZ' } }
+    },
+    {
+        type: 'texture/sampleNode',
+        label: 'Sample Texture Node',
+        category: 'Texture',
+        tsl: 'texture',
+        inputs: {
+            texture: { type: 'any', label: 'Texture', connectionOnly: true },
+            uv: { type: 'vec2', label: 'UV', connectionOnly: true },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } }
+    },
+    {
+        type: 'advanced/hashBlur',
+        label: 'Hash Blur',
+        category: 'Advanced',
+        tsl: 'hashBlur',
+        importFrom: 'three/addons/tsl/display/hashBlur.js',
+        inputs: {
+            texture: { type: 'any', label: 'Texture', connectionOnly: true },
+            radius: { type: 'float', default: 0.1, label: 'Radius' },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } },
+    },
+    {
+        type: 'postfx/bloom',
+        label: 'Bloom',
+        category: 'Post FX',
+        tsl: 'bloom',
+        importFrom: 'three/addons/tsl/display/BloomNode.js',
+        inputs: {
+            input: { type: 'any', label: 'Input', connectionOnly: true },
+            strength: { type: 'float', default: 1, label: 'Strength' },
+            radius: { type: 'float', default: 0, label: 'Radius' },
+            threshold: { type: 'float', default: 0, label: 'Threshold' },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } },
+    },
+    {
+        type: 'postfx/grayscale',
+        label: 'Grayscale',
+        category: 'Post FX',
+        tsl: 'grayscale',
+        inputs: {
+            color: { type: 'vec3', label: 'Color', connectionOnly: true },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } },
     },
     // Logic Nodes
     {
@@ -572,6 +655,49 @@ describe('compileGraph', () => {
             expect(code).toContain('add(_node0.x, 10)');
         });
 
+        it('should compile camera near/far handles into perspectiveDepthToViewZ', () => {
+            const nodes = [
+                createNode('cam', 'geo/camera'),
+                createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'cam', sourceHandle: 'near', target: 'depthToViewZ', targetHandle: 'near' },
+                { id: 'e2', source: 'cam', sourceHandle: 'far', target: 'depthToViewZ', targetHandle: 'far' },
+            ];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const _node0 = vec2(cameraNear, cameraFar);');
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, _node0.x, _node0.y)');
+        });
+
+        it('should wrap default near/far literals for perspectiveDepthToViewZ', () => {
+            const nodes = [
+                createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            ];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, float(0.01), float(2000))');
+        });
+
+        it('should compile depth -> viewZ -> linear depth chain', () => {
+            const nodes = [
+                createNode('cam', 'geo/camera'),
+                createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+                createNode('toLinear', 'advanced/viewZToOrthographicDepth'),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'cam', sourceHandle: 'near', target: 'depthToViewZ', targetHandle: 'near' },
+                { id: 'e2', source: 'cam', sourceHandle: 'far', target: 'depthToViewZ', targetHandle: 'far' },
+                { id: 'e3', source: 'depthToViewZ', sourceHandle: 'out', target: 'toLinear', targetHandle: 'viewZ' },
+                { id: 'e4', source: 'cam', sourceHandle: 'near', target: 'toLinear', targetHandle: 'near' },
+                { id: 'e5', source: 'cam', sourceHandle: 'far', target: 'toLinear', targetHandle: 'far' },
+            ];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, _node0.x, _node0.y)');
+            expect(code).toContain('viewZToOrthographicDepth(_node1, _node0.x, _node0.y)');
+        });
+
     it('should handle complex node chains', () => {
             const nodes = [
                 createNode('t1', 'geo/time'),
@@ -607,6 +733,157 @@ describe('compileGraph', () => {
             const code = compileGraph(nodes, []);
             expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), 0.5)');
         });
+    });
+});
+
+describe('compilePostGraph', () => {
+    it('compiles a connected post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'color', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.functionName).toMatch(/^PostGraph/);
+        expect(result.code).toContain('return arg_in_color;');
+    });
+
+    it('compiles post fx nodes in post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('bloomFx', 'postfx/bloom'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'color', target: 'bloomFx', targetHandle: 'input' },
+            { id: 'e2', source: 'bloomFx', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('bloom(arg_in_color, 1, 0, 0)');
+    });
+
+    it('compiles post graph texture sampling from scene input', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('uv0', 'geo/uv'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'sceneTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'uv0', sourceHandle: 'out', target: 'sample', targetHandle: 'uv' },
+            { id: 'e3', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_sceneTexture,');
+    });
+
+    it('uses screenUV by default when sample texture uv is not connected', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'sceneTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_sceneTexture, screenUV)');
+    });
+
+    it('maps depth input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('add', 'math/add', { values: { b: 1 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'depth', target: 'add', targetHandle: 'a' },
+            { id: 'e2', source: 'add', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('add(arg_in_depth, 1)');
+    });
+
+    it('maps depthTexture input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'depthTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_depthTexture, screenUV)');
+    });
+
+    it('maps normal input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'normal', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_normal, screenUV)');
+    });
+
+    it('compiles geo/camera in post graph using camera.near/camera.far', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('cam', 'geo/camera'),
+            createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'cam', sourceHandle: 'near', target: 'depthToViewZ', targetHandle: 'near' },
+            { id: 'e2', source: 'cam', sourceHandle: 'far', target: 'depthToViewZ', targetHandle: 'far' },
+            { id: 'e3', source: 'depthToViewZ', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('vec2(camera.near, camera.far)');
+        expect(result.code).not.toContain(' = camera;');
+        expect(result.code).not.toContain('arg_in_cameraNear');
+        expect(result.code).not.toContain('arg_in_cameraFar');
+    });
+
+    it('wraps default near/far literals for post perspectiveDepthToViewZ', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ', { values: { depth: 0.5 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'depthToViewZ', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('perspectiveDepthToViewZ(0.5, float(0.01), float(2000))');
+    });
+
+    it('throws when post output is disconnected', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+        ];
+
+        expect(() => compilePostGraph(nodes, [])).toThrow('Post output is not connected.');
     });
 });
 
@@ -1009,6 +1286,22 @@ describe('getRequiredImports', () => {
         expect(imports).toContain('sin');
     });
 
+    it('should include camera/depth conversion imports', () => {
+        const nodes = [
+            createNode('cam', 'geo/camera'),
+            createNode('depthToViewZ', 'advanced/perspectiveDepthToViewZ'),
+            createNode('toLinear', 'advanced/viewZToOrthographicDepth'),
+        ];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toEqual(expect.arrayContaining([
+            'cameraNear',
+            'cameraFar',
+            'perspectiveDepthToViewZ',
+            'viewZToOrthographicDepth',
+        ]));
+        expect(imports).not.toContain('camera');
+    });
+
     it('should include material type', () => {
         const nodes = [createNode('mat', 'material/standard')];
         const imports = getRequiredImports(nodes);
@@ -1031,6 +1324,12 @@ describe('getRequiredImports', () => {
         const nodes = [createNode('add1', 'math/add', { values: { a: [1, 2, 3, 4] } })];
         const imports = getRequiredImports(nodes);
         expect(imports).toContain('vec4');
+    });
+
+    it('should include screenUV for sample texture node default UV', () => {
+        const nodes = [createNode('sample', 'texture/sampleNode')];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toContain('screenUV');
     });
 
     it('should return sorted imports', () => {
@@ -1124,5 +1423,22 @@ describe('getRequiredImports', () => {
         ];
         const imports = getRequiredImports(nodes, undefined, undefined, globals);
         expect(imports).toEqual(expect.arrayContaining(['uniform', 'varying', 'float', 'vec2', 'color']));
+    });
+
+    it('should group addon imports by module', () => {
+        const nodes = [
+            createNode('sample', 'texture/sampleNode'),
+            createNode('bloomFx', 'postfx/bloom'),
+            createNode('hash', 'advanced/hashBlur'),
+        ];
+
+        const groups = getRequiredImportsByModule(nodes);
+        const byModule = new Map(groups.map((group) => [group.from, group.imports]));
+
+        expect(byModule.get('three/tsl')).toEqual(expect.arrayContaining(['texture', 'screenUV']));
+        expect(byModule.get('three/addons/tsl/display/BloomNode.js')).toEqual(['bloom']);
+        expect(byModule.get('three/addons/tsl/display/hashBlur.js')).toEqual(['hashBlur']);
+        expect(byModule.get('three/tsl')).not.toContain('bloom');
+        expect(byModule.get('three/tsl')).not.toContain('hashBlur');
     });
 });
