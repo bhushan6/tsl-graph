@@ -1,4 +1,4 @@
-import { Fn, float, vec4, mat4, mat2, normalize, sin, cos, pow, dot } from 'three/tsl';
+import { Fn, float, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step } from 'three/tsl';
 
 //@ts-expect-error: this is valid but TSL types seems off
 export const rotation3d = Fn(([pos, axis, angle]) => {
@@ -39,3 +39,97 @@ export const fresnelFull = Fn(([bias, scale, power, normal, viewDir]) => {
     return bias.add(scale.mul(pow(float(1.0).sub(dot(normal, viewDir).clamp(0, 1)), power)));
 });
 
+const LUMINANCE_WEIGHTS = vec3(0.2126, 0.7152, 0.0722);
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendColorDodge = Fn(([base, blend]) => {
+    return base.div(float(1).sub(blend).max(0.001)).min(vec3(1));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendOverlay = Fn(([base, blend]) => {
+    const low = base.mul(2).mul(blend);
+    const high = float(1).sub(float(2).mul(float(1).sub(base)).mul(float(1).sub(blend)));
+    return mix(low, high, step(0.5, base));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendSoftLight = Fn(([base, blend]) => {
+    return float(1).sub(blend.mul(2)).mul(base).mul(base).add(blend.mul(2).mul(base));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendHardLight = Fn(([base, blend]) => {
+    return blendOverlay(blend, base);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendScreen = Fn(([base, blend]) => {
+    return float(1).sub(float(1).sub(base).mul(float(1).sub(blend)));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendExclusion = Fn(([base, blend]) => {
+    return base.add(blend).sub(base.mul(blend).mul(2));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendMultiply = Fn(([base, blend]) => {
+    return base.mul(blend);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendPlusLighter = Fn(([base, blend]) => {
+    return base.add(blend).min(vec3(1));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendLuminosity = Fn(([base, blend]) => {
+    const baseLum = dot(base, LUMINANCE_WEIGHTS);
+    const blendLum = dot(blend, LUMINANCE_WEIGHTS);
+    return base.add(blendLum.sub(baseLum));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendDarken = Fn(([base, blend]) => {
+    return base.min(blend);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendLighten = Fn(([base, blend]) => {
+    return base.max(blend);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendHue = Fn(([base, blend]) => {
+    return mix(base, blend, 0.5);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const blendColorBurn = Fn(([base, blend]) => {
+    return float(1).sub(float(1).sub(base).div(blend.max(0.001)).min(vec3(1)));
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const adjustBrightness = Fn(([color, brightness]) => {
+    return color.mul(brightness);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const adjustContrast = Fn(([color, contrast]) => {
+    return color.sub(0.5).mul(contrast).add(0.5);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const adjustSaturate = Fn(([color, saturation]) => {
+    return mix(vec3(dot(color, LUMINANCE_WEIGHTS)), color, saturation);
+});
+
+// h is expected in degrees [0, 360], s/l in [0, 1]
+//@ts-expect-error: this is valid but TSL types seems off
+export const hslToRgb = Fn(([h, s, l]) => {
+    const hue = h.div(60);
+    const rgb = hue.add(vec3(0, 4, 2)).mod(6).sub(3).abs().sub(1).clamp(0, 1);
+    const chromaScale = float(1).sub(l.mul(2).sub(1).abs());
+    return l.add(s.mul(rgb.sub(0.5)).mul(chromaScale));
+});

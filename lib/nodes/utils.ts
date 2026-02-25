@@ -15,6 +15,7 @@ export const utilsNodes = [
         },
         tsl: 'rotation3d',
         pure: true,
+        importFrom: '@/lib/tsl-utils',
     },
     {
         type: 'utils/rotate2D',
@@ -29,6 +30,7 @@ export const utilsNodes = [
         },
         tsl: 'rotate2D',
         pure: true,
+        importFrom: '@/lib/tsl-utils',
     },
     // Color Adjustments
     {
@@ -84,6 +86,213 @@ export const utilsNodes = [
         },
         outputs: { out: { label: 'Out', type: 'vec3' } },
         tsl: 'posterize',
+    },
+    // Blend modes
+    {
+        type: 'utils/blendColorDodge',
+        label: 'Blend Color Dodge',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendColorDodge',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendOverlay',
+        label: 'Blend Overlay',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendOverlay',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendSoftLight',
+        label: 'Blend Soft Light',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendSoftLight',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendHardLight',
+        label: 'Blend Hard Light',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendHardLight',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendScreen',
+        label: 'Blend Screen',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendScreen',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendExclusion',
+        label: 'Blend Exclusion',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendExclusion',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendMultiply',
+        label: 'Blend Multiply',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendMultiply',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendPlusLighter',
+        label: 'Blend Plus Lighter',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendPlusLighter',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendLuminosity',
+        label: 'Blend Luminosity',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendLuminosity',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendDarken',
+        label: 'Blend Darken',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendDarken',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendLighten',
+        label: 'Blend Lighten',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendLighten',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendHue',
+        label: 'Blend Hue',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendHue',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/blendColorBurn',
+        label: 'Blend Color Burn',
+        category: 'Utils',
+        inputs: {
+            base: { label: 'Base', type: 'vec3', default: [0, 0, 0] },
+            blend: { label: 'Blend', type: 'vec3', default: [0, 0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'blendColorBurn',
+        importFrom: '@/lib/tsl-utils',
+    },
+    // Filter helpers
+    {
+        type: 'utils/adjustBrightness',
+        label: 'Adjust Brightness',
+        category: 'Utils',
+        inputs: {
+            color: { label: 'Color', type: 'vec3', default: [1, 1, 1] },
+            brightness: { label: 'Brightness', type: 'float', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'adjustBrightness',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/adjustContrast',
+        label: 'Adjust Contrast',
+        category: 'Utils',
+        inputs: {
+            color: { label: 'Color', type: 'vec3', default: [1, 1, 1] },
+            contrast: { label: 'Contrast', type: 'float', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'adjustContrast',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/adjustSaturate',
+        label: 'Adjust Saturate',
+        category: 'Utils',
+        inputs: {
+            color: { label: 'Color', type: 'vec3', default: [1, 1, 1] },
+            saturation: { label: 'Saturation', type: 'float', default: 1 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'adjustSaturate',
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
+        type: 'utils/hslToRgb',
+        label: 'HSL To RGB',
+        category: 'Utils',
+        inputs: {
+            h: { label: 'Hue', type: 'float', default: 0 },
+            s: { label: 'Sat', type: 'float', default: 1 },
+            l: { label: 'Light', type: 'float', default: 0.5 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec3' } },
+        tsl: 'hslToRgb',
+        importFrom: '@/lib/tsl-utils',
     },
     // Patterns
     {
@@ -149,6 +358,7 @@ export const utilsNodes = [
         outputs: { out: { label: 'Out', type: 'vec2' } },
         tsl: 'uvTransform',
         pure: true,
+        importFrom: '@/lib/tsl-utils',
     },
     {
         type: 'utils/fresnel',
@@ -163,7 +373,9 @@ export const utilsNodes = [
         },
         outputs: { out: { label: 'Out', type: 'float' } },
         tsl: 'fresnelFull',
+        importFrom: '@/lib/tsl-utils',
     }
 ] as const;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _utilsNodesCheck: readonly BaseNodeDef[] = utilsNodes;

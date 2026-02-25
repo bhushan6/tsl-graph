@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -16,6 +16,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 interface CodePanelProps {
     isOpen: boolean;
@@ -38,13 +39,17 @@ export function mergeImportGroups(groups: ImportGroup[]): ImportGroup[] {
 }
 
 export function CodePanel({ isOpen, onClose }: CodePanelProps) {
+    const [activeTab, setActiveTab] = useState<'main-js' | 'tsl-utils'>('main-js');
     const [copied, setCopied] = useState(false);
+    const [tslUtilsSource, setTslUtilsSource] = useState('');
+    const [tslUtilsSourceError, setTslUtilsSourceError] = useState<string | null>(null);
     const { resolvedTheme } = useTheme();
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
     const editorMode = useEditorStore((s) => s.editorMode);
     const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
     const getRootGraph = useEditorStore((s) => s.getRootGraph);
@@ -73,6 +78,8 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     }, [editorMode, editingSubgraphId, subgraphs, nodes, edges]);
 
     const compiledCode = useMemo(() => {
+        // Force recompute when the root graph mutates even if only getRootGraph() output changed.
+        void graphStructureVersion;
         if (subgraphDefinition) {
             return compileSubgraphCode(subgraphDefinition, subgraphs, codeNodes, { globals });
         }
@@ -106,9 +113,11 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                 ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`, 'postProcessing.render();']
                 : ['renderer.render(scene, camera);']),
         ].join('\n');
-    }, [nodes, edges, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+    }, [graphStructureVersion, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
 
     const importGroups = useMemo<ImportGroup[]>(() => {
+        // Keep import list in sync with graph topology changes.
+        void graphStructureVersion;
         if (subgraphDefinition) {
             return mergeImportGroups(
                 getRequiredImportsByModule(subgraphDefinition.nodes, subgraphs, codeNodes, globals)
@@ -121,7 +130,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             ...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals),
             { from: 'three/tsl', imports: ['pass', 'mrt', 'output', 'normalView'] },
         ]);
-    }, [nodes, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+    }, [graphStructureVersion, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
 
     const importBlock = useMemo(() => {
         return importGroups
@@ -129,35 +138,73 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             .join('\n');
     }, [importGroups]);
 
-    const importPreview = useMemo(() => {
-        return importGroups
-            .map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`)
-            .join(' | ');
-    }, [importGroups]);
+    const generatedCodeDisplay = useMemo(() => {
+        const codeWithImports = importBlock
+            ? `${importBlock}\n\n${compiledCode}`
+            : compiledCode;
+        return subgraphDefinition
+            ? codeWithImports
+            : `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`;
+    }, [compiledCode, importBlock, subgraphDefinition]);
 
     const displayedNodeCount = useMemo(() => {
+        // Keep displayed count synced when root graph changes.
+        void graphStructureVersion;
         if (subgraphDefinition) return subgraphDefinition.nodes.length;
         const materialGraph = getRootGraph('material');
         const postGraph = getRootGraph('post');
         return materialGraph.nodes.length + postGraph.nodes.length;
-    }, [subgraphDefinition, getRootGraph, nodes, edges]);
+    }, [graphStructureVersion, subgraphDefinition, getRootGraph]);
+
+    useEffect(() => {
+        if (!isOpen || tslUtilsSource.length > 0 || tslUtilsSourceError) return;
+
+        let isMounted = true;
+
+        const loadTSLUtilsSource = async () => {
+            try {
+                const response = await fetch('/api/tsl-utils-source', { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error(`Failed to load tsl-utils source (${response.status})`);
+                }
+                const source = await response.text();
+                if (isMounted) {
+                    setTslUtilsSource(source);
+                    setTslUtilsSourceError(null);
+                }
+            } catch (error) {
+                if (!isMounted) return;
+                const message = error instanceof Error ? error.message : 'Failed to load tsl-utils source';
+                setTslUtilsSourceError(message);
+            }
+        };
+
+        void loadTSLUtilsSource();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isOpen, tslUtilsSource, tslUtilsSourceError]);
+
+    const tslUtilsSourceDisplay = useMemo(() => {
+        if (tslUtilsSource.length > 0) return tslUtilsSource;
+        if (tslUtilsSourceError) return `// ${tslUtilsSourceError}`;
+        return '// Loading tsl-utils source...';
+    }, [tslUtilsSource, tslUtilsSourceError]);
 
     const handleCopy = useCallback(async () => {
-        const codeWithImports = importBlock
-            ? `${importBlock}\n\n${compiledCode}`
-            : compiledCode;
-        const fullCode = subgraphDefinition
-            ? codeWithImports
-            : `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`;
+        const textToCopy = activeTab === 'main-js'
+            ? generatedCodeDisplay
+            : tslUtilsSourceDisplay;
 
-        await navigator.clipboard.writeText(fullCode);
+        await navigator.clipboard.writeText(textToCopy);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    }, [compiledCode, importBlock, subgraphDefinition]);
+    }, [activeTab, generatedCodeDisplay, tslUtilsSourceDisplay]);
 
     return (
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()} >
-            <DialogContent className="max-h-[80vh] flex flex-col sm:max-w-[90vw] z-[10000]">
+            <DialogContent className="h-[80vh] max-h-[80vh] flex flex-col sm:max-w-[90vw] z-[10000] overflow-hidden">
                 <DialogHeader>
                     <DialogTitle className="flex flex-col gap-1">
                         <span>{subgraphDefinition ? 'Subgraph Output' : 'TSL Output'}</span>
@@ -167,49 +214,79 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="flex-1 flex flex-col overflow-hidden border border-border rounded-lg w-full">
-                    {/* Imports line */}
-                    <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border shrink-0">
-                        <span className="text-xs text-muted-foreground font-mono truncate">
-                            {importPreview.length > 0 && (
-                                <>
-                                    {importPreview}
-                                    {!subgraphDefinition && ' | import { PostProcessing } from \'three/webgpu\';'}
-                                </>
-                            )}
-                        </span>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleCopy}
-                            className="h-7 px-2 shrink-0 ml-2"
-                        >
-                            {copied ? (
-                                <Check className="w-3 h-3 text-green-500" />
-                            ) : (
-                                <Copy className="w-3 h-3" />
-                            )}
-                            <span className="ml-1 text-xs">
-                                {copied ? 'Copied!' : 'Copy'}
-                            </span>
-                        </Button>
-                    </div>
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden border border-border rounded-lg w-full">
+                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'main-js' | 'tsl-utils')} className="flex-1 min-h-0 overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-0 bg-muted/20 border-b border-border shrink-0 gap-3">
+                            <TabsList
+                                variant="line"
+                                className="h-9 gap-0 bg-transparent p-0 rounded-none"
+                            >
+                                <TabsTrigger
+                                    value="main-js"
+                                    className="h-9 min-w-[92px] rounded-none border-x border-t border-border border-b-0 bg-muted/50 px-3 text-xs font-medium text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=inactive]:hover:bg-muted/70 after:hidden"
+                                >
+                                    main.js
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="tsl-utils"
+                                    className="h-9 min-w-[108px] rounded-none border-x border-t border-border border-b-0 bg-muted/50 px-3 text-xs font-medium text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=inactive]:hover:bg-muted/70 after:hidden"
+                                >
+                                    tsl-utils.js
+                                </TabsTrigger>
+                            </TabsList>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCopy}
+                                className="h-7 px-2 shrink-0"
+                            >
+                                {copied ? (
+                                    <Check className="w-3 h-3 text-green-500" />
+                                ) : (
+                                    <Copy className="w-3 h-3" />
+                                )}
+                                <span className="ml-1 text-xs">
+                                    {copied ? 'Copied!' : 'Copy'}
+                                </span>
+                            </Button>
+                        </div>
 
-                    {/* Code content with syntax highlighting */}
-                    <CodeMirror
-                        value={compiledCode}
-                        extensions={extensions}
-                        theme={resolvedTheme === 'dark' ? oneDark : undefined}
-                        editable={false}
-                        readOnly={true}
-                        basicSetup={{
-                            lineNumbers: true,
-                            foldGutter: false,
-                            highlightActiveLine: false,
-                            autocompletion: false,
-                        }}
-                        className="flex-1 overflow-auto text-sm"
-                    />
+                        <TabsContent value="main-js" className="flex-1 min-h-0 mt-0 flex flex-col overflow-hidden">
+                            <CodeMirror
+                                value={generatedCodeDisplay}
+                                extensions={extensions}
+                                theme={resolvedTheme === 'dark' ? oneDark : undefined}
+                                height="100%"
+                                editable={false}
+                                readOnly={true}
+                                basicSetup={{
+                                    lineNumbers: true,
+                                    foldGutter: false,
+                                    highlightActiveLine: false,
+                                    autocompletion: false,
+                                }}
+                                className="flex-1 min-h-0 overflow-hidden text-sm [&_.cm-editor]:h-full [&_.cm-scroller]:max-h-full [&_.cm-scroller]:overflow-auto [&_.cm-gutters]:h-full"
+                            />
+                        </TabsContent>
+
+                        <TabsContent value="tsl-utils" className="flex-1 min-h-0 mt-0 flex flex-col overflow-hidden">
+                            <CodeMirror
+                                value={tslUtilsSourceDisplay}
+                                extensions={extensions}
+                                theme={resolvedTheme === 'dark' ? oneDark : undefined}
+                                height="100%"
+                                editable={false}
+                                readOnly={true}
+                                basicSetup={{
+                                    lineNumbers: true,
+                                    foldGutter: false,
+                                    highlightActiveLine: false,
+                                    autocompletion: false,
+                                }}
+                                className="flex-1 min-h-0 overflow-hidden text-sm [&_.cm-editor]:h-full [&_.cm-scroller]:max-h-full [&_.cm-scroller]:overflow-auto [&_.cm-gutters]:h-full"
+                            />
+                        </TabsContent>
+                    </Tabs>
                 </div>
             </DialogContent>
         </Dialog>

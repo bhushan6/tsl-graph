@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu'; // For Material classes
 import * as TSL from 'three/tsl'; // For TSL functions
 import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, GlobalContextEntry } from '@/lib/types';
 import { compileGraph, compilePostGraph } from './compiler';
-import { rotation3d, rotate2D, uvTransform, fresnelFull } from './tsl-utils';
+import * as customTSLUtils from './tsl-utils';
 import { afterImage } from 'three/addons/tsl/display/AfterImageNode.js';
 import { anamorphic } from 'three/addons/tsl/display/AnamorphicNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -25,6 +25,7 @@ import { ensureUniform, setUniformFactory } from './uniform-store';
 function createTSLRuntimeScope() {
     return {
         ...TSL,
+        ...customTSLUtils,
         wgslFn: TSL.wgslFn,
         MeshStandardNodeMaterial: THREE.MeshStandardNodeMaterial,
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
@@ -33,10 +34,6 @@ function createTSLRuntimeScope() {
         SpriteNodeMaterial: THREE.SpriteNodeMaterial,
         NodeMaterial: THREE.NodeMaterial,
         THREE: THREE,
-        rotation3d,
-        rotate2D,
-        uvTransform,
-        fresnelFull,
         afterImage,
         anamorphic,
         bloom,
@@ -226,13 +223,7 @@ export function buildNodePreviewMaterial(
     const targetVarName = definedVars[definedVars.length - 1];
 
     // Build execution scope
-    const scope = {
-        ...TSL,
-        wgslFn: TSL.wgslFn,
-        MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,
-        THREE: THREE,
-        __uniform: ensureUniform,
-    };
+    const scope = createTSLRuntimeScope();
 
     const scopeKeys = Object.keys(scope);
     const scopeValues = Object.values(scope);
