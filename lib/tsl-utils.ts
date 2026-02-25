@@ -60,6 +60,7 @@ export const blendSoftLight = Fn(([base, blend]) => {
 
 //@ts-expect-error: this is valid but TSL types seems off
 export const blendHardLight = Fn(([base, blend]) => {
+    //@ts-expect-error: this is valid but TSL types seems off
     return blendOverlay(blend, base);
 });
 

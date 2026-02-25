@@ -3,8 +3,17 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { getCompatibleNodes, getNodesWithOutputType, getGroupedCompatibleNodes, getAllNodesButExclud } from '@/lib/node-picker-utils';
-import { NodeType, NodeDef, TSLType } from '@/lib/types';
+import {
+    getAllNodesButExclud,
+    getGroupedCompatibleNodes,
+    getHandleDisplayLabel,
+    getTypeMatchRank,
+    getVisibleInputHandles,
+    getVisibleOutputHandles,
+    type PickerHandle,
+} from '@/lib/node-picker-utils';
+import { NodeType, NodeDef, Port, TSLType } from '@/lib/types';
+import { getMultiOpParams } from '@/lib/multi-op';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
@@ -17,12 +26,20 @@ import {
     CommandList,
 } from "@/components/ui/command";
 
+export const MULTI_OP_INPUT_HANDLE_PREFIX = 'multiop:param:';
+const SUBGRAPH_ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'] as const;
+
+export interface EdgeDropSelection {
+    nodeType: NodeType;
+    handleId: string | null;
+}
+
 interface EdgeDropNodePickerProps {
     position: { x: number; y: number };
     flowPosition: { x: number; y: number };
     sourceDataType: TSLType | '';
     handleDirection: 'input' | 'output' | null;
-    onNodeSelect: (nodeType: NodeType) => void;
+    onNodeSelect: (selection: EdgeDropSelection) => void;
     onClose: () => void;
 }
 
@@ -36,7 +53,34 @@ interface SubgraphNodeDef extends Omit<NodeDef, 'tsl'> {
     tsl: string;
 }
 
+interface EdgeDropHandleRow {
+    key: string;
+    category: string;
+    nodeType: NodeType;
+    nodeLabel: string;
+    handleId: string;
+    handleLabel: string;
+    displayLabel: string;
+    matchRank: number;
+    isCodeNode?: boolean;
+    isSubgraphNode?: boolean;
+}
+
 type EdgeDropNodeDef = NodeDef | CodeNodeDef | SubgraphNodeDef;
+
+function getNodeHandles(node: EdgeDropNodeDef, direction: 'input' | 'output'): PickerHandle[] {
+    if (direction === 'output') {
+        if (node.type === 'math/multiOp') {
+            return getMultiOpParams('add', true).map((param) => ({
+                id: `${MULTI_OP_INPUT_HANDLE_PREFIX}${param.key}`,
+                label: param.label,
+                type: param.type,
+            }));
+        }
+        return getVisibleInputHandles(node.inputs as Record<string, Port> | undefined);
+    }
+    return getVisibleOutputHandles(node.outputs as Record<string, Port> | undefined);
+}
 
 export function EdgeDropNodePicker({
     position,
@@ -80,9 +124,12 @@ export function EdgeDropNodePicker({
     const clipboard = useEditorStore((s) => s.clipboard);
     const pasteSelection = useEditorStore((s) => s.pasteSelection);
 
-    // Get compatible nodes
-    const compatibleNodes = useMemo(() => {
+    const filteredRegistryNodes = useMemo(() => {
+        const excludedNodes: NodeType[] = editorMode === "main" ? ["loop"] : ["loop", "const/uniform"];
+
         const shouldExclude = (type: NodeType) => {
+            if (type === 'loop' || type.startsWith('loop/')) return true;
+            if ((SUBGRAPH_ANCHOR_NODE_TYPES as readonly string[]).includes(type)) return true;
             if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(type)) return true;
             if (activeRootGraph === 'post' && (MATERIAL_NODE_TYPES as readonly string[]).includes(type)) return true;
             if (activeRootGraph === 'post' && type === 'texture/viewportShared') return true;
@@ -91,71 +138,38 @@ export function EdgeDropNodePicker({
             return false;
         };
 
-        if (!sourceDataType && !handleDirection) {
-            const excludedNodes: NodeType[] = editorMode === "main" ? ["loop"] : ["loop", "const/uniform"];
-            return getAllNodesButExclud(excludedNodes).filter((node) => !shouldExclude(node.type));
-        }
-        if (!sourceDataType) {
-            const nodes = handleDirection === 'output'
-                ? getCompatibleNodes(sourceDataType as string)
-                : getNodesWithOutputType(sourceDataType as string);
-            return nodes.filter((node) => !shouldExclude(node.type));
-        } else {
-            // Case where sourceDataType is provided
-            const nodes = handleDirection === 'output'
-                ? getCompatibleNodes(sourceDataType)
-                : getNodesWithOutputType(sourceDataType);
-            return nodes.filter((node) => !shouldExclude(node.type));
-        }
-    }, [sourceDataType, handleDirection, editorMode, activeRootGraph])
-
-
+        return getAllNodesButExclud(excludedNodes).filter((node) => !shouldExclude(node.type));
+    }, [editorMode, activeRootGraph]);
 
     // Build code nodes from templates (fetched from server, cached by Convex)
-    const compatibleCodeNodes = useMemo((): CodeNodeDef[] => {
+    const codeNodes = useMemo((): CodeNodeDef[] => {
         if (!userCodeNodeTemplates) return [];
 
-        const isCompatibleType = (a: string, b: string) => {
-            if (a === 'any' || b === 'any') return true;
-            return a === b;
-        };
-
-        const shouldIncludeTemplate = (data: {
-            inputs: Array<{ id: string; label: string; type: string }>;
-            output: { label: string; type: string };
-        }) => {
-            if (!sourceDataType || !handleDirection) return true;
-            if (handleDirection === 'output') {
-                return data.inputs.some(inp => isCompatibleType(inp.type, sourceDataType));
-            }
-            return isCompatibleType(data.output.type, sourceDataType);
-        };
-
-        // Code nodes can carry authored types for inputs/outputs
         return userCodeNodeTemplates
             .map(template => {
                 const data = template.data as {
                     id: string;
                     language?: string;
                     inputs: Array<{ id: string; label: string; type: string }>;
-                    output: { label: string; type: string };
+                    output?: { id: string; label: string; type: string };
                 };
-                return { template, data };
-            })
-            .filter(({ data }) => shouldIncludeTemplate(data))
-            .map(({ template, data }) => ({
-                type: `code/${template._id}` as NodeType,
-                label: template.name,
-                category: 'Custom' as const,
-                isCodeNode: true as const,
-                inputs: data.inputs.reduce((acc, inp) => {
-                    acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
-                    return acc;
-                }, {} as Record<string, { label: string; type: TSLType }>),
-                outputs: { out: { label: data.output.label, type: data.output.type as TSLType } },
-                tsl: data.id, // Use the code node ID as TSL reference
-            }));
-    }, [userCodeNodeTemplates, sourceDataType, handleDirection]);
+                const outputId = data.output?.id || 'out';
+                const outputLabel = data.output?.label || 'Out';
+                const outputType = (data.output?.type || 'any') as TSLType;
+                return {
+                    type: `code/${template._id}` as NodeType,
+                    label: template.name,
+                    category: 'Custom' as const,
+                    isCodeNode: true as const,
+                    inputs: (data.inputs || []).reduce((acc, inp) => {
+                        acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
+                        return acc;
+                    }, {} as Record<string, { label: string; type: TSLType }>),
+                    outputs: { [outputId]: { label: outputLabel, type: outputType } },
+                    tsl: data.id, // Use the code node ID as TSL reference
+                };
+            });
+    }, [userCodeNodeTemplates]);
 
     // Build subgraph nodes from templates (fetched from server, cached by Convex)
     const getSubgraphScope = (def: { scope?: string; templateId?: string }) => {
@@ -163,7 +177,7 @@ export function EdgeDropNodePicker({
         return def.templateId ? 'library' : 'project';
     };
 
-    const compatibleSubgraphNodes = useMemo((): SubgraphNodeDef[] => {
+    const subgraphTemplateNodes = useMemo((): SubgraphNodeDef[] => {
         if (!userSubgraphTemplates) return [];
 
         return userSubgraphTemplates
@@ -182,11 +196,11 @@ export function EdgeDropNodePicker({
                     label: template.name,
                     category: 'Custom' as const,
                     isSubgraphNode: true as const,
-                    inputs: data.inputs.reduce((acc, inp) => {
+                    inputs: (data.inputs || []).reduce((acc, inp) => {
                         acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
                         return acc;
                     }, {} as Record<string, { label: string; type: TSLType }>),
-                    outputs: data.outputs.reduce((acc, out) => {
+                    outputs: (data.outputs || []).reduce((acc, out) => {
                         acc[out.id] = { label: out.label, type: out.type as TSLType };
                         return acc;
                     }, {} as Record<string, { label: string; type: TSLType }>),
@@ -215,22 +229,54 @@ export function EdgeDropNodePicker({
             }));
     }, [subgraphs]);
 
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
-    const groupedNodes = useMemo(() => {
-        const grouped = getGroupedCompatibleNodes<EdgeDropNodeDef>(compatibleNodes as EdgeDropNodeDef[]);
-
-        // Add custom nodes to Custom category
-        const customNodes: EdgeDropNodeDef[] = [
+    const allNodes = useMemo((): EdgeDropNodeDef[] => {
+        return [
+            ...(filteredRegistryNodes as EdgeDropNodeDef[]),
             ...projectSubgraphNodes,
-            ...compatibleSubgraphNodes,
-            ...compatibleCodeNodes,
+            ...subgraphTemplateNodes,
+            ...codeNodes,
         ];
-        if (customNodes.length > 0) {
-            grouped['Custom'] = [...(grouped['Custom'] || []), ...customNodes];
+    }, [filteredRegistryNodes, projectSubgraphNodes, subgraphTemplateNodes, codeNodes]);
+
+    const groupedNodes = useMemo(() => {
+        return getGroupedCompatibleNodes<EdgeDropNodeDef>(allNodes);
+    }, [allNodes]);
+
+    const groupedHandleRows = useMemo(() => {
+        if (!handleDirection) return {} as Record<string, EdgeDropHandleRow[]>;
+
+        const grouped: Record<string, EdgeDropHandleRow[]> = {};
+
+        for (const node of allNodes) {
+            const handles = getNodeHandles(node, handleDirection);
+            if (handles.length === 0) continue;
+
+            for (const handle of handles) {
+                const row: EdgeDropHandleRow = {
+                    key: `${node.type}::${handle.id}`,
+                    category: node.category,
+                    nodeType: node.type as NodeType,
+                    nodeLabel: node.label,
+                    handleId: handle.id,
+                    handleLabel: handle.label,
+                    displayLabel: getHandleDisplayLabel(node.label, handle.label, handles.length),
+                    matchRank: getTypeMatchRank(handle.type, sourceDataType),
+                    isCodeNode: (node as { isCodeNode?: boolean }).isCodeNode,
+                    isSubgraphNode: (node as { isSubgraphNode?: boolean }).isSubgraphNode,
+                };
+                (grouped[node.category] ??= []).push(row);
+            }
+        }
+
+        for (const rows of Object.values(grouped)) {
+            rows.sort((a, b) => (
+                a.matchRank - b.matchRank ||
+                a.displayLabel.localeCompare(b.displayLabel)
+            ));
         }
 
         return grouped;
-    }, [compatibleNodes, compatibleCodeNodes, compatibleSubgraphNodes]);
+    }, [allNodes, handleDirection, sourceDataType]);
 
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -298,7 +344,7 @@ export function EdgeDropNodePicker({
             >
                 <CommandInput placeholder="Search nodes..." autoFocus />
                 <CommandList className="max-h-[300px]">
-                    <CommandEmpty>No compatible nodes found.</CommandEmpty>
+                    <CommandEmpty>{handleDirection ? 'No nodes or handles found.' : 'No nodes found.'}</CommandEmpty>
                     {showPaste && (
                         <CommandGroup heading="Actions">
                             <CommandItem
@@ -313,18 +359,34 @@ export function EdgeDropNodePicker({
                             </CommandItem>
                         </CommandGroup>
                     )}
-                    {Object.entries(groupedNodes).map(([category, nodes]) => (
+                    {!handleDirection && Object.entries(groupedNodes).map(([category, nodes]) => (
                         <CommandGroup key={category} heading={category}>
                             {nodes.map((node) => (
                                 <CommandItem
                                     key={node.type}
                                     value={node.label}
-                                    onSelect={() => onNodeSelect(node.type as NodeType)}
+                                    onSelect={() => onNodeSelect({ nodeType: node.type as NodeType, handleId: null })}
                                     className="gap-2"
                                 >
                                     {(node as { isCodeNode?: boolean }).isCodeNode && <Code className="w-3 h-3 text-primary" />}
                                     {(node as { isSubgraphNode?: boolean }).isSubgraphNode && <Layers className="w-3 h-3 text-primary" />}
                                     <span>{node.label}</span>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    ))}
+                    {!!handleDirection && Object.entries(groupedHandleRows).map(([category, rows]) => (
+                        <CommandGroup key={category} heading={category}>
+                            {rows.map((row) => (
+                                <CommandItem
+                                    key={row.key}
+                                    value={`${row.displayLabel} ${row.nodeLabel} ${row.handleLabel}`}
+                                    onSelect={() => onNodeSelect({ nodeType: row.nodeType, handleId: row.handleId })}
+                                    className="gap-2"
+                                >
+                                    {row.isCodeNode && <Code className="w-3 h-3 text-primary" />}
+                                    {row.isSubgraphNode && <Layers className="w-3 h-3 text-primary" />}
+                                    <span>{row.displayLabel}</span>
                                 </CommandItem>
                             ))}
                         </CommandGroup>

@@ -208,7 +208,7 @@ export function HelpDialog() {
                                         <div>
                                             <h3 className="font-semibold text-lg">Quick Add</h3>
                                             <p className="text-muted-foreground mt-1">
-                                                Drag a wire into empty space and release it to open a filtered <strong>Node Picker</strong>. This shows only nodes compatible with that connection.
+                                                Drag a wire into empty space and release it to open the <strong>Node Picker</strong>. This shows available nodes and lets you choose the exact handle to connect.
                                             </p>
                                         </div>
                                     </div>

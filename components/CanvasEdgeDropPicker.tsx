@@ -4,7 +4,7 @@ import { memo, useCallback } from "react";
 import { addEdge, useReactFlow, Edge } from "@xyflow/react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { EdgeDropNodePicker } from "./EdgeDropNodePicker";
+import { EdgeDropNodePicker, MULTI_OP_INPUT_HANDLE_PREFIX, type EdgeDropSelection } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
 import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from "@/lib/nodes";
@@ -15,7 +15,7 @@ import { getAbsolutePosition } from "@/lib/utils";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
-    const { addNodes, setNodes, setEdges } = useReactFlow<AppNode>();
+    const { setNodes, setEdges } = useReactFlow<AppNode>();
 
     const isOpen = useEdgeDropPickerStore(state => state.isOpen);
     const screenPosition = useEdgeDropPickerStore(state => state.screenPosition);
@@ -32,7 +32,9 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
 
     const handleNodeSelect = useCallback(
-        (nodeType: NodeType) => {
+        (selection: EdgeDropSelection) => {
+            const nodeType = selection.nodeType;
+            const selectedHandleId = selection.handleId;
             const definition = registry.get(nodeType);
             const isCodeNode = nodeType.startsWith('code/');
             const isSubgraphNode = nodeType.startsWith('subgraph/') && !nodeType.startsWith('subgraph/input') && !nodeType.startsWith('subgraph/output');
@@ -406,58 +408,77 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             // Determine target handle on the new node
             let targetHandleId = '';
 
-            if (handleDirection === 'output') {
-                // We are dragging FROM source (output) TO new node (input)
-                if (isCodeNode && codeTemplateData) {
-                    // Code node: find first input
-                    if (codeTemplateData.inputs.length > 0) {
-                        targetHandleId = codeTemplateData.inputs[0].id;
+            if (selectedHandleId) {
+                if (
+                    nodeType === 'math/multiOp' &&
+                    handleDirection === 'output' &&
+                    selectedHandleId.startsWith(MULTI_OP_INPUT_HANDLE_PREFIX)
+                ) {
+                    const paramKey = selectedHandleId.slice(MULTI_OP_INPUT_HANDLE_PREFIX.length);
+                    const op = newNode.data.operations?.[0];
+                    if (op && paramKey) {
+                        targetHandleId = getMultiOpHandleId(op.id, paramKey);
                     }
-                } else if (isSubgraphNode && subgraphTemplateData) {
-                    // Subgraph node: find first input
-                    if (subgraphTemplateData.inputs.length > 0) {
-                        targetHandleId = subgraphTemplateData.inputs[0].id;
-                    }
-                } else if (nodeType === 'math/multiOp' && newNode.data.operations?.length) {
-                    // MultiOp: connect to the first operation's first param
-                    const op = newNode.data.operations[0];
-                    const params = getMultiOpParams(op.op, true);
-                    if (params.length > 0) {
-                        targetHandleId = getMultiOpHandleId(op.id, params[0].key);
-                    }
-                } else if (definition) {
-                    // Find compatible input on new node
-                    const inputs = definition.inputs || {};
-                    // Find first input that matches
-                    const matchingInput = Object.entries(inputs).find(([, port]) => {
-                        return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
-                    });
-                    if (matchingInput) {
-                        targetHandleId = matchingInput[0];
-                    } else if (Object.keys(inputs).length > 0) {
-                        targetHandleId = Object.keys(inputs)[0]; // Fallback
-                    }
+                } else {
+                    targetHandleId = selectedHandleId;
                 }
-            } else {
-                // We are dragging FROM source (input) TO new node (output)
-                if (isCodeNode && codeTemplateData) {
-                    // Code node: use the single output
-                    targetHandleId = codeTemplateData.output.id;
-                } else if (isSubgraphNode && subgraphTemplateData) {
-                    // Subgraph node: find first output
-                    if (subgraphTemplateData.outputs.length > 0) {
-                        targetHandleId = subgraphTemplateData.outputs[0].id;
+            }
+
+            // Backward-safe fallback: pick a default handle when picker didn't provide one.
+            if (!targetHandleId) {
+                if (handleDirection === 'output') {
+                    // We are dragging FROM source (output) TO new node (input)
+                    if (isCodeNode && codeTemplateData) {
+                        // Code node: find first input
+                        if (codeTemplateData.inputs.length > 0) {
+                            targetHandleId = codeTemplateData.inputs[0].id;
+                        }
+                    } else if (isSubgraphNode && subgraphTemplateData) {
+                        // Subgraph node: find first input
+                        if (subgraphTemplateData.inputs.length > 0) {
+                            targetHandleId = subgraphTemplateData.inputs[0].id;
+                        }
+                    } else if (nodeType === 'math/multiOp' && newNode.data.operations?.length) {
+                        // MultiOp: connect to the first operation's first param
+                        const op = newNode.data.operations[0];
+                        const params = getMultiOpParams(op.op, true);
+                        if (params.length > 0) {
+                            targetHandleId = getMultiOpHandleId(op.id, params[0].key);
+                        }
+                    } else if (definition) {
+                        // Find compatible input on new node
+                        const inputs = definition.inputs || {};
+                        // Find first input that matches
+                        const matchingInput = Object.entries(inputs).find(([, port]) => {
+                            return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
+                        });
+                        if (matchingInput) {
+                            targetHandleId = matchingInput[0];
+                        } else if (Object.keys(inputs).length > 0) {
+                            targetHandleId = Object.keys(inputs)[0]; // Fallback
+                        }
                     }
-                } else if (definition) {
-                    // Find compatible output on new node
-                    const outputs = definition.outputs || {};
-                    const matchingOutput = Object.entries(outputs).find(([, port]) => {
-                        return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
-                    });
-                    if (matchingOutput) {
-                        targetHandleId = matchingOutput[0];
-                    } else if (Object.keys(outputs).length > 0) {
-                        targetHandleId = Object.keys(outputs)[0];
+                } else {
+                    // We are dragging FROM source (input) TO new node (output)
+                    if (isCodeNode && codeTemplateData) {
+                        // Code node: use the single output
+                        targetHandleId = codeTemplateData.output.id;
+                    } else if (isSubgraphNode && subgraphTemplateData) {
+                        // Subgraph node: find first output
+                        if (subgraphTemplateData.outputs.length > 0) {
+                            targetHandleId = subgraphTemplateData.outputs[0].id;
+                        }
+                    } else if (definition) {
+                        // Find compatible output on new node
+                        const outputs = definition.outputs || {};
+                        const matchingOutput = Object.entries(outputs).find(([, port]) => {
+                            return port.type === 'any' || sourceDataType === 'any' || port.type === sourceDataType;
+                        });
+                        if (matchingOutput) {
+                            targetHandleId = matchingOutput[0];
+                        } else if (Object.keys(outputs).length > 0) {
+                            targetHandleId = Object.keys(outputs)[0];
+                        }
                     }
                 }
             }
@@ -485,7 +506,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
             close();
         },
-        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, addNodes, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates, activeRootGraph]
+        [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates, activeRootGraph]
     );
 
     if (!isOpen) return null;

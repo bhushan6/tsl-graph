@@ -1,8 +1,61 @@
 import { registry } from './registry';
 import { NodeDef, NodeType } from './types';
+import type { Port, TSLType } from './types';
 
 export interface GroupedNodeList<T> {
     [category: string]: T[];
+}
+
+export interface PickerHandle {
+    id: string;
+    label: string;
+    type: TSLType;
+}
+
+export function isTypeMatch(portType: string, sourceDataType: string): boolean {
+    if (!sourceDataType) return false;
+    if (portType === 'any') return true;
+    if (sourceDataType === 'any') return true;
+    return portType === sourceDataType;
+}
+
+export function getTypeMatchRank(portType: string, sourceDataType: string): number {
+    return isTypeMatch(portType, sourceDataType) ? 0 : 1;
+}
+
+export function isVisibleInputPort(port: Pick<Port, 'hidden' | 'propertyOnly'>): boolean {
+    return !port.hidden && !port.propertyOnly;
+}
+
+export function isVisibleOutputPort(port: Pick<Port, 'hidden'>): boolean {
+    return !port.hidden;
+}
+
+export function getVisibleInputHandles(inputs?: Record<string, Port>): PickerHandle[] {
+    if (!inputs) return [];
+    return Object.entries(inputs)
+        .filter(([, port]) => isVisibleInputPort(port))
+        .map(([id, port]) => ({
+            id,
+            label: port.label,
+            type: port.type,
+        }));
+}
+
+export function getVisibleOutputHandles(outputs?: Record<string, Port>): PickerHandle[] {
+    if (!outputs) return [];
+    return Object.entries(outputs)
+        .filter(([, port]) => isVisibleOutputPort(port))
+        .map(([id, port]) => ({
+            id,
+            label: port.label,
+            type: port.type,
+        }));
+}
+
+export function getHandleDisplayLabel(nodeLabel: string, handleLabel: string, totalHandlesForNode: number): string {
+    if (totalHandlesForNode <= 1) return nodeLabel;
+    return `${nodeLabel}.${handleLabel}`;
 }
 
 /**
