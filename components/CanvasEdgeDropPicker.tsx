@@ -12,6 +12,7 @@ import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
 import { CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 import { getAbsolutePosition } from "@/lib/utils";
+import { replaceEdgeOnTargetHandle } from "@/lib/graph-utils";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -509,7 +510,14 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     };
 
                 // Add edge
-                setEdges((eds) => addEdge(newEdge, eds));
+                setEdges((eds) => {
+                    const filtered = replaceEdgeOnTargetHandle(
+                        eds,
+                        newEdge.target,
+                        newEdge.targetHandle
+                    );
+                    return addEdge(newEdge, filtered);
+                });
             }
 
             close();

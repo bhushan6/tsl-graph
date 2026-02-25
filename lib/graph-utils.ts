@@ -74,3 +74,15 @@ export function hasCycle(target: Node, source: Node, nodes: Node[], edges: Edge[
     return visit(target);
 }
 
+export function replaceEdgeOnTargetHandle(
+    edges: Edge[],
+    target: string,
+    targetHandle: string | null | undefined
+): Edge[] {
+    const normalizedTargetHandle = targetHandle ?? null;
+    return edges.filter((edge) => {
+        const sameTarget = edge.target === target;
+        const sameHandle = (edge.targetHandle ?? null) === normalizedTargetHandle;
+        return !(sameTarget && sameHandle);
+    });
+}

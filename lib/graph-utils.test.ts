@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { topologicalSort, hasCycle } from './graph-utils';
+import { topologicalSort, hasCycle, replaceEdgeOnTargetHandle } from './graph-utils';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData } from '@/lib/types';
 
@@ -112,5 +112,29 @@ describe('hasCycle', () => {
 
         // Try to connect A -> A
         expect(hasCycle(createNode('A'), createNode('A'), nodes, edges)).toBe(true);
+    });
+});
+
+describe('replaceEdgeOnTargetHandle', () => {
+    it('removes existing edge on the same input handle and keeps others', () => {
+        const edges: Edge[] = [
+            { id: 'e1', source: 'a', sourceHandle: 'out', target: 'b', targetHandle: 'in' },
+            { id: 'e2', source: 'c', sourceHandle: 'out', target: 'b', targetHandle: 'in2' },
+            { id: 'e3', source: 'd', sourceHandle: 'out', target: 'x', targetHandle: 'in' },
+        ];
+
+        const result = replaceEdgeOnTargetHandle(edges, 'b', 'in');
+        expect(result.map((edge) => edge.id)).toEqual(['e2', 'e3']);
+    });
+
+    it('treats undefined and null target handles as equivalent', () => {
+        const edges: Edge[] = [
+            { id: 'e1', source: 'a', sourceHandle: 'out', target: 'b' },
+            { id: 'e2', source: 'c', sourceHandle: 'out', target: 'b', targetHandle: null },
+            { id: 'e3', source: 'd', sourceHandle: 'out', target: 'b', targetHandle: 'in' },
+        ];
+
+        const result = replaceEdgeOnTargetHandle(edges, 'b', undefined);
+        expect(result.map((edge) => edge.id)).toEqual(['e3']);
     });
 });

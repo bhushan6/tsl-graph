@@ -13,6 +13,7 @@ import {
     getNodesBounds,
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
+import { replaceEdgeOnTargetHandle } from '@/lib/graph-utils';
 import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
@@ -1231,12 +1232,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // Remove any existing connection to the same target handle
         // (inputs can only have one connection, so replace the old one)
-        const filteredEdges = edges.filter(
-            (edge) => {
-                const sameTarget = edge.target === connection.target;
-                const sameHandle = (edge.targetHandle || null) === (connection.targetHandle || null);
-                return !(sameTarget && sameHandle);
-            }
+        const filteredEdges = replaceEdgeOnTargetHandle(
+            edges,
+            connection.target,
+            connection.targetHandle
         );
 
 
