@@ -5,6 +5,7 @@ export const textureNodes = [
         type: 'texture/sampleNode',
         label: 'Sample Texture Node',
         category: 'Texture',
+        description: 'Samples a connected texture node at the provided UV coordinates.',
         inputs: {
             texture: { label: 'Texture', type: 'any', connectionOnly: true },
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
@@ -16,6 +17,7 @@ export const textureNodes = [
         type: 'texture/sample',
         label: 'Texture',
         category: 'Texture',
+        description: 'Loads a texture from a URL and samples it at the provided UV coordinates.',
         inputs: {
             url: { label: 'URL', type: 'string', default: "/uv.png", propertyOnly: true },
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
@@ -78,6 +80,7 @@ export const textureNodes = [
         type: 'texture/viewportShared',
         label: 'Backdrop',
         category: 'Texture',
+        description: 'Samples the shared viewport/backdrop texture at the provided UV coordinates.',
         inputs: {
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
         },
@@ -88,6 +91,7 @@ export const textureNodes = [
         type: 'texture/triplanar',
         label: 'Triplanar Texture',
         category: 'Texture',
+        description: 'Blends three axis-projected textures based on surface normal and position.',
         inputs: {
             textureX: { label: 'Texture X', type: 'any', connectionOnly: true },
             textureY: { label: 'Texture Y', type: 'any', connectionOnly: true },
@@ -103,6 +107,7 @@ export const textureNodes = [
         type: 'texture/viewportDepth',
         label: 'Viewport Depth',
         category: 'Texture',
+        description: 'Samples the viewport depth texture at the provided UV coordinates.',
         inputs: {
             uv: { label: 'UV', type: 'vec2', default: [0, 0] },
         },

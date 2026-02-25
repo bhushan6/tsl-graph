@@ -26,6 +26,9 @@ export default function LandingPage() {
                         <Logo size="lg" className="text-white [&_span]:text-white [&_span.text-muted-foreground]:text-white/60" />
                     </div>
                     <div className="flex gap-4 items-center">
+                        <Button size="sm" asChild className="pointer-events-auto bg-transparent dark:text-white text-black hover:bg-white dark:hover:text-black">
+                            <Link href="/docs/nodes">Docs</Link>
+                        </Button>
                         <ThemeToggle className="pointer-events-auto dark:text-white text-black hover:bg-white hover:text-black" />
                         <Button size="sm" asChild className="pointer-events-auto bg-transparent dark:text-white text-black hover:bg-white dark:hover:text-black">
                             <Link href="/sign-in">Sign In</Link>

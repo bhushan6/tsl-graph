@@ -35,6 +35,7 @@ export interface BaseNodeDef {
     readonly type: string;          // Unique ID: "math/add"
     readonly label: string;         // Display name: "Add"
     readonly category: string;      // For grouping: "Math"
+    readonly description?: string; // Optional doc description
     readonly inputs?: Record<string, Port>;
     readonly outputs?: Record<string, Port>;
     readonly tsl: string;           // TSL function name

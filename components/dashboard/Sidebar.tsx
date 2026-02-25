@@ -9,6 +9,7 @@ import {
     LogOut,
     Globe,
     Heart,
+    BookOpen,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
@@ -75,6 +76,12 @@ export function Sidebar({ className, user }: SidebarProps) {
             icon: Heart,
             href: "/dashboard/favorites",
             isActive: pathname === "/dashboard/favorites",
+        },
+        {
+            label: "Docs",
+            icon: BookOpen,
+            href: "/docs/nodes",
+            isActive: pathname?.startsWith("/docs"),
         },
     ];
 

@@ -15,26 +15,27 @@ import { assignNodes } from './assign';
 import { globalNodes } from './globals';
 import { postNodes, POST_ANCHOR_NODE_TYPES } from './post';
 import { postEffectNodes, POST_FX_NODE_TYPES } from './post-effects';
+import { withNodeDescriptions } from './descriptions';
 
 
 // Register all nodes
 export function initializeNodes() {
-    registry.registerMany(constantNodes);
-    registry.registerMany(mathNodes);
-    registry.registerMany(geometryNodes);
-    registry.registerMany(materialNodes);
-    registry.registerMany(subgraphNodes);
-    registry.registerMany(textureNodes);
-    registry.registerMany(modelNodes);
-    registry.registerMany(advancedNodes);
-    registry.registerMany(noiseNodes);
-    registry.registerMany(utilsNodes);
-    registry.registerMany(logicNodes);
-    registry.registerMany(loopNodes);
-    registry.registerMany(assignNodes);
-    registry.registerMany(globalNodes);
-    registry.registerMany(postNodes);
-    registry.registerMany(postEffectNodes);
+    registry.registerMany(withNodeDescriptions(constantNodes));
+    registry.registerMany(withNodeDescriptions(mathNodes));
+    registry.registerMany(withNodeDescriptions(geometryNodes));
+    registry.registerMany(withNodeDescriptions(materialNodes));
+    registry.registerMany(withNodeDescriptions(subgraphNodes));
+    registry.registerMany(withNodeDescriptions(textureNodes));
+    registry.registerMany(withNodeDescriptions(modelNodes));
+    registry.registerMany(withNodeDescriptions(advancedNodes));
+    registry.registerMany(withNodeDescriptions(noiseNodes));
+    registry.registerMany(withNodeDescriptions(utilsNodes));
+    registry.registerMany(withNodeDescriptions(logicNodes));
+    registry.registerMany(withNodeDescriptions(loopNodes));
+    registry.registerMany(withNodeDescriptions(assignNodes));
+    registry.registerMany(withNodeDescriptions(globalNodes));
+    registry.registerMany(withNodeDescriptions(postNodes));
+    registry.registerMany(withNodeDescriptions(postEffectNodes));
 }
 
 

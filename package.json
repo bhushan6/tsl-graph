@@ -54,6 +54,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "three": "^0.182.0",
+    "nuqs": "^2.8.8",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

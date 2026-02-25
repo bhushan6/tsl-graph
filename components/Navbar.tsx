@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2 } from 'lucide-react';
+import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -27,6 +27,7 @@ import { Logo } from '@/components/ui/logo';
 import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
 import { HelpDialog } from '@/components/HelpDialog';
+import Link from 'next/link';
 
 interface NavbarProps {
     projectName?: string;
@@ -269,6 +270,18 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
                         <Share2 className="h-4 w-4" />
                     </Button>
                 )}
+
+                <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    title="Docs"
+                >
+                    <Link href="/docs/nodes">
+                        <BookOpen className="h-4 w-4" />
+                    </Link>
+                </Button>
 
                 <FeedbackDialog />
                 <HelpDialog />

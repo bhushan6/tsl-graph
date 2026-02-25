@@ -5,6 +5,7 @@ export const postNodes = [
         type: 'post/input',
         label: 'Post Input',
         category: 'Post',
+        description: 'Provides scene color, depth, and normal textures for post-processing.',
         inputs: {},
         outputs: {
             color: { label: 'Color', type: 'vec4' },
@@ -20,6 +21,7 @@ export const postNodes = [
         type: 'post/output',
         label: 'Post Output',
         category: 'Post',
+        description: 'Defines the final color output for the post-processing pipeline.',
         inputs: {
             color: { label: 'Color', type: 'vec4', connectionOnly: true },
         },

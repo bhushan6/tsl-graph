@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import "./globals.css";
 import { ReactScan } from "@/components/react-scan";
 
@@ -44,11 +45,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ConvexClientProvider>
-          <ThemeProvider>
-            {children}
-            <ReactScan />
-            <Toaster position="top-center" richColors />
-          </ThemeProvider>
+          <NuqsAdapter>
+            <ThemeProvider>
+              {children}
+              <ReactScan />
+              <Toaster position="top-center" richColors />
+            </ThemeProvider>
+          </NuqsAdapter>
         </ConvexClientProvider>
       </body>
     </html>
