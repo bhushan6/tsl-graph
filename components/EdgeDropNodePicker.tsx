@@ -12,8 +12,9 @@ import {
     getVisibleOutputHandles,
     type PickerHandle,
 } from '@/lib/node-picker-utils';
-import { NodeType, NodeDef, Port, TSLType } from '@/lib/types';
+import { NodeType, Port, TSLType } from '@/lib/types';
 import { getMultiOpParams } from '@/lib/multi-op';
+import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
@@ -32,6 +33,7 @@ const SUBGRAPH_ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'] as cons
 export interface EdgeDropSelection {
     nodeType: NodeType;
     handleId: string | null;
+    globalId?: string;
 }
 
 interface EdgeDropNodePickerProps {
@@ -43,14 +45,18 @@ interface EdgeDropNodePickerProps {
     onClose: () => void;
 }
 
-interface CodeNodeDef extends Omit<NodeDef, 'tsl'> {
-    isCodeNode: true;
-    tsl: string;
-}
-
-interface SubgraphNodeDef extends Omit<NodeDef, 'tsl'> {
-    isSubgraphNode: true;
-    tsl: string;
+interface EdgeDropPickerNode {
+    type: NodeType;
+    label: string;
+    category: string;
+    inputs?: Record<string, Port>;
+    outputs?: Record<string, Port>;
+    isCodeNode?: boolean;
+    isSubgraphNode?: boolean;
+    isGlobalRefNode?: boolean;
+    globalId?: string;
+    pickerKey?: string;
+    searchText?: string;
 }
 
 interface EdgeDropHandleRow {
@@ -64,11 +70,13 @@ interface EdgeDropHandleRow {
     matchRank: number;
     isCodeNode?: boolean;
     isSubgraphNode?: boolean;
+    isGlobalRefNode?: boolean;
+    globalId?: string;
+    searchText?: string;
+    globalOrder: number;
 }
 
-type EdgeDropNodeDef = NodeDef | CodeNodeDef | SubgraphNodeDef;
-
-function getNodeHandles(node: EdgeDropNodeDef, direction: 'input' | 'output'): PickerHandle[] {
+function getNodeHandles(node: EdgeDropPickerNode, direction: 'input' | 'output'): PickerHandle[] {
     if (direction === 'output') {
         if (node.type === 'math/multiOp') {
             return getMultiOpParams('add', true).map((param) => ({
@@ -120,6 +128,7 @@ export function EdgeDropNodePicker({
     // Fetch user's subgraph templates from server (cached by Convex)
     const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const globals = useEditorStore((s) => s.globals);
 
     const clipboard = useEditorStore((s) => s.clipboard);
     const pasteSelection = useEditorStore((s) => s.pasteSelection);
@@ -142,7 +151,7 @@ export function EdgeDropNodePicker({
     }, [editorMode, activeRootGraph]);
 
     // Build code nodes from templates (fetched from server, cached by Convex)
-    const codeNodes = useMemo((): CodeNodeDef[] => {
+    const codeNodes = useMemo((): EdgeDropPickerNode[] => {
         if (!userCodeNodeTemplates) return [];
 
         return userCodeNodeTemplates
@@ -160,13 +169,12 @@ export function EdgeDropNodePicker({
                     type: `code/${template._id}` as NodeType,
                     label: template.name,
                     category: 'Custom' as const,
-                    isCodeNode: true as const,
+                    isCodeNode: true,
                     inputs: (data.inputs || []).reduce((acc, inp) => {
                         acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
                         return acc;
                     }, {} as Record<string, { label: string; type: TSLType }>),
                     outputs: { [outputId]: { label: outputLabel, type: outputType } },
-                    tsl: data.id, // Use the code node ID as TSL reference
                 };
             });
     }, [userCodeNodeTemplates]);
@@ -177,7 +185,7 @@ export function EdgeDropNodePicker({
         return def.templateId ? 'library' : 'project';
     };
 
-    const subgraphTemplateNodes = useMemo((): SubgraphNodeDef[] => {
+    const subgraphTemplateNodes = useMemo((): EdgeDropPickerNode[] => {
         if (!userSubgraphTemplates) return [];
 
         return userSubgraphTemplates
@@ -195,7 +203,7 @@ export function EdgeDropNodePicker({
                     type: `subgraph/${template._id}` as NodeType,
                     label: template.name,
                     category: 'Custom' as const,
-                    isSubgraphNode: true as const,
+                    isSubgraphNode: true,
                     inputs: (data.inputs || []).reduce((acc, inp) => {
                         acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
                         return acc;
@@ -204,19 +212,18 @@ export function EdgeDropNodePicker({
                         acc[out.id] = { label: out.label, type: out.type as TSLType };
                         return acc;
                     }, {} as Record<string, { label: string; type: TSLType }>),
-                    tsl: data.id,
                 };
             });
     }, [userSubgraphTemplates]);
 
-    const projectSubgraphNodes = useMemo((): SubgraphNodeDef[] => {
+    const projectSubgraphNodes = useMemo((): EdgeDropPickerNode[] => {
         return Object.values(subgraphs)
             .filter(sg => getSubgraphScope(sg) === 'project')
             .map((sg) => ({
                 type: sg.id as NodeType,
                 label: sg.name,
                 category: 'Custom' as const,
-                isSubgraphNode: true as const,
+                isSubgraphNode: true,
                 inputs: sg.inputs.reduce((acc, inp) => {
                     acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
                     return acc;
@@ -225,21 +232,36 @@ export function EdgeDropNodePicker({
                     acc[out.id] = { label: out.label, type: out.type as TSLType };
                     return acc;
                 }, {} as Record<string, { label: string; type: TSLType }>),
-                tsl: sg.id,
             }));
     }, [subgraphs]);
 
-    const allNodes = useMemo((): EdgeDropNodeDef[] => {
+    const globalRefNodes = useMemo((): EdgeDropPickerNode[] => {
+        return buildGlobalPickerEntries(globals).map((entry) => ({
+            type: 'global/ref',
+            label: entry.label,
+            category: 'Globals',
+            outputs: {
+                out: { label: entry.label, type: entry.outputType },
+            },
+            isGlobalRefNode: true,
+            globalId: entry.globalId,
+            pickerKey: entry.pickerKey,
+            searchText: entry.searchText,
+        }));
+    }, [globals]);
+
+    const allNodes = useMemo((): EdgeDropPickerNode[] => {
         return [
-            ...(filteredRegistryNodes as EdgeDropNodeDef[]),
+            ...globalRefNodes,
+            ...(filteredRegistryNodes as EdgeDropPickerNode[]),
             ...projectSubgraphNodes,
             ...subgraphTemplateNodes,
             ...codeNodes,
         ];
-    }, [filteredRegistryNodes, projectSubgraphNodes, subgraphTemplateNodes, codeNodes]);
+    }, [globalRefNodes, filteredRegistryNodes, projectSubgraphNodes, subgraphTemplateNodes, codeNodes]);
 
     const groupedNodes = useMemo(() => {
-        return getGroupedCompatibleNodes<EdgeDropNodeDef>(allNodes);
+        return getGroupedCompatibleNodes<EdgeDropPickerNode>(allNodes);
     }, [allNodes]);
 
     const groupedHandleRows = useMemo(() => {
@@ -252,8 +274,10 @@ export function EdgeDropNodePicker({
             if (handles.length === 0) continue;
 
             for (const handle of handles) {
+                const nodePickerKey = node.pickerKey ?? node.type;
+                const isGenericGlobal = node.type === 'global/ref' && !node.isGlobalRefNode;
                 const row: EdgeDropHandleRow = {
-                    key: `${node.type}::${handle.id}`,
+                    key: `${nodePickerKey}::${handle.id}`,
                     category: node.category,
                     nodeType: node.type as NodeType,
                     nodeLabel: node.label,
@@ -261,8 +285,12 @@ export function EdgeDropNodePicker({
                     handleLabel: handle.label,
                     displayLabel: getHandleDisplayLabel(node.label, handle.label, handles.length),
                     matchRank: getTypeMatchRank(handle.type, sourceDataType),
-                    isCodeNode: (node as { isCodeNode?: boolean }).isCodeNode,
-                    isSubgraphNode: (node as { isSubgraphNode?: boolean }).isSubgraphNode,
+                    isCodeNode: node.isCodeNode,
+                    isSubgraphNode: node.isSubgraphNode,
+                    isGlobalRefNode: node.isGlobalRefNode,
+                    globalId: node.globalId,
+                    searchText: node.searchText,
+                    globalOrder: isGenericGlobal ? 1 : 0,
                 };
                 (grouped[node.category] ??= []).push(row);
             }
@@ -271,6 +299,7 @@ export function EdgeDropNodePicker({
         for (const rows of Object.values(grouped)) {
             rows.sort((a, b) => (
                 a.matchRank - b.matchRank ||
+                a.globalOrder - b.globalOrder ||
                 a.displayLabel.localeCompare(b.displayLabel)
             ));
         }
@@ -363,13 +392,17 @@ export function EdgeDropNodePicker({
                         <CommandGroup key={category} heading={category}>
                             {nodes.map((node) => (
                                 <CommandItem
-                                    key={node.type}
-                                    value={node.label}
-                                    onSelect={() => onNodeSelect({ nodeType: node.type as NodeType, handleId: null })}
+                                    key={node.pickerKey ?? node.type}
+                                    value={node.searchText ? `${node.label} ${node.searchText}` : node.label}
+                                    onSelect={() => onNodeSelect({
+                                        nodeType: node.type as NodeType,
+                                        handleId: null,
+                                        globalId: node.globalId,
+                                    })}
                                     className="gap-2"
                                 >
-                                    {(node as { isCodeNode?: boolean }).isCodeNode && <Code className="w-3 h-3 text-primary" />}
-                                    {(node as { isSubgraphNode?: boolean }).isSubgraphNode && <Layers className="w-3 h-3 text-primary" />}
+                                    {node.isCodeNode && <Code className="w-3 h-3 text-primary" />}
+                                    {node.isSubgraphNode && <Layers className="w-3 h-3 text-primary" />}
                                     <span>{node.label}</span>
                                 </CommandItem>
                             ))}
@@ -380,8 +413,12 @@ export function EdgeDropNodePicker({
                             {rows.map((row) => (
                                 <CommandItem
                                     key={row.key}
-                                    value={`${row.displayLabel} ${row.nodeLabel} ${row.handleLabel}`}
-                                    onSelect={() => onNodeSelect({ nodeType: row.nodeType, handleId: row.handleId })}
+                                    value={`${row.displayLabel} ${row.nodeLabel} ${row.handleLabel} ${row.searchText ?? ''}`}
+                                    onSelect={() => onNodeSelect({
+                                        nodeType: row.nodeType,
+                                        handleId: row.handleId,
+                                        globalId: row.globalId,
+                                    })}
                                     className="gap-2"
                                 >
                                     {row.isCodeNode && <Code className="w-3 h-3 text-primary" />}

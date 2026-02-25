@@ -10,7 +10,8 @@ import { registry } from '@/lib/registry';
 import { POST_ANCHOR_NODE_TYPES } from '@/lib/nodes';
 import { useEditorStore } from '@/store/editor';
 import { cn, getErrorMessage } from '@/lib/utils';
-import { NodeType, SubgraphPort } from '@/lib/types';
+import { NodeType, SubgraphPort, TSLNodeData } from '@/lib/types';
+import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { X, ChevronDown, Search, Code, Plus, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -73,6 +74,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
     const nodes = useEditorStore((s) => s.nodes);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const globals = useEditorStore((s) => s.globals);
     const { screenToFlowPosition } = useReactFlow();
     const nodesByCategory = registry.byCategory();
     const [searchQuery, setSearchQuery] = useState('');
@@ -157,7 +159,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     const hasProjectSubgraphs = filteredProjectSubgraphs.length > 0;
 
     const handleAddNode = useCallback(
-        (type: NodeType) => {
+        (type: NodeType, data?: Partial<TSLNodeData>) => {
             // Add node at center of current viewport
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
@@ -171,7 +173,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
             position.x += (Math.random() - 0.5) * 100;
             position.y += (Math.random() - 0.5) * 100;
 
-            addNode(type, position);
+            addNode(type, position, data);
         },
         [addNode, screenToFlowPosition]
     );
@@ -411,6 +413,26 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
         return result;
     }, [nodesByCategory, editorMode, activeRootGraph, hasInputAnchor, hasOutputAnchor, searchQuery]);
 
+    const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+    const globalPickerEntries = useMemo(() => {
+        const entries = buildGlobalPickerEntries(globals);
+        if (!normalizedSearchQuery) return entries;
+        return entries.filter((entry) => (
+            entry.label.toLowerCase().includes(normalizedSearchQuery) ||
+            entry.searchText.includes(normalizedSearchQuery)
+        ));
+    }, [globals, normalizedSearchQuery]);
+
+    const categoryEntries = useMemo(() => {
+        const entries = Object.entries(filteredNodesByCategory);
+        const hasGlobalsCategory = entries.some(([category]) => category === 'Globals');
+        if (!hasGlobalsCategory && globalPickerEntries.length > 0) {
+            entries.push(['Globals', []]);
+        }
+        return entries.sort(([catA], [catB]) => catA.localeCompare(catB));
+    }, [filteredNodesByCategory, globalPickerEntries]);
+
     // Menu button styles matching shadcn SidebarMenuButton
     const menuButtonStyles = cn(
         'flex w-full items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-xs outline-none',
@@ -448,24 +470,32 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto">
-                {Object.entries(filteredNodesByCategory)
-                    .sort(([catA], [catB]) => catA.localeCompare(catB))
-                    .map(([category, categoryNodes]) => (
-                        <CategoryGroup key={category} title={category} forceOpen={!!searchQuery}>
-                            <SidebarMenu>
-                                {categoryNodes.map((node) => (
-                                    <SidebarMenuItem key={node.type}>
-                                        <button
-                                            onClick={() => handleAddNode(node.type)}
-                                            className={menuButtonStyles}
-                                        >
-                                            {node.label}
-                                        </button>
-                                    </SidebarMenuItem>
-                                ))}
-                            </SidebarMenu>
-                        </CategoryGroup>
-                    ))}
+                {categoryEntries.map(([category, categoryNodes]) => (
+                    <CategoryGroup key={category} title={category} forceOpen={!!searchQuery}>
+                        <SidebarMenu>
+                            {category === 'Globals' && globalPickerEntries.map((entry) => (
+                                <SidebarMenuItem key={entry.pickerKey}>
+                                    <button
+                                        onClick={() => handleAddNode('global/ref', { values: { globalId: entry.globalId } })}
+                                        className={menuButtonStyles}
+                                    >
+                                        {entry.label}
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
+                            {categoryNodes.map((node) => (
+                                <SidebarMenuItem key={node.type}>
+                                    <button
+                                        onClick={() => handleAddNode(node.type)}
+                                        className={menuButtonStyles}
+                                    >
+                                        {node.label}
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </CategoryGroup>
+                ))}
 
                 {/* Custom Nodes Section - User's templates + Community templates */}
                 {(showCustomSection || hasProjectSubgraphs || hasUserTemplates || hasPublicTemplates) && (

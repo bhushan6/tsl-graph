@@ -68,4 +68,30 @@ describe('Editor root graph switching', () => {
         expect(added).toBe(false);
         expect(useEditorStore.getState().nodes.some((node) => node.data.type === 'const/uniform')).toBe(false);
     });
+
+    it('binds explicit global refs and keeps generic global fallback binding', () => {
+        const store = useEditorStore.getState();
+        const firstGlobalId = store.addGlobal({ name: 'uTime', kind: 'uniform', type: 'float', defaultValue: 0 });
+        const secondGlobalId = store.addGlobal({ name: 'uTint', kind: 'uniform', type: 'color', defaultValue: '#ffffff' });
+
+        expect(firstGlobalId).toBeTruthy();
+        expect(secondGlobalId).toBeTruthy();
+
+        const addedExplicit = store.addNode('global/ref', { x: 10, y: 10 }, {
+            values: { globalId: secondGlobalId as string },
+        });
+        expect(addedExplicit).toBe(true);
+
+        const explicitNodes = useEditorStore.getState().nodes;
+        const explicitNode = explicitNodes[explicitNodes.length - 1];
+        expect(explicitNode?.data.values?.globalId).toBe(secondGlobalId);
+
+        const addedGeneric = store.addNode('global/ref', { x: 40, y: 10 });
+        expect(addedGeneric).toBe(true);
+
+        const genericNodes = useEditorStore.getState().nodes;
+        const genericNode = genericNodes[genericNodes.length - 1];
+        const currentFallbackGlobalId = useEditorStore.getState().globals[0]?.id;
+        expect(genericNode?.data.values?.globalId).toBe(currentFallbackGlobalId);
+    });
 });

@@ -35,6 +35,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
         (selection: EdgeDropSelection) => {
             const nodeType = selection.nodeType;
             const selectedHandleId = selection.handleId;
+            const selectedGlobalId = selection.globalId;
             const definition = registry.get(nodeType);
             const isCodeNode = nodeType.startsWith('code/');
             const isSubgraphNode = nodeType.startsWith('subgraph/') && !nodeType.startsWith('subgraph/input') && !nodeType.startsWith('subgraph/output');
@@ -292,6 +293,13 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     values: defaultValues,
                     connected: {},
                 } as TSLNodeData;
+
+                if (nodeType === 'global/ref' && typeof selectedGlobalId === 'string') {
+                    nodeData.values = {
+                        ...nodeData.values,
+                        globalId: selectedGlobalId,
+                    };
+                }
 
                 // Add default operation for MultiOp nodes
                 if (nodeType === 'math/multiOp') {
