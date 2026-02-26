@@ -137,6 +137,7 @@ const tslFunctions: TSLCompletion[] = [
     // -- Textures --
     { label: 'texture', type: 'function', detail: 'texture(sampler, uv)', info: 'Sample a texture', boost: 5 },
     { label: 'triplanarTexture', type: 'function', detail: 'triplanarTexture(tex, ...)', info: 'Triplanar texture mapping' },
+    { label: 'parallaxUV', type: 'function', detail: 'parallaxUV(uv, scale)', info: 'Parallax UV offset' },
     { label: 'viewportDepthTexture', type: 'function', detail: 'viewportDepthTexture(uv)', info: 'Viewport depth' },
     { label: 'viewportSharedTexture', type: 'function', detail: 'viewportSharedTexture(uv)', info: 'Viewport shared texture' },
     { label: 'viewportLinearDepth', type: 'variable', detail: 'float', info: 'Viewport linear depth (current fragment)' },

@@ -110,6 +110,18 @@ export const textureNodes = [
         tsl: 'triplanarTexture',
     },
     {
+        type: 'texture/parallaxUV',
+        label: 'Parallax UV',
+        category: 'Texture',
+        description: 'Offsets UVs based on view direction for parallax mapping.',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+            scale: { label: 'Scale', type: 'vec2', default: [0, 0] },
+        },
+        outputs: { out: { label: 'Out', type: 'vec2' } },
+        tsl: 'parallaxUV',
+    },
+    {
         type: 'texture/viewportDepth',
         label: 'Viewport Depth',
         category: 'Texture',

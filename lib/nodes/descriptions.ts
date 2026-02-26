@@ -76,6 +76,7 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
     cubeTexture: 'Samples a cube texture using a direction vector.',
     texture3D: 'Samples a 3D texture at a given coordinate.',
     triplanarTexture: 'Samples a texture using triplanar projection.',
+    parallaxUV: 'Offsets UVs based on view direction for parallax mapping.',
 
     // Attributes
     uv: 'Returns the UV attribute for the selected index (default 0).',
