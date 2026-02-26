@@ -16,8 +16,21 @@ export interface AssetValue {
     assetId?: string;
 }
 
+export interface GradientStopValue {
+    id?: string;
+    color: string;
+    pos: number;
+}
+
 // Port/value definitions
-export type TSLValueType = number | number[] | readonly number[] | string | boolean | AssetValue;
+export type TSLValueType =
+    | number
+    | number[]
+    | readonly number[]
+    | string
+    | boolean
+    | AssetValue
+    | GradientStopValue[];
 
 export interface Port {
     readonly label: string;

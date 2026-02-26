@@ -188,6 +188,7 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'utils/spherizeUV': 'Applies a spherical warping effect to UV coordinates.',
     'utils/hslToRgb': 'Converts HSL values to RGB.',
     'utils/checker': 'Generates a checker pattern from UV coordinates.',
+    'utils/linearGradient': 'Generates a linear color gradient using ordered color stops.',
 
     'advanced/varying': 'Computes the node in the vertex stage and interpolates it to the fragment stage.',
     'advanced/var': 'Creates a temporary variable for reuse in shader code.',

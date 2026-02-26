@@ -18,6 +18,7 @@ import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TY
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
+import { DEFAULT_GRADIENT_STOPS, normalizeGradientStops } from '@/lib/gradient-utils';
 import { registry } from '@/lib/registry';
 import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
@@ -1343,6 +1344,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     globalId: data.values?.globalId ?? globals[0].id,
                 };
             }
+        }
+
+        if (type === 'utils/linearGradient') {
+            data.values = {
+                ...data.values,
+                mode: Number(data.values?.mode ?? 0.0),
+                stops: normalizeGradientStops(data.values?.stops ?? DEFAULT_GRADIENT_STOPS),
+            };
         }
 
         const newNode: Node<TSLNodeData> = {

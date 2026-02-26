@@ -38,6 +38,11 @@ import {
 } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { parseGlobalDeclarations } from '@/lib/global-parser';
+import {
+    DEFAULT_GRADIENT_STOPS,
+    normalizeGradientStops,
+} from '@/lib/gradient-utils';
+import { LinearGradientUI, type LinearGradientUIChange } from '@/components/gradient/linear-gradient-ui';
 import { toast } from 'sonner';
 
 // Type options for port type selector
@@ -406,6 +411,45 @@ function LoopGroupPanel({ node }: { node: AppNode }) {
                         </div>
                     </>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function LinearGradientPanel({
+    node,
+    tConnected,
+}: {
+    node: AppNode;
+    tConnected: boolean;
+}) {
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const modeValue = useNodeInputValue(node.id, 'mode', 0.0);
+    const stopsValue = useNodeInputValue(node.id, 'stops', DEFAULT_GRADIENT_STOPS);
+    const normalizedMode = Number(modeValue ?? 0) === 1 ? 1.0 : 0.0;
+    const normalizedStops = useMemo(() => normalizeGradientStops(stopsValue), [stopsValue]);
+    const handleGradientChange = useCallback((value: LinearGradientUIChange) => {
+        updateNodeValue(node.id, 'mode', value.mode);
+        updateNodeValue(node.id, 'stops', value.stops);
+    }, [node.id, updateNodeValue]);
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Linear Gradient</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    t input: {tConnected ? 'Connected' : 'Disconnected (uses float(0))'}
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+                <LinearGradientUI
+                    key={node.id}
+                    initialMode={normalizedMode}
+                    initialStops={normalizedStops}
+                    onChange={handleGradientChange}
+                    debounceMs={500}
+                />
             </div>
         </div>
     );
@@ -1126,6 +1170,10 @@ function PropertiesPanelContent() {
         return <GlobalRefPanel node={node} />;
     }
 
+    if (node.data.type === 'utils/linearGradient') {
+        return <LinearGradientPanel node={node} tConnected={connectedInputs.has('t')} />;
+    }
+
     const def = registry.get(node.data.type);
 
     if (!def) {
@@ -1438,6 +1486,9 @@ interface PropertyInputProps {
 }
 
 function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId, immediate = false }: PropertyInputProps) {
+    const vectorValue = Array.isArray(value) && value.every((entry) => typeof entry === 'number')
+        ? value
+        : Number(value ?? 0);
 
     if (options && options.length > 0) {
         return (
@@ -1486,13 +1537,13 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
         return <BooleanInput value={value} onChange={onChange} />;
     }
     if (type === 'vec2') {
-        return <VectorInput size={2} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y']} immediate={immediate} />;
+        return <VectorInput size={2} value={vectorValue} onChange={onChange} labels={['X', 'Y']} immediate={immediate} />;
     }
     if (type === 'vec3') {
-        return <VectorInput size={3} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z']} immediate={immediate} />;
+        return <VectorInput size={3} value={vectorValue} onChange={onChange} labels={['X', 'Y', 'Z']} immediate={immediate} />;
     }
     if (type === 'vec4') {
-        return <VectorInput size={4} value={Array.isArray(value) ? value : Number(value ?? 0)} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} immediate={immediate} />;
+        return <VectorInput size={4} value={vectorValue} onChange={onChange} labels={['X', 'Y', 'Z', 'W']} immediate={immediate} />;
     }
 
     if (type === 'int' || type === 'uint') {

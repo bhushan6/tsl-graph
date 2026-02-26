@@ -146,6 +146,10 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
     };
 
     const renderInput = () => {
+        const vectorValue = Array.isArray(value) && value.every((entry) => typeof entry === 'number')
+            ? value
+            : Number(value ?? 0);
+
         switch (currentType) {
             case 'bool':
                 return <BooleanInput value={value} onChange={onChange} />;
@@ -153,7 +157,7 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
                 return (
                     <VectorInput
                         size={2}
-                        value={Array.isArray(value) ? value : Number(value ?? 0)}
+                        value={vectorValue}
                         onChange={onChange}
                         immediate={immediate}
                         labels={['X', 'Y']}
@@ -163,7 +167,7 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
                 return (
                     <VectorInput
                         size={3}
-                        value={Array.isArray(value) ? value : Number(value ?? 0)}
+                        value={vectorValue}
                         onChange={onChange}
                         immediate={immediate}
                         labels={['X', 'Y', 'Z']}
@@ -173,7 +177,7 @@ function AnyInputComponent({ value, onChange, immediate = false }: AnyInputProps
                 return (
                     <VectorInput
                         size={4}
-                        value={Array.isArray(value) ? value : Number(value ?? 0)}
+                        value={vectorValue}
                         onChange={onChange}
                         immediate={immediate}
                         labels={['X', 'Y', 'Z', 'W']}

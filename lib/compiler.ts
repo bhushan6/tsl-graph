@@ -7,6 +7,7 @@ import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
 import { UNIFORM_KINDS, formatUniformValueExpression, getUniformKindFromNode, type UniformKind } from './uniform-utils';
 import { getMaterialActiveInputsSet } from './material-inputs';
 import { TEXTURE_PROP_INPUTS } from './texture-props';
+import { normalizeGradientStops } from './gradient-utils';
 
 interface CompiledNode {
     id: string;
@@ -251,8 +252,10 @@ function getInputValue(
         return value ? 'true' : 'false';
     }
 
-    // Handle array values (vectors)
-    if (Array.isArray(value)) {
+    // Handle numeric array values (vectors)
+    if (Array.isArray(value) && value.every((entry) => {
+        return typeof entry === 'number' && Number.isFinite(entry);
+    })) {
         const components = value.map(v => String(Number(v ?? 0)));
         if (components.length === 2) return `vec2(${components.join(', ')})`;
         if (components.length === 3) return `vec3(${components.join(', ')})`;
@@ -267,6 +270,26 @@ function getInputValue(
     }
 
     return String(num);
+}
+
+function getLinearGradientArgs(
+    node: Node<TSLNodeData>,
+    edges: Edge[],
+    compiledNodes: Map<string, CompiledNode>,
+    inputs: Record<string, Port>,
+    argsMap?: Record<string, string>
+): { tArg: string; modeArg: string; stopsLiteral: string } {
+    const tInput = inputs['t'] ?? { label: 'T', type: 'float', default: 0 };
+    const modeInput = inputs['mode'] ?? { label: 'Mode', type: 'float', default: 0 };
+    const tEdge = edges.find((edge) => edge.target === node.id && edge.targetHandle === 't');
+    const tArg = tEdge
+        ? getInputValue(node, 't', edges, compiledNodes, tInput, argsMap)
+        : 'float(0)';
+    const modeArg = getInputValue(node, 'mode', edges, compiledNodes, modeInput, argsMap);
+    const stops = normalizeGradientStops(node.data.values?.stops);
+    const stopsLiteral = `[${stops.map((stop) => `{ color: color("${stop.color}"), pos: ${stop.pos} }`).join(', ')}]`;
+
+    return { tArg, modeArg, stopsLiteral };
 }
 
 function getMultiOpOperations(node: Node<TSLNodeData>): MultiOp[] {
@@ -694,6 +717,9 @@ function compileSubgraphDefinition(
         } else if (def.type === 'const/color') {
             const hex = getStringValue(node, 'value', inputs['value']);
             code = `color("${hex}")`;
+        } else if (def.type === 'utils/linearGradient') {
+            const { tArg, modeArg, stopsLiteral } = getLinearGradientArgs(node, internalEdges, compiledNodes, inputs, argsMap);
+            code = `linearGradient(${tArg}, ${modeArg}, ${stopsLiteral})`;
         } else if (def.type === 'math/split') {
             code = getInputValue(node, 'in', internalEdges, compiledNodes, inputs['in'], argsMap);
         } else if (def.type === 'advanced/perspectiveDepthToViewZ') {
@@ -1797,6 +1823,9 @@ export function compileGraph(
         } else if (def.type === 'const/color') {
             const hex = getStringValue(node, 'value', inputs['value']);
             code = `color("${hex}")`;
+        } else if (def.type === 'utils/linearGradient') {
+            const { tArg, modeArg, stopsLiteral } = getLinearGradientArgs(node, edgesForInputs, compiledNodes, inputs);
+            code = `linearGradient(${tArg}, ${modeArg}, ${stopsLiteral})`;
         } else if (def.type === 'geo/uv') {
             const index = Number(node.data.values?.['index'] ?? 0);
             code = `uv(${index})`;
@@ -2283,6 +2312,10 @@ export function getRequiredImports(
                 if ((codeNode?.language ?? 'tsl') === 'wgsl') {
                     imports.add('wgslFn');
                 }
+            } else if (node.data.type === 'utils/linearGradient') {
+                imports.add('linearGradient');
+                imports.add('color');
+                imports.add('float');
             } else if (node.data.type === 'geo/camera') {
                 imports.add('cameraNear');
                 imports.add('cameraFar');
@@ -2295,7 +2328,9 @@ export function getRequiredImports(
             // Collect vec imports from values
             if (node.data.values) {
                 for (const value of Object.values(node.data.values)) {
-                    if (Array.isArray(value)) {
+                    if (Array.isArray(value) && value.every((entry) => {
+                        return typeof entry === 'number' && Number.isFinite(entry);
+                    })) {
                         if (value.length === 2) imports.add('vec2');
                         else if (value.length === 3) imports.add('vec3');
                         else if (value.length === 4) imports.add('vec4');
@@ -2330,6 +2365,11 @@ export function getRequiredImports(
             imports.add('screenUV');
         }
 
+        if (node.data.type === 'utils/linearGradient') {
+            imports.add('color');
+            imports.add('float');
+        }
+
         if (node.data.type === 'geo/camera') {
             imports.add('cameraNear');
             imports.add('cameraFar');
@@ -2359,7 +2399,9 @@ export function getRequiredImports(
         // Check node values for arrays (vectors) to add vec imports
         if (node.data.values) {
             for (const value of Object.values(node.data.values)) {
-                if (Array.isArray(value)) {
+                if (Array.isArray(value) && value.every((entry) => {
+                    return typeof entry === 'number' && Number.isFinite(entry);
+                })) {
                     if (value.length === 2) imports.add('vec2');
                     else if (value.length === 3) imports.add('vec3');
                     else if (value.length === 4) imports.add('vec4');

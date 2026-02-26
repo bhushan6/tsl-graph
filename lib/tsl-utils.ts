@@ -1,4 +1,4 @@
-import { Fn, float, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step } from 'three/tsl';
+import { Fn, float, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, color } from 'three/tsl';
 
 //@ts-expect-error: this is valid but TSL types seems off
 export const rotation3d = Fn(([pos, axis, angle]) => {
@@ -28,6 +28,29 @@ export const rotate2D = Fn(([pos, angle]) => {
 //@ts-expect-error: this is valid but TSL types seems off
 export const uvTransform = Fn(([uv, scale, offset]) => {
     return uv.mul(scale).add(offset);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const linearGradient = Fn(([t, mode, stops]) => {
+    const fallback = color('#ffffff');
+    if (!Array.isArray(stops) || stops.length === 0) return fallback;
+
+    const first = stops[0] as { color?: unknown };
+    let currentColor: unknown = first?.color ?? fallback;
+
+    for (let i = 1; i < stops.length; i++) {
+        const prev = stops[i - 1] as { color: unknown; pos: number };
+        const curr = stops[i] as { color: unknown; pos: number };
+
+        const prevPos = Number(prev.pos);
+        const currPos = Number(curr.pos);
+        const range = Math.max(0.00001, currPos - prevPos);
+        const posNode = clamp(t.sub(prevPos).div(range), 0.0, 1.0);
+        const blendFactor = mix(posNode, step(0.01, posNode), mode);
+        currentColor = mix(currentColor as never, curr.color as never, blendFactor);
+    }
+
+    return currentColor;
 });
 
 // manually implementing fresnel to control everything

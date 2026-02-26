@@ -1,4 +1,5 @@
 import { BaseNodeDef } from './definitions';
+import { DEFAULT_GRADIENT_STOPS } from '@/lib/gradient-utils';
 
 export const utilsNodes = [
     {
@@ -384,6 +385,35 @@ export const utilsNodes = [
         },
         outputs: { out: { label: 'Out', type: 'vec2' } },
         tsl: 'spherizeUV',
+    },
+    {
+        type: 'utils/linearGradient',
+        label: 'Linear Gradient',
+        category: 'Utils',
+        inputs: {
+            t: { label: 'T', type: 'float', connectionOnly: true },
+            mode: {
+                label: 'Mode',
+                type: 'float',
+                default: 0.0,
+                options: [
+                    { label: 'Blend', value: 0.0 },
+                    { label: 'Flat', value: 1.0 },
+                ],
+                propertyOnly: true,
+                hidden: true,
+            },
+            stops: {
+                label: 'Stops',
+                type: 'any',
+                default: DEFAULT_GRADIENT_STOPS,
+                propertyOnly: true,
+                hidden: true,
+            },
+        },
+        outputs: { out: { label: 'Out', type: 'color' } },
+        tsl: 'linearGradient',
+        importFrom: '@/lib/tsl-utils',
     },
     {
         type: 'utils/fresnel',

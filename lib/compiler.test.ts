@@ -228,6 +228,19 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'vec4', label: 'Out' } }
     },
     {
+        type: 'utils/linearGradient',
+        label: 'Linear Gradient',
+        category: 'Utils',
+        tsl: 'linearGradient',
+        importFrom: '@/lib/tsl-utils',
+        inputs: {
+            t: { type: 'float', label: 'T', connectionOnly: true },
+            mode: { type: 'float', default: 0.0, label: 'Mode', propertyOnly: true },
+            stops: { type: 'any', label: 'Stops', propertyOnly: true },
+        },
+        outputs: { out: { type: 'color', label: 'Out' } },
+    },
+    {
         type: 'advanced/hashBlur',
         label: 'Hash Blur',
         category: 'Advanced',
@@ -954,6 +967,37 @@ describe('compileSubgraphCode', () => {
         expect(code).toContain('.assign(');
         expect(code).not.toContain('__loop_');
         expect(() => new Function(code)).not.toThrow();
+    });
+
+    it('compiles linear gradient nodes inside subgraphs', () => {
+        const gradNode = createNode('grad1', 'utils/linearGradient', {
+            values: {
+                mode: 0.0,
+                stops: [
+                    { color: '#020024', pos: 0.0 },
+                    { color: '#090979', pos: 0.35 },
+                    { color: '#00d4ff', pos: 1.0 },
+                ],
+            },
+        });
+
+        const subgraph: SubgraphDefinition = {
+            id: 'custom/gradient-subgraph',
+            name: 'Gradient Subgraph',
+            inputs: [{ id: 'in_0', label: 't', type: 'float' }],
+            outputs: [{ id: 'out_0', label: 'out', type: 'color' }],
+            nodes: [gradNode],
+            edges: [
+                { id: 'e1', source: 'subgraph-input', sourceHandle: 'in_0', target: 'grad1', targetHandle: 't' },
+                { id: 'e2', source: 'grad1', sourceHandle: 'out', target: 'subgraph-output', targetHandle: 'out_0' },
+            ],
+            createdAt: 0,
+            updatedAt: 0,
+        };
+
+        const code = compileSubgraphCode(subgraph);
+        expect(code).toContain('linearGradient(arg_in_0, 0, [');
+        expect(code).toContain('{ color: color("#020024"), pos: 0 }');
     });
 });
 

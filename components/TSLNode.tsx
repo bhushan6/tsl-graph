@@ -29,6 +29,7 @@ import { NodeProps } from '@xyflow/react';
 import { MULTI_OP_OPTIONS, getMultiOpHandleId, getMultiOpLabel, getMultiOpParams, type MultiOp, type MultiOpType } from '@/lib/multi-op';
 import { Separator } from './ui/separator';
 import { getUniformKindFromNode, getUniformOutputs } from '@/lib/uniform-utils';
+import { generateGradientString, normalizeGradientStops } from '@/lib/gradient-utils';
 
 type TSLNodeProps = NodeProps<AppNode>;
 
@@ -397,6 +398,15 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
+    const isLinearGradientNode = data.type === 'utils/linearGradient';
+    const linearGradientPreview = isLinearGradientNode
+        ? generateGradientString(
+            'linear',
+            90,
+            normalizeGradientStops(data.values?.stops),
+            Number(data.values?.mode ?? 0)
+        )
+        : null;
 
     const isTextureSample = def?.type === 'texture/sample';
     const textureToggleKeys = isTextureSample ? new Set<string>(TEXTURE_PROP_INPUTS) : null;
@@ -445,6 +455,14 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 
             {/* Content - Removed px-2 to allow handles to touch edges pattern. Added pb-3 for safe area near rounded corners */}
             <div className="flex flex-col gap-0 pt-1 pb-1.5 rounded-b-xl">
+                {linearGradientPreview && (
+                    <div className="px-2 pb-1">
+                        <div
+                            className="h-3 rounded "
+                            style={{ background: linearGradientPreview }}
+                        />
+                    </div>
+                )}
                 {rows.map((row) => (
                     <div key={row.key} className="flex items-center justify-between min-h-[22px]">
                         {/* Input Side */}
