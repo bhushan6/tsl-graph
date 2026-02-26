@@ -22,6 +22,16 @@ export const textureNodes = [
             url: { label: 'URL', type: 'string', default: "/uv.png", propertyOnly: true },
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
             // Texture Properties
+            colorSpace: {
+                label: 'Color Space',
+                type: 'string',
+                default: 'SRGBColorSpace',
+                options: [
+                    { label: 'sRGB', value: 'SRGBColorSpace' },
+                    { label: 'No Color Space', value: 'NoColorSpace' },
+                ],
+                propertyOnly: true,
+            },
             wrapS: {
                 label: 'Wrap S',
                 type: 'string',
@@ -32,7 +42,6 @@ export const textureNodes = [
                     { label: 'Mirrored Repeat', value: 'MirroredRepeatWrapping' },
                 ],
                 propertyOnly: true,
-                hidden: true
             },
             wrapT: {
                 label: 'Wrap T',
@@ -44,7 +53,6 @@ export const textureNodes = [
                     { label: 'Mirrored Repeat', value: 'MirroredRepeatWrapping' },
                 ],
                 propertyOnly: true,
-                hidden: true
             },
             minFilter: {
                 label: 'Min Filter',
@@ -59,7 +67,6 @@ export const textureNodes = [
                     { label: 'Linear Mipmap Linear', value: 'LinearMipmapLinearFilter' },
                 ],
                 propertyOnly: true,
-                hidden: true
             },
             magFilter: {
                 label: 'Mag Filter',
@@ -70,7 +77,6 @@ export const textureNodes = [
                     { label: 'Linear', value: 'LinearFilter' },
                 ],
                 propertyOnly: true,
-                hidden: true
             },
         },
         outputs: { out: { label: 'Out', type: 'vec4' } },

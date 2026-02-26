@@ -6,6 +6,7 @@ import { registry } from '@/lib/registry';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { getMaterialActiveInputsSet, getMaterialStoredActiveInputs } from '@/lib/material-inputs';
+import { TEXTURE_PROP_INPUTS } from '@/lib/texture-props';
 import { Button } from '@/components/ui/button';
 import { HexColorPicker } from 'react-colorful';
 import { useEdges, useReactFlow } from '@xyflow/react';
@@ -1153,12 +1154,19 @@ function PropertiesPanelContent() {
     const inputKeys = Object.keys(inputs);
     const visibleInputKeys = inputKeys.filter((key) => !inputs[key].hidden);
     const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+    const isTextureSample = def.type === 'texture/sample';
+    const textureToggleKeys = isTextureSample ? TEXTURE_PROP_INPUTS : [];
+    const textureToggleSet = new Set(textureToggleKeys);
     const storedActiveInputs = isMaterialNode ? getMaterialStoredActiveInputs(node.data, def) : [];
     const activeInputsSet = isMaterialNode ? getMaterialActiveInputsSet(node.data, def, connectedInputs) : new Set<string>();
+    const textureActiveInputsSet = isTextureSample
+        ? getMaterialActiveInputsSet(node.data, def, connectedInputs)
+        : new Set<string>();
     const editableInputs = visibleInputKeys.filter((key) =>
         !connectedInputs.has(key)
         && !inputs[key].connectionOnly
         && (!isMaterialNode || activeInputsSet.has(key))
+        && (!isTextureSample || !textureToggleSet.has(key))
     );
     // const activeInputKeys = isMaterialNode ? visibleInputKeys.filter((key) => activeInputsSet.has(key)) : visibleInputKeys;
     // const activeEditableCandidates = isMaterialNode
@@ -1247,31 +1255,94 @@ function PropertiesPanelContent() {
                             </p>
                         ) : null}
                     </>
-                ) : editableInputs.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        {visibleInputKeys.length === 0
-                            ? 'This node has no editable properties'
-                            : 'All inputs are connected'}
-                    </p>
                 ) : (
-                    <div className="flex flex-col gap-4">
-                        {editableInputs.map((key) => {
-                            const input = inputs[key];
+                    <>
+                        {editableInputs.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                {visibleInputKeys.length === 0
+                                    ? 'This node has no editable properties'
+                                    : 'All inputs are connected'}
+                            </p>
+                        ) : (
+                            <div className="flex flex-col gap-4">
+                                {editableInputs.map((key) => {
+                                    const input = inputs[key];
 
-                            return (
-                                <PropertyInputWrapper
-                                    key={key}
-                                    nodeId={node.id}
-                                    inputKey={key}
-                                    inputType={input.type}
-                                    inputLabel={input.label}
-                                    inputDefault={input.default}
-                                    inputOptions={input.options}
-                                    onChange={(v) => updateNodeValue(node.id, key, v)}
-                                />
-                            );
-                        })}
-                    </div>
+                                    return (
+                                        <PropertyInputWrapper
+                                            key={key}
+                                            nodeId={node.id}
+                                            inputKey={key}
+                                            inputType={input.type}
+                                            inputLabel={input.label}
+                                            inputDefault={input.default}
+                                            inputOptions={input.options}
+                                            onChange={(v) => updateNodeValue(node.id, key, v)}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {isTextureSample && textureToggleKeys.length > 0 && (
+                            <div className="mt-6">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
+                                        Texture Props
+                                    </h4>
+                                    <span className="text-[10px] text-muted-foreground">Active props show on node & compile</span>
+                                </div>
+                                <div className="mt-2 flex flex-col gap-2">
+                                    {textureToggleKeys.map((key) => {
+                                        const input = inputs[key];
+                                        if (!input || input.hidden) return null;
+                                        const isConnected = connectedInputs.has(key);
+                                        const isActive = textureActiveInputsSet.has(key);
+                                        const hints: string[] = [];
+                                        if (input.connectionOnly) hints.push('connection only');
+                                        if (input.propertyOnly) hints.push('property');
+                                        if (isConnected) hints.push('connected');
+                                        const hintText = hints.length > 0 ? ` • ${hints.join(' • ')}` : '';
+
+                                        return (
+                                            <div key={key} className="rounded-md border border-sidebar-border/60 px-2 py-1.5">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs font-medium text-sidebar-foreground truncate">
+                                                            {input.label}
+                                                        </div>
+                                                        <div className="text-[10px] text-muted-foreground truncate">
+                                                            {input.type}{hintText}
+                                                        </div>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 rounded border-primary"
+                                                        checked={isActive}
+                                                        disabled={isConnected}
+                                                        onChange={(e) => setNodeActiveInput(node.id, key, e.target.checked)}
+                                                        title={isConnected ? 'Disconnect to deactivate' : (isActive ? 'Deactivate input' : 'Activate input')}
+                                                    />
+                                                </div>
+                                                {isActive && !isConnected && !input.connectionOnly && (
+                                                    <div className="mt-2">
+                                                        <PropertyInputInline
+                                                            nodeId={node.id}
+                                                            inputKey={key}
+                                                            inputType={input.type}
+                                                            inputDefault={input.default}
+                                                            inputOptions={input.options}
+                                                            onChange={(v) => updateNodeValue(node.id, key, v)}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

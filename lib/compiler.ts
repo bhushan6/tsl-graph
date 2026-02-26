@@ -6,6 +6,7 @@ import { topologicalSort } from './graph-utils';
 import { getMultiOpHandleId, getMultiOpParams, type MultiOp } from './multi-op';
 import { UNIFORM_KINDS, formatUniformValueExpression, getUniformKindFromNode, type UniformKind } from './uniform-utils';
 import { getMaterialActiveInputsSet } from './material-inputs';
+import { TEXTURE_PROP_INPUTS } from './texture-props';
 
 interface CompiledNode {
     id: string;
@@ -1841,17 +1842,34 @@ export function compileGraph(
 
             const texVarName = `${baseName}_tex`;
             targetLines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
-            targetLines.push(`${texVarName}.colorSpace = THREE.SRGBColorSpace;`);
+            const texturePropKeys = new Set(TEXTURE_PROP_INPUTS);
+            const activeInputs = getMaterialActiveInputsSet(node.data, def);
+            const isPropActive = (key: string) => !texturePropKeys.has(key) || activeInputs.has(key);
 
-            const wrapS = node.data.values?.['wrapS'] ?? inputs['wrapS']?.default ?? 'RepeatWrapping';
-            const wrapT = node.data.values?.['wrapT'] ?? inputs['wrapT']?.default ?? 'RepeatWrapping';
-            const minFilter = node.data.values?.['minFilter'] ?? inputs['minFilter']?.default ?? 'LinearMipmapLinearFilter';
-            const magFilter = node.data.values?.['magFilter'] ?? inputs['magFilter']?.default ?? 'LinearFilter';
+            if (isPropActive('colorSpace')) {
+                const colorSpace = node.data.values?.['colorSpace'] ?? inputs['colorSpace']?.default ?? 'SRGBColorSpace';
+                targetLines.push(`${texVarName}.colorSpace = THREE.${colorSpace};`);
+            }
 
-            targetLines.push(`${texVarName}.wrapS = THREE.${wrapS};`);
-            targetLines.push(`${texVarName}.wrapT = THREE.${wrapT};`);
-            targetLines.push(`${texVarName}.minFilter = THREE.${minFilter};`);
-            targetLines.push(`${texVarName}.magFilter = THREE.${magFilter};`);
+            if (isPropActive('wrapS')) {
+                const wrapS = node.data.values?.['wrapS'] ?? inputs['wrapS']?.default ?? 'RepeatWrapping';
+                targetLines.push(`${texVarName}.wrapS = THREE.${wrapS};`);
+            }
+
+            if (isPropActive('wrapT')) {
+                const wrapT = node.data.values?.['wrapT'] ?? inputs['wrapT']?.default ?? 'RepeatWrapping';
+                targetLines.push(`${texVarName}.wrapT = THREE.${wrapT};`);
+            }
+
+            if (isPropActive('minFilter')) {
+                const minFilter = node.data.values?.['minFilter'] ?? inputs['minFilter']?.default ?? 'LinearMipmapLinearFilter';
+                targetLines.push(`${texVarName}.minFilter = THREE.${minFilter};`);
+            }
+
+            if (isPropActive('magFilter')) {
+                const magFilter = node.data.values?.['magFilter'] ?? inputs['magFilter']?.default ?? 'LinearFilter';
+                targetLines.push(`${texVarName}.magFilter = THREE.${magFilter};`);
+            }
 
             const uvInput = inputs['uv'];
             const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');

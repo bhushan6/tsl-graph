@@ -9,6 +9,7 @@ import { TSLHandle } from './TSLHandle';
 import { useTheme } from 'next-themes';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { getMaterialActiveInputsSet } from '@/lib/material-inputs';
+import { TEXTURE_PROP_INPUTS } from '@/lib/texture-props';
 import {
     Tooltip,
     TooltipContent,
@@ -397,11 +398,17 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
 
-    // Filter out hidden inputs/outputs if necessary, currently inputs support hidden
+    const isTextureSample = def.type === 'texture/sample';
+    const textureToggleKeys = isTextureSample ? new Set(TEXTURE_PROP_INPUTS) : null;
+
+    // Filter out hidden inputs from node UI
     let visibleInputKeys = inputKeys.filter(k => !inputs[k].hidden);
     if (isMaterialNode) {
         const activeInputs = getMaterialActiveInputsSet(data, def, connectedInputs);
         visibleInputKeys = visibleInputKeys.filter((key) => activeInputs.has(key));
+    } else if (textureToggleKeys && textureToggleKeys.size > 0) {
+        const activeInputs = getMaterialActiveInputsSet(data, def, connectedInputs);
+        visibleInputKeys = visibleInputKeys.filter((key) => !textureToggleKeys.has(key) || activeInputs.has(key));
     }
     // Include 'out' in the main list of outputs.
     // We strictly align by index now for compactness
@@ -468,6 +475,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     {!connectedInputs.has(row.input[0]) && !row.input[1].connectionOnly && (
                                         <div className={cn("flex-1 flex items-center min-w-0", row.input[1].propertyOnly && "justify-end")}>
                                             <ValuePreview
+                                                inputKey={row.input[0]}
                                                 type={row.input[1].type}
                                                 value={data.values?.[row.input[0]] ?? row.input[1].default}
                                             />
@@ -500,11 +508,12 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 
 // Value Preview Components - Read-only previews for node values
 interface ValuePreviewProps {
+    inputKey?: string;
     type: string;
     value: TSLValueType;
 }
 
-function ValuePreview({ type, value }: ValuePreviewProps) {
+function ValuePreview({ inputKey, type, value }: ValuePreviewProps) {
     // If type is explicitly one of these, use it.
     // If 'any', try to infer from value.
     const isVector = type.startsWith('vec') || (type === 'any' && Array.isArray(value));
@@ -522,7 +531,8 @@ function ValuePreview({ type, value }: ValuePreviewProps) {
         } else {
             stringValue = String(value ?? '');
         }
-        return <StringPreview value={stringValue} />;
+        const isImage = inputKey === 'url' || isLikelyImageUrl(stringValue);
+        return <StringPreview value={stringValue} isImage={isImage} />;
     }
     if (isColor || looksLikeColor) {
         return <ColorInputPreview value={String(value ?? '#ffffff')} />;
@@ -562,8 +572,15 @@ function NumberPreview({ value }: { value: number }) {
     );
 }
 
-function StringPreview({ value }: { value: string }) {
+function StringPreview({ value, isImage }: { value: string; isImage: boolean }) {
     if (!value) return <span className="text-[9px] text-muted-foreground italic">Empty</span>;
+    if (!isImage) {
+        return (
+            <span className="text-[9px] text-gray-500 font-mono truncate max-w-[80px]" title={value}>
+                {value}
+            </span>
+        );
+    }
 
     return (
         <div className="w-16 h-16 rounded overflow-hidden border border-gray-200 dark:border-white/10 bg-checkered">
@@ -580,6 +597,13 @@ function StringPreview({ value }: { value: string }) {
             />
         </div>
     );
+}
+
+function isLikelyImageUrl(value: string): boolean {
+    if (!value) return false;
+    if (value.startsWith('data:image/')) return true;
+    const clean = value.split('?')[0].split('#')[0].toLowerCase();
+    return /\.(png|jpe?g|webp|gif|bmp|svg)$/.test(clean);
 }
 
 export const TSLNode = memo(TSLNodeComponent);
