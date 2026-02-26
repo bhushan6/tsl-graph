@@ -119,6 +119,7 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'tangentLocal', type: 'variable', detail: 'vec4', info: 'Local tangent' },
     { label: 'uv', type: 'function', detail: 'uv()', info: 'Texture coordinates', boost: 8 },
     { label: 'screenUV', type: 'variable', detail: 'vec2', info: 'Screen UVs' },
+    { label: 'screenCoordinate', type: 'variable', detail: 'vec2', info: 'Screen coordinates (pixels)' },
     { label: 'screenSize', type: 'variable', detail: 'vec2', info: 'Screen resolution' },
     { label: 'frontFacing', type: 'variable', detail: 'bool', info: 'Is front face' },
     { label: 'instanceIndex', type: 'variable', detail: 'uint', info: 'Instance index' },
@@ -153,6 +154,7 @@ const tslFunctions: TSLCompletion[] = [
     // -- Transforms --
     { label: 'rotation3d', type: 'function', detail: 'rotation3d(pos, axis, angle)', info: '3D rotation' },
     { label: 'rotate2D', type: 'function', detail: 'rotate2D(pos, angle)', info: '2D rotation' },
+    { label: 'rotate', type: 'function', detail: 'rotate(pos, rotation)', info: 'Rotate a 2D/3D vector' },
     { label: 'uvTransform', type: 'function', detail: 'uvTransform(uv, scale, offset)', info: 'Transform UVs' },
     { label: 'fresnelFull', type: 'function', detail: 'fresnelFull(bias, scale, power, normal, viewDir)', info: 'Fresnel effect' },
 

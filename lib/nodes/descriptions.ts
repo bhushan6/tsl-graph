@@ -104,6 +104,7 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
 
     // Screen / Viewport
     screenUV: 'Returns the screen-space UV coordinates.',
+    screenCoordinate: 'Returns the screen-space coordinate in pixels.',
     screenSize: 'Returns the screen resolution.',
     viewportSharedTexture: 'Samples the already-rendered viewport color.',
     viewportDepthTexture: 'Returns the viewport depth texture.',
@@ -112,6 +113,9 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
     // UV / Interpolation
     uvTransform: 'Transforms UVs using scale and offset.',
     remap: 'Maps a value from one range to another.',
+
+    // Transforms
+    rotate: 'Rotates a 2D or 3D vector.',
 
     // Random
     range: 'Returns a deterministic random value in a range.',
@@ -176,6 +180,7 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
 
     'utils/remapClamp': 'Remaps a value from one range to another and clamps the result.',
     'utils/rotate2D': 'Rotates a 2D vector by an angle.',
+    'utils/rotate': 'Rotates a 2D or 3D vector.',
     'utils/rotation3d': 'Rotates a 3D vector around an axis by an angle.',
     'utils/transformDirection': 'Transforms a direction vector by a matrix.',
     'utils/fresnel': 'Computes a Fresnel term from normal and view direction.',
@@ -195,6 +200,7 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
 
     'geo/camera': 'Returns camera near and far plane values.',
     'geo/screenUV': 'Returns screen-space UV coordinates.',
+    'geo/screenCoordinate': 'Returns screen-space coordinates in pixels.',
     'geo/resolution': 'Returns the screen resolution.',
     'geo/time': 'Returns the current time in seconds.',
 

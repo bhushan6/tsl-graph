@@ -162,6 +162,14 @@ export const geometryNodes = [
         pure: true,
     },
     {
+        type: 'geo/screenCoordinate',
+        label: 'Screen Coordinate',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'screenCoordinate',
+        pure: true,
+    },
+    {
         type: 'geo/resolution',
         label: 'Resolution',
         category: 'Geometry',

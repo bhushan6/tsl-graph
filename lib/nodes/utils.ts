@@ -32,6 +32,19 @@ export const utilsNodes = [
         pure: true,
         importFrom: '@/lib/tsl-utils',
     },
+    {
+        type: 'utils/rotate',
+        label: 'Rotate',
+        category: 'Utils',
+        inputs: {
+            pos: { label: 'Pos', type: 'any', default: 0 },
+            rotation: { label: 'Rotation', type: 'any', default: 0 },
+        },
+        outputs: {
+            out: { label: 'Out', type: 'any' },
+        },
+        tsl: 'rotate',
+    },
     // Color Adjustments
     {
         type: 'utils/luminance',
