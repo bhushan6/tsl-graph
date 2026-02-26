@@ -398,8 +398,8 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
 
-    const isTextureSample = def.type === 'texture/sample';
-    const textureToggleKeys = isTextureSample ? new Set(TEXTURE_PROP_INPUTS) : null;
+    const isTextureSample = def?.type === 'texture/sample';
+    const textureToggleKeys = isTextureSample ? new Set<string>(TEXTURE_PROP_INPUTS) : null;
 
     // Filter out hidden inputs from node UI
     let visibleInputKeys = inputKeys.filter(k => !inputs[k].hidden);

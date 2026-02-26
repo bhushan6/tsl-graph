@@ -1156,7 +1156,7 @@ function PropertiesPanelContent() {
     const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
     const isTextureSample = def.type === 'texture/sample';
     const textureToggleKeys = isTextureSample ? TEXTURE_PROP_INPUTS : [];
-    const textureToggleSet = new Set(textureToggleKeys);
+    const textureToggleSet: Set<string> = new Set(textureToggleKeys);
     const storedActiveInputs = isMaterialNode ? getMaterialStoredActiveInputs(node.data, def) : [];
     const activeInputsSet = isMaterialNode ? getMaterialActiveInputsSet(node.data, def, connectedInputs) : new Set<string>();
     const textureActiveInputsSet = isTextureSample

@@ -1842,7 +1842,7 @@ export function compileGraph(
 
             const texVarName = `${baseName}_tex`;
             targetLines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
-            const texturePropKeys = new Set(TEXTURE_PROP_INPUTS);
+            const texturePropKeys = new Set<string>(TEXTURE_PROP_INPUTS);
             const activeInputs = getMaterialActiveInputsSet(node.data, def);
             const isPropActive = (key: string) => !texturePropKeys.has(key) || activeInputs.has(key);
 
