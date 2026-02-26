@@ -156,6 +156,7 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'rotate2D', type: 'function', detail: 'rotate2D(pos, angle)', info: '2D rotation' },
     { label: 'rotate', type: 'function', detail: 'rotate(pos, rotation)', info: 'Rotate a 2D/3D vector' },
     { label: 'uvTransform', type: 'function', detail: 'uvTransform(uv, scale, offset)', info: 'Transform UVs' },
+    { label: 'spherizeUV', type: 'function', detail: 'spherizeUV(uv, strength, center)', info: 'Spherical UV warping' },
     { label: 'fresnelFull', type: 'function', detail: 'fresnelFull(bias, scale, power, normal, viewDir)', info: 'Fresnel effect' },
 
     // -- Noise --
