@@ -32,7 +32,7 @@ import {
 } from '@/lib/local-utils';
 
 // Preview mesh type
-export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
+export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder' | 'fullscreenQuad';
 export type RootGraphMode = 'material' | 'post';
 
 // Geometry configuration

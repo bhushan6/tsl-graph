@@ -19,6 +19,7 @@ const meshOptions: { value: PreviewMeshType; name: string }[] = [
     { value: 'box', name: 'Box' },
     { value: 'torus', name: 'Torus' },
     { value: 'plane', name: 'Plane' },
+    { value: 'fullscreenQuad', name: 'Fullscreen Quad' },
     { value: 'cylinder', name: 'Cylinder' },
 ];
 
@@ -63,6 +64,7 @@ export function PreviewControls({
     geometryScriptError,
 }: PreviewControlsProps) {
     const { resolvedTheme } = useTheme();
+    const isFullscreenQuad = previewSettings.mesh === 'fullscreenQuad';
 
     return (
         <>
@@ -155,56 +157,60 @@ export function PreviewControls({
                                     </select>
                                 </div>
 
-                                <div className="grid grid-cols-2 items-center gap-4">
-                                    <Label>Environment</Label>
-                                    <select
-                                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
-                                        value={previewSettings.environment || 'none'}
-                                        onChange={(e) => updatePreviewSettingsDebounced({ environment: e.target.value })}
-                                    >
-                                        {hdriOptions.map((opt) => (
-                                            <option key={opt.value} value={opt.value}>
-                                                {opt.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {previewSettings.environment && previewSettings.environment !== 'none' && (
+                                {!isFullscreenQuad && (
                                     <>
                                         <div className="grid grid-cols-2 items-center gap-4">
-                                            <Label>Intensity</Label>
-                                            <DebouncedInput
-                                                type="number"
-                                                step={0.1}
-                                                min={0}
-                                                max={5}
-                                                value={previewSettings.environmentIntensity ?? 1}
-                                                onChange={(value) => updatePreviewSettings({ environmentIntensity: Number(value) })}
-                                                className="h-8"
-                                            />
+                                            <Label>Environment</Label>
+                                            <select
+                                                className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
+                                                value={previewSettings.environment || 'none'}
+                                                onChange={(e) => updatePreviewSettingsDebounced({ environment: e.target.value })}
+                                            >
+                                                {hdriOptions.map((opt) => (
+                                                    <option key={opt.value} value={opt.value}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         </div>
+
+                                        {previewSettings.environment && previewSettings.environment !== 'none' && (
+                                            <>
+                                                <div className="grid grid-cols-2 items-center gap-4">
+                                                    <Label>Intensity</Label>
+                                                    <DebouncedInput
+                                                        type="number"
+                                                        step={0.1}
+                                                        min={0}
+                                                        max={5}
+                                                        value={previewSettings.environmentIntensity ?? 1}
+                                                        onChange={(value) => updatePreviewSettings({ environmentIntensity: Number(value) })}
+                                                        className="h-8"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <Label>Show Background</Label>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 rounded border-primary"
+                                                        checked={previewSettings.showEnvironmentBackground ?? false}
+                                                        onChange={(e) => updatePreviewSettingsDebounced({ showEnvironmentBackground: e.target.checked })}
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+
                                         <div className="flex items-center justify-between">
-                                            <Label>Show Background</Label>
+                                            <Label>Show Grid</Label>
                                             <input
                                                 type="checkbox"
                                                 className="h-4 w-4 rounded border-primary"
-                                                checked={previewSettings.showEnvironmentBackground ?? false}
-                                                onChange={(e) => updatePreviewSettingsDebounced({ showEnvironmentBackground: e.target.checked })}
+                                                checked={previewSettings.showGrid ?? true}
+                                                onChange={(e) => updatePreviewSettingsDebounced({ showGrid: e.target.checked })}
                                             />
                                         </div>
                                     </>
                                 )}
-
-                                <div className="flex items-center justify-between">
-                                    <Label>Show Grid</Label>
-                                    <input
-                                        type="checkbox"
-                                        className="h-4 w-4 rounded border-primary"
-                                        checked={previewSettings.showGrid ?? true}
-                                        onChange={(e) => updatePreviewSettingsDebounced({ showGrid: e.target.checked })}
-                                    />
-                                </div>
 
                                 <div className="flex items-center justify-between">
                                     <Label>Enable Post-Processing</Label>
@@ -451,37 +457,41 @@ export function PreviewControls({
                                     </div>
                                 )}
 
-                                <div className="h-[1px] bg-border my-1" />
+                                {!isFullscreenQuad && (
+                                    <>
+                                        <div className="h-[1px] bg-border my-1" />
 
-                                <div className="flex items-center justify-between">
-                                    <Label>Show Backdrop</Label>
-                                    <input
-                                        type="checkbox"
-                                        className="h-4 w-4 rounded border-primary"
-                                        checked={previewSettings.showBackdrop ?? false}
-                                        onChange={(e) => updatePreviewSettingsDebounced({ showBackdrop: e.target.checked })}
-                                    />
-                                </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Show Backdrop</Label>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={previewSettings.showBackdrop ?? false}
+                                                onChange={(e) => updatePreviewSettingsDebounced({ showBackdrop: e.target.checked })}
+                                            />
+                                        </div>
 
-                                <div className="flex items-center justify-between">
-                                    <Label>Instancing</Label>
-                                    <input
-                                        type="checkbox"
-                                        className="h-4 w-4 rounded border-primary"
-                                        checked={previewSettings.isInstanced}
-                                        onChange={(e) => updatePreviewSettings({ isInstanced: e.target.checked })}
-                                    />
-                                </div>
-                                {previewSettings.isInstanced && (
-                                    <div className="grid grid-cols-2 items-center gap-4">
-                                        <Label>Instance Count</Label>
-                                        <Input
-                                            type="number"
-                                            value={previewSettings.instanceCount}
-                                            onChange={(e) => updatePreviewSettings({ instanceCount: Number(e.target.value) })}
-                                            className="h-8"
-                                        />
-                                    </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Instancing</Label>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={previewSettings.isInstanced}
+                                                onChange={(e) => updatePreviewSettings({ isInstanced: e.target.checked })}
+                                            />
+                                        </div>
+                                        {previewSettings.isInstanced && (
+                                            <div className="grid grid-cols-2 items-center gap-4">
+                                                <Label>Instance Count</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={previewSettings.instanceCount}
+                                                    onChange={(e) => updatePreviewSettings({ instanceCount: Number(e.target.value) })}
+                                                    className="h-8"
+                                                />
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>

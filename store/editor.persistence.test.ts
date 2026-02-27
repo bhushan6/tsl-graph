@@ -47,6 +47,19 @@ describe('Editor Store Persistence', () => {
         expect(restoredSettings.config).toBeDefined();
     });
 
+    it('should round-trip fullscreenQuad preview mesh', () => {
+        const store = useEditorStore.getState();
+        store.updatePreviewSettings({ mesh: 'fullscreenQuad' });
+
+        const json = store.saveToJSON();
+        store.resetEditor();
+        expect(useEditorStore.getState().previewSettings.mesh).toBe('sphere');
+
+        const success = store.loadFromJSON(json);
+        expect(success).toBe(true);
+        expect(useEditorStore.getState().previewSettings.mesh).toBe('fullscreenQuad');
+    });
+
     it('should migrate v1 data by creating post anchors and material root mode', () => {
         const store = useEditorStore.getState();
 

@@ -41,7 +41,8 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
-    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const perspectiveCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const orthographicCameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const controlsRef = useRef<OrbitControls | null>(null);
     const postProcessingRef = useRef<THREE.PostProcessing | null>(null);
     const usePostProcessingRef = useRef(false);
@@ -54,6 +55,15 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+    const isFullscreenQuad = previewSettings.mesh === 'fullscreenQuad';
+
+    const getActiveCamera = useCallback((): THREE.Camera | null => {
+        const currentMesh = useEditorStore.getState().previewSettings.mesh;
+        if (currentMesh === 'fullscreenQuad') {
+            return orthographicCameraRef.current ?? perspectiveCameraRef.current;
+        }
+        return perspectiveCameraRef.current;
+    }, []);
 
     const captureBlob = useCallback((options?: PreviewCaptureOptions): Promise<CapturedFrame> => {
         const renderer = rendererRef.current;
@@ -162,7 +172,8 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     }, [isReady, onReadyChange]);
 
     useEffect(() => {
-        if (!isReady || !rendererRef.current || !sceneRef.current || !cameraRef.current) {
+        const camera = getActiveCamera();
+        if (!isReady || !rendererRef.current || !sceneRef.current || !camera) {
             usePostProcessingRef.current = false;
             return;
         }
@@ -180,7 +191,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         try {
             const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
             const postGraph = getRootGraph('post');
-            const scenePass = pass(sceneRef.current, cameraRef.current);
+            const scenePass = pass(sceneRef.current, camera);
             scenePass.setMRT(mrt({ output, normal: normalView }));
             const outputNode = buildTSLPostOutputNode(
                 scenePass,
@@ -188,7 +199,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 scenePass.getLinearDepthNode(),
                 scenePass.getTextureNode('depth'),
                 scenePass.getTextureNode('normal'),
-                cameraRef.current,
+                camera,
                 postGraph.nodes,
                 postGraph.edges,
                 subgraphs,
@@ -214,17 +225,20 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     }, [
         graphStructureVersion,
         isReady,
+        previewSettings.mesh,
         previewSettings.postEnabled,
         onPostErrorChange,
+        getActiveCamera,
     ]);
 
     const handleResize = useCallback(() => {
-        if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
+        if (!rendererRef.current || !perspectiveCameraRef.current || !containerRef.current) return;
         const w = containerRef.current.clientWidth;
         const h = containerRef.current.clientHeight;
         if (w <= 0 || h <= 0) return;
-        cameraRef.current.aspect = w / h;
-        cameraRef.current.updateProjectionMatrix();
+        perspectiveCameraRef.current.aspect = w / h;
+        perspectiveCameraRef.current.updateProjectionMatrix();
+        orthographicCameraRef.current?.updateProjectionMatrix();
         rendererRef.current.setSize(w, h);
     }, []);
 
@@ -248,10 +262,15 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             scene.background = new THREE.Color(0x1a1a1a);
             sceneRef.current = scene;
 
-            const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 2000);
-            camera.position.set(3.6, 2, 2);
-            camera.lookAt(0, 0, 0);
-            cameraRef.current = camera;
+            const perspectiveCamera = new THREE.PerspectiveCamera(45, width / height, 0.01, 2000);
+            perspectiveCamera.position.set(3.6, 2, 2);
+            perspectiveCamera.lookAt(0, 0, 0);
+            perspectiveCameraRef.current = perspectiveCamera;
+
+            const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
+            orthographicCamera.position.set(0, 0, 1);
+            orthographicCamera.lookAt(0, 0, 0);
+            orthographicCameraRef.current = orthographicCamera;
 
             const renderer = new THREE.WebGPURenderer({ antialias: true });
             await renderer.init();
@@ -276,7 +295,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             scene.add(gridHelper);
             gridRef.current = gridHelper;
 
-            const controls = new OrbitControls(camera, renderer.domElement);
+            const controls = new OrbitControls(perspectiveCamera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
             controls.target.set(0, 0, 0);
@@ -289,11 +308,15 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             const animate = () => {
                 if (isUnmounted) return;
                 frameIdRef.current = requestAnimationFrame(animate);
-                controls.update();
+                if (controls.enabled) {
+                    controls.update();
+                }
+                const activeCamera = getActiveCamera();
+                if (!activeCamera) return;
                 if (usePostProcessingRef.current && postProcessingRef.current) {
                     postProcessingRef.current.render();
                 } else {
-                    renderer.render(scene, camera);
+                    renderer.render(scene, activeCamera);
                 }
             };
             animate();
@@ -409,10 +432,11 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 rendererRef.current = null;
             }
 
-            cameraRef.current = null;
+            perspectiveCameraRef.current = null;
+            orthographicCameraRef.current = null;
             initRef.current = false;
         };
-    }, [handleResize]);
+    }, [getActiveCamera, handleResize]);
 
     useEffect(() => {
         if (!sceneRef.current || !material) return;
@@ -424,8 +448,9 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             }
         }
 
+        const shouldInstance = previewSettings.isInstanced && !isFullscreenQuad;
         let mesh: THREE.Mesh;
-        if (previewSettings.isInstanced) {
+        if (shouldInstance) {
             mesh = new THREE.InstancedMesh(geometry, material, previewSettings.instanceCount);
             mesh.position.set(0, 0, 0);
         } else {
@@ -435,12 +460,18 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
         sceneRef.current.add(mesh);
         meshRef.current = mesh;
-    }, [geometry, material, previewSettings.isInstanced, previewSettings.instanceCount]);
+    }, [geometry, material, previewSettings.isInstanced, previewSettings.instanceCount, isFullscreenQuad]);
 
     useEffect(() => {
         if (!sceneRef.current || !isReady) return;
 
         const scene = sceneRef.current;
+        if (isFullscreenQuad) {
+            scene.environment = null;
+            scene.background = new THREE.Color(0x1a1a1a);
+            return;
+        }
+
         const envName = previewSettings.environment;
 
         if (!envName || envName === 'none') {
@@ -474,6 +505,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         previewSettings.environment,
         previewSettings.environmentIntensity,
         previewSettings.showEnvironmentBackground,
+        isFullscreenQuad,
     ]);
 
     useEffect(() => {
@@ -496,6 +528,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             backdropRef.current = null;
         }
 
+        if (isFullscreenQuad) return;
         if (!previewSettings.showBackdrop) return;
 
         const loader = new GLTFLoader();
@@ -513,13 +546,18 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 console.error('Failed to load backdrop model:', err);
             }
         );
-    }, [isReady, previewSettings.showBackdrop]);
+    }, [isReady, previewSettings.showBackdrop, isFullscreenQuad]);
 
     useEffect(() => {
         if (gridRef.current) {
-            gridRef.current.visible = !!previewSettings.showGrid;
+            gridRef.current.visible = !!previewSettings.showGrid && !isFullscreenQuad;
         }
-    }, [previewSettings.showGrid, isReady]);
+    }, [previewSettings.showGrid, isFullscreenQuad, isReady]);
+
+    useEffect(() => {
+        if (!controlsRef.current) return;
+        controlsRef.current.enabled = !isFullscreenQuad;
+    }, [isFullscreenQuad]);
 
     return <div ref={containerRef} className="w-full h-full" />;
 });

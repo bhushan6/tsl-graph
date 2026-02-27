@@ -28,6 +28,7 @@ describe('buildPreviewGeometry', () => {
         ['box', 'BoxGeometry'],
         ['torus', 'TorusKnotGeometry'],
         ['plane', 'PlaneGeometry'],
+        ['fullscreenQuad', 'PlaneGeometry'],
         ['cylinder', 'CylinderGeometry'],
     ] as const)('maps %s mesh to %s', (mesh, expectedType) => {
         const settings = createPreviewSettings({ mesh });
@@ -35,6 +36,22 @@ describe('buildPreviewGeometry', () => {
 
         expect(result.geometry.type).toBe(expectedType);
         expect(result.geometryScriptError).toBeNull();
+
+        result.geometry.dispose();
+    });
+
+    it('creates fullscreen quad with [-1, 1] bounds in X/Y', () => {
+        const settings = createPreviewSettings({
+            mesh: 'fullscreenQuad',
+        });
+
+        const result = buildPreviewGeometry(settings);
+        result.geometry.computeBoundingBox();
+
+        expect(result.geometry.boundingBox?.min.x).toBeCloseTo(-1);
+        expect(result.geometry.boundingBox?.max.x).toBeCloseTo(1);
+        expect(result.geometry.boundingBox?.min.y).toBeCloseTo(-1);
+        expect(result.geometry.boundingBox?.max.y).toBeCloseTo(1);
 
         result.geometry.dispose();
     });

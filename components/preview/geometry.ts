@@ -37,6 +37,9 @@ export function buildPreviewGeometry(previewSettings: PreviewSettings): PreviewG
                 config.heightSegmentsPlane ?? 1
             );
             break;
+        case 'fullscreenQuad':
+            baseGeometry = new THREE.PlaneGeometry(2, 2, 1, 1);
+            break;
         case 'cylinder':
             baseGeometry = new THREE.CylinderGeometry(
                 config.radiusTop ?? 1,
