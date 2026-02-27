@@ -8,6 +8,15 @@ import { UNIFORM_KINDS, formatUniformValueExpression, getUniformKindFromNode, ty
 import { getMaterialActiveInputsSet } from './material-inputs';
 import { TEXTURE_PROP_INPUTS } from './texture-props';
 import { normalizeGradientStops } from './gradient-utils';
+import {
+    getLocalName,
+    getLocalSourceId,
+    isLocalGetType,
+    isLocalScopeAccessible,
+    isLocalSetNode,
+    isLocalSetType,
+    withLocalDependencyEdges,
+} from './local-utils';
 
 interface CompiledNode {
     id: string;
@@ -393,7 +402,7 @@ function compileSubgraphDefinition(
     const lines: string[] = [];
     const internalNodes = subgraph.nodes;
     // We saved edges including those to anchor nodes in store/editor.ts
-    const internalEdges = subgraph.edges;
+    const internalEdges = withLocalDependencyEdges(internalNodes, subgraph.edges);
     const nodesById = new Map(internalNodes.map((node) => [node.id, node]));
 
     const isLoopGroupNode = (node: Node<TSLNodeData>) => node.type === 'loop' || node.data.type === 'loop';
@@ -617,6 +626,71 @@ function compileSubgraphDefinition(
                     singleOutput: true,
                 });
             }
+            return;
+        }
+
+        if (isLocalSetType(node.data.type)) {
+            const setName = getLocalName(node) || node.id;
+            const valueEdge = internalEdges.find((edge) => edge.target === node.id && edge.targetHandle === 'value');
+            if (!valueEdge) {
+                throw new Error(`Set Local "${setName}" is missing its source connection.`);
+            }
+
+            if (valueEdge.source === 'subgraph-input' && argsMap && valueEdge.sourceHandle) {
+                const argExpr = argsMap[valueEdge.sourceHandle];
+                if (!argExpr) {
+                    throw new Error(`Set Local "${setName}" references an unknown subgraph input "${valueEdge.sourceHandle}".`);
+                }
+                compiledNodes.set(node.id, {
+                    id: node.id,
+                    varName: argExpr,
+                    code: '/* local set */',
+                    singleOutput: true,
+                });
+                return;
+            }
+
+            const upstream = compiledNodes.get(valueEdge.source);
+            if (!upstream) {
+                throw new Error(`Set Local "${setName}" source node "${valueEdge.source}" is not compiled.`);
+            }
+
+            const swizzle = getSwizzleSuffix(valueEdge.sourceHandle, upstream.singleOutput);
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: `${upstream.varName}${swizzle}`,
+                code: '/* local set */',
+                singleOutput: true,
+            });
+            return;
+        }
+
+        if (isLocalGetType(node.data.type)) {
+            const sourceId = getLocalSourceId(node);
+            if (!sourceId) {
+                throw new Error(`Get Local "${node.id}" is missing localSourceId.`);
+            }
+
+            const setNode = nodesById.get(sourceId);
+            if (!setNode || !isLocalSetNode(setNode)) {
+                throw new Error(`Get Local "${node.id}" references missing Set Local "${sourceId}".`);
+            }
+
+            if (!isLocalScopeAccessible(setNode, node, nodesById)) {
+                throw new Error(`Get Local "${node.id}" cannot access Set Local "${sourceId}" due to loop scope.`);
+            }
+
+            const setCompiled = compiledNodes.get(sourceId);
+            if (!setCompiled) {
+                throw new Error(`Get Local "${node.id}" references Set Local "${sourceId}" before it is available.`);
+            }
+
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: setCompiled.varName,
+                code: '/* local get */',
+                singleOutput: true,
+            });
             return;
         }
 
@@ -1316,6 +1390,7 @@ export function compileGraph(
 
     const uniformMode = options.uniformMode ?? 'inline';
     const globals = options.globals ?? [];
+    const compileEdges = withLocalDependencyEdges(nodes, edges);
     const { varMap: globalVarMap, reserved: globalReservedNames } = buildGlobalVarMap(globals);
 
     const lines: string[] = [];
@@ -1482,7 +1557,7 @@ export function compileGraph(
     };
 
     const loopAwareEdges: Edge[] = [];
-    for (const edge of edges) {
+    for (const edge of compileEdges) {
         const sourceNode = nodesById.get(edge.source);
         const targetNode = nodesById.get(edge.target);
         const sourceLoopId = sourceNode ? getLoopParentId(sourceNode) : null;
@@ -1694,6 +1769,57 @@ export function compileGraph(
                 });
                 return;
             }
+        }
+
+        if (isLocalSetType(node.data.type)) {
+            const setName = getLocalName(node) || node.id;
+            const valueEdge = edgesForInputs.find((edge) => edge.target === node.id && edge.targetHandle === 'value');
+            if (!valueEdge) {
+                throw new Error(`Set Local "${setName}" is missing its source connection.`);
+            }
+
+            const upstream = compiledNodes.get(valueEdge.source);
+            if (!upstream) {
+                throw new Error(`Set Local "${setName}" source node "${valueEdge.source}" is not compiled.`);
+            }
+
+            const swizzle = getSwizzleSuffix(valueEdge.sourceHandle, upstream.singleOutput);
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: `${upstream.varName}${swizzle}`,
+                code: '/* local set */',
+                singleOutput: true,
+            });
+            return;
+        }
+
+        if (isLocalGetType(node.data.type)) {
+            const sourceId = getLocalSourceId(node);
+            if (!sourceId) {
+                throw new Error(`Get Local "${node.id}" is missing localSourceId.`);
+            }
+
+            const setNode = nodesById.get(sourceId);
+            if (!setNode || !isLocalSetNode(setNode)) {
+                throw new Error(`Get Local "${node.id}" references missing Set Local "${sourceId}".`);
+            }
+
+            if (!isLocalScopeAccessible(setNode, node, nodesById)) {
+                throw new Error(`Get Local "${node.id}" cannot access Set Local "${sourceId}" due to loop scope.`);
+            }
+
+            const setCompiled = compiledNodes.get(sourceId);
+            if (!setCompiled) {
+                throw new Error(`Get Local "${node.id}" references Set Local "${sourceId}" before it is available.`);
+            }
+
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: setCompiled.varName,
+                code: '/* local get */',
+                singleOutput: true,
+            });
+            return;
         }
 
         if (node.data.type === 'math/multiOp') {
@@ -2001,23 +2127,23 @@ export function compileGraph(
         const loopCompare = compareOptions.includes(compareRaw) ? compareRaw : (loopMode === 'reverse' ? '>' : '<');
 
         const countExpr = countNode
-            ? getInputValue(countNode, 'count', edges, compiledNodes, { type: 'int', default: 1 })
+            ? getInputValue(countNode, 'count', compileEdges, compiledNodes, { type: 'int', default: 1 })
             : '1';
 
         const count2Expr = count2Node
-            ? getInputValue(count2Node, 'count', edges, compiledNodes, { type: 'int', default: 1 })
+            ? getInputValue(count2Node, 'count', compileEdges, compiledNodes, { type: 'int', default: 1 })
             : '1';
 
         const startExpr = startNode
-            ? getInputValue(startNode, 'start', edges, compiledNodes, { type: 'float', default: 0 })
+            ? getInputValue(startNode, 'start', compileEdges, compiledNodes, { type: 'float', default: 0 })
             : '0';
 
         const endExpr = endNode
-            ? getInputValue(endNode, 'end', edges, compiledNodes, { type: 'float', default: 1 })
+            ? getInputValue(endNode, 'end', compileEdges, compiledNodes, { type: 'float', default: 1 })
             : '1';
 
         const conditionExpr = conditionNode
-            ? getInputValue(conditionNode, 'cond', edges, compiledNodes, { type: 'bool', default: false })
+            ? getInputValue(conditionNode, 'cond', compileEdges, compiledNodes, { type: 'bool', default: false })
             : 'false';
 
         if (loopMode === 'count' || loopMode === 'nested') {
@@ -2029,10 +2155,10 @@ export function compileGraph(
 
         let seedExpr = getTSLDefaultForType('any');
         if (accNode) {
-            const seedEdge = edges.find(e => e.target === accNode.id && e.targetHandle === 'seed');
+            const seedEdge = compileEdges.find(e => e.target === accNode.id && e.targetHandle === 'seed');
             const seedValue = accNode.data.values?.['seed'];
             if (seedEdge || seedValue !== undefined) {
-                seedExpr = getInputValue(accNode, 'seed', edges, compiledNodes, { type: 'any', default: 0 });
+                seedExpr = getInputValue(accNode, 'seed', compileEdges, compiledNodes, { type: 'any', default: 0 });
             }
         }
         targetLines.push(`const ${loopFnName} = Fn(() => {`);
@@ -2078,19 +2204,19 @@ export function compileGraph(
         }
 
         const bodyNodes = internalNodes.filter(n => !LOOP_INTERNAL_NODE_TYPES.has(n.data.type));
-        const bodySorted = topologicalSort(bodyNodes, edges);
+        const bodySorted = topologicalSort(bodyNodes, compileEdges);
         const innerLines: string[] = [];
 
         for (const nodeId of bodySorted) {
             const node = nodesById.get(nodeId);
             if (!node) continue;
-            compileSingleNode(node, innerLines, edges, true);
+            compileSingleNode(node, innerLines, compileEdges, true);
         }
 
         if (outputNode) {
-            const outputEdge = edges.find(e => e.target === outputNode.id && e.targetHandle === 'next');
+            const outputEdge = compileEdges.find(e => e.target === outputNode.id && e.targetHandle === 'next');
             if (outputEdge) {
-                const nextExpr = getInputValue(outputNode, 'next', edges, compiledNodes, { type: 'any', default: 0 });
+                const nextExpr = getInputValue(outputNode, 'next', compileEdges, compiledNodes, { type: 'any', default: 0 });
                 innerLines.push(`${accVarName}.assign(${nextExpr});`);
             }
         }
@@ -2121,7 +2247,7 @@ export function compileGraph(
             continue;
         }
 
-        compileSingleNode(node, lines, edges);
+        compileSingleNode(node, lines, compileEdges);
     }
 
     // Generate material code

@@ -94,4 +94,24 @@ describe('Editor root graph switching', () => {
         const currentFallbackGlobalId = useEditorStore.getState().globals[0]?.id;
         expect(genericNode?.data.values?.globalId).toBe(currentFallbackGlobalId);
     });
+
+    it('keeps local names unique per root context', () => {
+        const store = useEditorStore.getState();
+
+        store.addNode('local/set', { x: 20, y: 20 });
+        const materialSet = useEditorStore.getState().nodes.find((node) => node.data.type === 'local/set');
+        expect(materialSet?.data.values?.localName).toBe('local');
+
+        store.setActiveRootGraph('post');
+        store.addNode('local/set', { x: 40, y: 40 });
+        const postSet = useEditorStore
+            .getState()
+            .nodes
+            .find((node) => node.data.type === 'local/set');
+        expect(postSet?.data.values?.localName).toBe('local');
+
+        store.setActiveRootGraph('material');
+        const restoredMaterialSet = useEditorStore.getState().nodes.find((node) => node.id === materialSet?.id);
+        expect(restoredMaterialSet?.data.values?.localName).toBe('local');
+    });
 });

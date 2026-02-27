@@ -1,10 +1,12 @@
 "use client";
-import { BaseEdge, EdgeProps, getBezierPath, useReactFlow } from "@xyflow/react";
+import { useMemo } from "react";
+import { BaseEdge, EdgeProps, getBezierPath } from "@xyflow/react";
 import { TYPE_COLORS, DEFAULT_HANDLE_COLOR } from "./TSLHandle";
 import type { AppNode, TSLType } from "@/lib/types";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
 import { getMultiOpInputs, type MultiOp } from "@/lib/multi-op";
+import { resolveNodeOutputTypeById } from "@/lib/local-utils";
 
 const TSLEdge = ({
     id,
@@ -30,67 +32,59 @@ const TSLEdge = ({
         targetY,
         targetPosition,
     });
-    const { getNode } = useReactFlow<AppNode>();
-    const subgraphs = useEditorStore((s) => s.subgraphs);
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
 
-    // source date type
+    const graphSnapshot = useMemo(() => {
+        const { nodes, edges, globals, subgraphs } = useEditorStore.getState();
+        const nodesById = new Map(nodes.map((node) => [node.id, node]));
+        return { nodesById, edges, globals, subgraphs };
+    }, [graphStructureVersion]);
 
-    const sourceNode = getNode(source);
+    const sourceNode = graphSnapshot.nodesById.get(source);
+    const targetNode = graphSnapshot.nodesById.get(target);
 
-    const type = sourceNode?.data.type;
+    const sourceDataType: TSLType | null = useMemo(() => {
+        if (!sourceNode) return null;
+        return resolveNodeOutputTypeById(
+            source,
+            sourceHandleId ?? 'out',
+            graphSnapshot.nodesById,
+            graphSnapshot.edges,
+            graphSnapshot.globals,
+            graphSnapshot.subgraphs
+        );
+    }, [graphSnapshot, source, sourceHandleId, sourceNode]);
 
-    const sourceDefination = type ? registry.get(type) : null;
+    const targetDataType: TSLType | null = useMemo(() => {
+        if (!targetNode) return null;
 
-    let sourceDataType: TSLType | null = null;
-    if (sourceNode?.data.type === 'math/multiOp') {
-        sourceDataType = 'any';
-    } else {
-        sourceDataType = sourceDefination && sourceDefination.outputs && type && sourceHandleId
-            ? sourceDefination.outputs[sourceHandleId]?.type ?? null
-            : null;
-        if (!sourceDataType && sourceHandleId) {
-            if (sourceNode?.data.type.startsWith('custom/')) {
-                const sg = subgraphs[sourceNode.data.type];
-                const port = sg?.outputs.find((p) => p.id === sourceHandleId) ?? sg?.inputs.find((p) => p.id === sourceHandleId);
-                sourceDataType = (port?.type as TSLType) ?? null;
-            }
-            if (!sourceDataType && sourceNode?.data.dynamicPorts) {
-                const dynamicPort = sourceNode.data.dynamicPorts.find((port) => port.id === sourceHandleId);
-                sourceDataType = (dynamicPort?.type as TSLType) ?? null;
-            }
+        const targetType = targetNode.data.type;
+        const targetDefinition = registry.get(targetType);
+
+        if (targetNode.data.type === 'math/multiOp' && targetHandleId) {
+            const ops = Array.isArray(targetNode.data.operations) ? (targetNode.data.operations as MultiOp[]) : [];
+            const input = getMultiOpInputs(ops).find((entry) => entry.handleId === targetHandleId);
+            return input?.param.type ?? 'any';
         }
-    }
 
-
-    // target data type 
-
-    const targetNode = getNode(target);
-
-    const targetType = targetNode?.data.type;
-
-    const targetDefination = targetType ? registry.get(targetType) : null;
-
-    let targetDataType: TSLType | null = null;
-    if (targetNode?.data.type === 'math/multiOp' && targetHandleId) {
-        const ops = Array.isArray(targetNode.data.operations) ? (targetNode.data.operations as MultiOp[]) : [];
-        const input = getMultiOpInputs(ops).find((entry) => entry.handleId === targetHandleId);
-        targetDataType = input?.param.type ?? 'any';
-    } else {
-        targetDataType = targetDefination && targetDefination.inputs && targetType && targetHandleId
-            ? targetDefination.inputs[targetHandleId]?.type ?? null
+        let resolvedType = targetDefinition?.inputs && targetHandleId
+            ? targetDefinition.inputs[targetHandleId]?.type ?? null
             : null;
-        if (!targetDataType && targetHandleId) {
-            if (targetNode?.data.type.startsWith('custom/')) {
-                const sg = subgraphs[targetNode.data.type];
+
+        if (!resolvedType && targetHandleId) {
+            if (targetNode.data.type.startsWith('custom/')) {
+                const sg = graphSnapshot.subgraphs[targetNode.data.type];
                 const port = sg?.inputs.find((p) => p.id === targetHandleId) ?? sg?.outputs.find((p) => p.id === targetHandleId);
-                targetDataType = (port?.type as TSLType) ?? null;
+                resolvedType = (port?.type as TSLType) ?? null;
             }
-            if (!targetDataType && targetNode?.data.dynamicPorts) {
+            if (!resolvedType && targetNode.data.dynamicPorts) {
                 const dynamicPort = targetNode.data.dynamicPorts.find((port) => port.id === targetHandleId);
-                targetDataType = (dynamicPort?.type as TSLType) ?? null;
+                resolvedType = (dynamicPort?.type as TSLType) ?? null;
             }
         }
-    }
+
+        return resolvedType;
+    }, [graphSnapshot, targetHandleId, targetNode]);
 
 
     const sourceColor = sourceDataType ? (TYPE_COLORS[sourceDataType] ?? DEFAULT_HANDLE_COLOR) : DEFAULT_HANDLE_COLOR

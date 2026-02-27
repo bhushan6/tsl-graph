@@ -85,7 +85,11 @@ export type ValidationIssue = {
     | 'material-count'
     | 'material-unconnected'
     | 'post-output-unconnected'
-    | 'unused-node';
+    | 'unused-node'
+    | 'local-missing-source-id'
+    | 'local-missing-set'
+    | 'local-scope-invalid'
+    | 'local-duplicate-name';
   message: string;
   nodeId?: string;
   edgeId?: string;

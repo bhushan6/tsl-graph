@@ -13,6 +13,7 @@ import { logicNodes } from './logic';
 import { loopNodes } from './loop';
 import { assignNodes } from './assign';
 import { globalNodes } from './globals';
+import { localNodes } from './local';
 import { postNodes } from './post';
 import { postEffectNodes } from './post-effects';
 
@@ -33,6 +34,7 @@ export const allNodes = [
     ...loopNodes,
     ...assignNodes,
     ...globalNodes,
+    ...localNodes,
     ...postNodes,
     ...postEffectNodes,
 ] as const;

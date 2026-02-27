@@ -1,7 +1,7 @@
 'use client';
 
-import { memo, useState, useCallback } from 'react';
-import { Position, useEdges } from '@xyflow/react';
+import { memo, useState, useCallback, useEffect, useMemo } from 'react';
+import { Position } from '@xyflow/react';
 import { registry } from '@/lib/registry';
 import { useEditorStore } from '@/store/editor';
 import { cn } from '@/lib/utils';
@@ -47,6 +47,7 @@ const categoryColors: Record<string, string> = {
     'Utils': 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20',
     'Loop': 'border-indigo-500 bg-indigo-100 dark:bg-indigo-900/20',
     'Globals': 'border-emerald-500 bg-emerald-100 dark:bg-emerald-900/20',
+    'Locals': 'border-amber-500 bg-amber-100 dark:bg-amber-900/20',
     'Default': 'border-gray-500 bg-gray-100 dark:bg-gray-900/20',
 };
 
@@ -56,25 +57,33 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const addMultiOp = useEditorStore((s) => s.addMultiOp);
     const updateMultiOp = useEditorStore((s) => s.updateMultiOp);
     const removeMultiOp = useEditorStore((s) => s.removeMultiOp);
+    const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
-    const edges = useEdges();
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
 
-    const connectedInputs = new Set(
-        edges.filter((e) => e.target === id).map((e) => e.targetHandle)
-    );
-    const connectedOutputs = new Set(
-        edges.filter((e) => e.source === id).map((e) => e.sourceHandle)
-    );
+    const connectedInputs = useMemo(() => {
+        return new Set(
+            edges.filter((e) => e.target === id).map((e) => e.targetHandle)
+        );
+    }, [edges, id])
+
+    const connectedOutputs = useMemo(() => {
+        return new Set(
+            edges.filter((e) => e.source === id).map((e) => e.sourceHandle)
+        );
+    }, [edges, id])
 
     const storedNameValue = data.values?.localName;
     const storedName = typeof storedNameValue === 'string' ? storedNameValue : '';
     const [isEditingName, setIsEditingName] = useState(false);
-    const [localName, setLocalName] = useState(storedName);
-    // const [hoveredPort, setHoveredPort] = useState<string | null>(null);
+    const [localName, setLocalName] = useState(storedName || 'local');
+
+    useEffect(() => {
+        setLocalName(storedName || 'local');
+    }, [storedName]);
 
     const handleNameSubmit = useCallback(() => {
         const trimmedName = localName.trim();

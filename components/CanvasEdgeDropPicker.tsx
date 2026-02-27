@@ -37,6 +37,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             const nodeType = selection.nodeType;
             const selectedHandleId = selection.handleId;
             const selectedGlobalId = selection.globalId;
+            const selectedLocalSourceId = selection.localSourceId;
             const definition = registry.get(nodeType);
             const isCodeNode = nodeType.startsWith('code/');
             const isSubgraphNode = nodeType.startsWith('subgraph/') && !nodeType.startsWith('subgraph/input') && !nodeType.startsWith('subgraph/output');
@@ -301,6 +302,12 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         globalId: selectedGlobalId,
                     };
                 }
+                if (nodeType === 'local/get') {
+                    nodeData.values = {
+                        ...nodeData.values,
+                        localSourceId: typeof selectedLocalSourceId === 'string' ? selectedLocalSourceId : '',
+                    };
+                }
 
                 // Add default operation for MultiOp nodes
                 if (nodeType === 'math/multiOp') {
@@ -532,6 +539,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             position={screenPosition}
             flowPosition={flowPosition}
             sourceDataType={sourceDataType}
+            sourceNodeId={sourceNodeId}
             handleDirection={handleDirection}
             onNodeSelect={handleNodeSelect}
             onClose={close}

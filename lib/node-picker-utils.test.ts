@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Port } from './types';
 import {
+    buildLocalGetQuickCreateEntries,
     getHandleDisplayLabel,
     getTypeMatchRank,
     getVisibleInputHandles,
@@ -54,5 +55,31 @@ describe('node-picker-utils edge-drop helpers', () => {
     it('uses plain label for single handle and Node.Handle for multi-handle nodes', () => {
         expect(getHandleDisplayLabel('Sin', 'X', 1)).toBe('Sin');
         expect(getHandleDisplayLabel('Add', 'B', 2)).toBe('Add.B');
+    });
+
+    it('builds per-local quick-create entries with binding payload', () => {
+        const rows = buildLocalGetQuickCreateEntries([
+            { id: 'set-b', name: 'Lighting', outputType: 'vec3' },
+            { id: 'set-a', name: 'Albedo', outputType: 'color' },
+        ]);
+
+        expect(rows).toEqual([
+            {
+                key: 'local/get:set-a',
+                label: 'Get Albedo',
+                nodeType: 'local/get',
+                handleId: 'out',
+                localSourceId: 'set-a',
+                outputType: 'color',
+            },
+            {
+                key: 'local/get:set-b',
+                label: 'Get Lighting',
+                nodeType: 'local/get',
+                handleId: 'out',
+                localSourceId: 'set-b',
+                outputType: 'vec3',
+            },
+        ]);
     });
 });

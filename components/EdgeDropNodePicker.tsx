@@ -4,6 +4,7 @@ import { useMemo, useEffect, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import {
+    buildLocalGetQuickCreateEntries,
     getAllNodesButExclud,
     getGroupedCompatibleNodes,
     getHandleDisplayLabel,
@@ -15,6 +16,7 @@ import {
 import { NodeType, Port, TSLType } from '@/lib/types';
 import { getMultiOpParams } from '@/lib/multi-op';
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
+import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
@@ -34,12 +36,14 @@ export interface EdgeDropSelection {
     nodeType: NodeType;
     handleId: string | null;
     globalId?: string;
+    localSourceId?: string;
 }
 
 interface EdgeDropNodePickerProps {
     position: { x: number; y: number };
     flowPosition: { x: number; y: number };
     sourceDataType: TSLType | '';
+    sourceNodeId: string | null;
     handleDirection: 'input' | 'output' | null;
     onNodeSelect: (selection: EdgeDropSelection) => void;
     onClose: () => void;
@@ -54,6 +58,7 @@ interface EdgeDropPickerNode {
     isCodeNode?: boolean;
     isSubgraphNode?: boolean;
     isGlobalRefNode?: boolean;
+    localSourceId?: string;
     globalId?: string;
     pickerKey?: string;
     searchText?: string;
@@ -71,6 +76,7 @@ interface EdgeDropHandleRow {
     isCodeNode?: boolean;
     isSubgraphNode?: boolean;
     isGlobalRefNode?: boolean;
+    localSourceId?: string;
     globalId?: string;
     searchText?: string;
     globalOrder: number;
@@ -94,6 +100,7 @@ export function EdgeDropNodePicker({
     position,
     flowPosition,
     sourceDataType,
+    sourceNodeId,
     handleDirection,
     onNodeSelect,
     onClose,
@@ -127,6 +134,8 @@ export function EdgeDropNodePicker({
     const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
     // Fetch user's subgraph templates from server (cached by Convex)
     const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
+    const nodes = useEditorStore((s) => s.nodes);
+    const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const globals = useEditorStore((s) => s.globals);
 
@@ -147,8 +156,13 @@ export function EdgeDropNodePicker({
             return false;
         };
 
-        return getAllNodesButExclud(excludedNodes).filter((node) => !shouldExclude(node.type));
-    }, [editorMode, activeRootGraph]);
+        return getAllNodesButExclud(excludedNodes).filter((node) => {
+            if (handleDirection !== 'output' && node.type === 'local/get') {
+                return false;
+            }
+            return !shouldExclude(node.type);
+        });
+    }, [editorMode, activeRootGraph, handleDirection]);
 
     // Build code nodes from templates (fetched from server, cached by Convex)
     const codeNodes = useMemo((): EdgeDropPickerNode[] => {
@@ -250,15 +264,47 @@ export function EdgeDropNodePicker({
         }));
     }, [globals]);
 
+    const localGetQuickNodes = useMemo((): EdgeDropPickerNode[] => {
+        if (handleDirection === 'output') return [];
+
+        const nodesById = new Map(nodes.map((node) => [node.id, node]));
+        const targetNode = sourceNodeId ? nodesById.get(sourceNodeId) : null;
+        const scopedSets = targetNode
+            ? getValidLocalSetNodesForGetNode(targetNode, nodesById)
+            : nodes.filter((node) => isLocalSetNode(node));
+
+        const localSeeds = scopedSets
+            .filter((setNode) => isLocalSetNode(setNode))
+            .map((setNode) => ({
+                id: setNode.id,
+                name: getLocalSetReferenceLabel(setNode, nodesById, edges),
+                outputType: resolveNodeOutputTypeById(setNode.id, 'out', nodesById, edges, globals, subgraphs),
+            }));
+
+        const quickEntries = buildLocalGetQuickCreateEntries(localSeeds);
+        return quickEntries.map((entry) => ({
+            type: 'local/get',
+            label: entry.label,
+            category: 'Locals',
+            outputs: {
+                out: { label: 'Out', type: entry.outputType },
+            },
+            localSourceId: entry.localSourceId,
+            pickerKey: entry.key,
+            searchText: `local ${entry.label.toLowerCase()}`,
+        }));
+    }, [edges, globals, handleDirection, nodes, sourceNodeId, subgraphs]);
+
     const allNodes = useMemo((): EdgeDropPickerNode[] => {
         return [
+            ...localGetQuickNodes,
             ...globalRefNodes,
             ...(filteredRegistryNodes as EdgeDropPickerNode[]),
             ...projectSubgraphNodes,
             ...subgraphTemplateNodes,
             ...codeNodes,
         ];
-    }, [globalRefNodes, filteredRegistryNodes, projectSubgraphNodes, subgraphTemplateNodes, codeNodes]);
+    }, [localGetQuickNodes, globalRefNodes, filteredRegistryNodes, projectSubgraphNodes, subgraphTemplateNodes, codeNodes]);
 
     const groupedNodes = useMemo(() => {
         return getGroupedCompatibleNodes<EdgeDropPickerNode>(allNodes);
@@ -288,6 +334,7 @@ export function EdgeDropNodePicker({
                     isCodeNode: node.isCodeNode,
                     isSubgraphNode: node.isSubgraphNode,
                     isGlobalRefNode: node.isGlobalRefNode,
+                    localSourceId: node.localSourceId,
                     globalId: node.globalId,
                     searchText: node.searchText,
                     globalOrder: isGenericGlobal ? 1 : 0,
@@ -398,6 +445,7 @@ export function EdgeDropNodePicker({
                                         nodeType: node.type as NodeType,
                                         handleId: null,
                                         globalId: node.globalId,
+                                        localSourceId: node.localSourceId,
                                     })}
                                     className="gap-2"
                                 >
@@ -418,6 +466,7 @@ export function EdgeDropNodePicker({
                                         nodeType: row.nodeType,
                                         handleId: row.handleId,
                                         globalId: row.globalId,
+                                        localSourceId: row.localSourceId,
                                     })}
                                     className="gap-2"
                                 >

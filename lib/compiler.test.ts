@@ -153,6 +153,21 @@ const mockDefs: NodeDef[] = [
         inputs: { node: { type: 'any', default: 0, label: 'Node' } },
         outputs: { out: { type: 'any', label: 'Out' } }
     },
+    {
+        type: 'local/set',
+        label: 'Set Local',
+        category: 'Locals',
+        tsl: '__local_set__',
+        inputs: { value: { type: 'any', label: 'Value', connectionOnly: true } },
+        outputs: { out: { type: 'any', label: 'Out' } }
+    },
+    {
+        type: 'local/get',
+        label: 'Get Local',
+        category: 'Locals',
+        tsl: '__local_get__',
+        outputs: { out: { type: 'any', label: 'Out' } }
+    },
     // Geometry nodes
     {
         type: 'geo/uv',
@@ -711,7 +726,7 @@ describe('compileGraph', () => {
             expect(code).toContain('viewZToOrthographicDepth(_node1, _node0.x, _node0.y)');
         });
 
-    it('should handle complex node chains', () => {
+        it('should handle complex node chains', () => {
             const nodes = [
                 createNode('t1', 'geo/time'),
                 createNode('sin1', 'math/sin'),
@@ -729,6 +744,199 @@ describe('compileGraph', () => {
             expect(code).toContain('sin(_node0)');
             expect(code).toContain('add(_node1, 0.5)');
             expect(code).toContain('material.roughnessNode = _node2;');
+        });
+    });
+
+    describe('Local portals', () => {
+        it('compiles Set/Get locals as pure aliases with no extra declarations', () => {
+            const nodes = [
+                createNode('constA', 'const/float', { values: { value: 1 } }),
+                createNode('setA', 'local/set', { values: { localName: 'foo' } }),
+                createNode('getA', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('constB', 'const/float', { values: { value: 2 } }),
+                createNode('sum', 'math/add'),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'constA', sourceHandle: 'out', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+                { id: 'e3', source: 'constB', sourceHandle: 'out', target: 'sum', targetHandle: 'b' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+            const declarations = code.match(/^const /gm) ?? [];
+
+            expect(declarations.length).toBe(3);
+            expect(code).toContain('add(_node0, _node1)');
+            expect(code).not.toContain('Var(');
+        });
+
+        it('handles Get-before-Set node order through synthetic local dependencies', () => {
+            const nodes = [
+                createNode('getA', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('setA', 'local/set', { values: { localName: 'foo' } }),
+                createNode('constA', 'const/float', { values: { value: 3 } }),
+                createNode('sum', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'constA', sourceHandle: 'out', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).not.toThrow();
+        });
+
+        it('throws hard error for missing localSourceId on Get Local', () => {
+            const nodes = [
+                createNode('constA', 'const/float', { values: { value: 1 } }),
+                createNode('getA', 'local/get'),
+                createNode('sum', 'math/add', { values: { b: 2 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'getA', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).toThrow('is missing localSourceId');
+        });
+
+        it('throws hard error for missing Set Local target on Get Local', () => {
+            const nodes = [
+                createNode('getA', 'local/get', { values: { localSourceId: 'missing-set' } }),
+                createNode('sum', 'math/add', { values: { b: 2 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'getA', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).toThrow('references missing Set Local');
+        });
+
+        it('allows assign nodes to target Get Local expressions', () => {
+            const nodes = [
+                createNode('constA', 'const/float', { values: { value: 1 } }),
+                createNode('setA', 'local/set', { values: { localName: 'foo' } }),
+                createNode('getA', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('assignA', 'assign/assign', { values: { value: 2 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'constA', sourceHandle: 'out', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA', sourceHandle: 'out', target: 'assignA', targetHandle: 'target' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+            expect(code).toContain('_node0.assign(2)');
+        });
+
+        it('allows outer Set Local to be read by inner Get Local', () => {
+            const loop = createNode('loop1', 'loop');
+            const setNode = createNode('set1', 'local/set', { values: { localName: 'outer' } });
+            const constNode = createNode('const1', 'const/float', { values: { value: 1 } });
+            const getNode = { ...createNode('get1', 'local/get', { values: { localSourceId: 'set1' } }), parentId: 'loop1' };
+
+            const nodes = [loop, setNode, constNode, getNode];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'const1', sourceHandle: 'out', target: 'set1', targetHandle: 'value' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).not.toThrow();
+        });
+
+        it('rejects inner Set Local read from outer scope', () => {
+            const loop = createNode('loop1', 'loop');
+            const setNode = { ...createNode('set1', 'local/set', { values: { localName: 'inner' } }), parentId: 'loop1' };
+            const constNode = createNode('const1', 'const/float', { values: { value: 1 } });
+            const getNode = createNode('get1', 'local/get', { values: { localSourceId: 'set1' } });
+
+            const nodes = [loop, setNode, constNode, getNode];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'const1', sourceHandle: 'out', target: 'set1', targetHandle: 'value' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).toThrow('due to loop scope');
+        });
+
+        it('rejects cross-loop sibling local reads', () => {
+            const loopA = createNode('loopA', 'loop');
+            const loopB = createNode('loopB', 'loop');
+            const setNode = { ...createNode('set1', 'local/set', { values: { localName: 'left' } }), parentId: 'loopA' };
+            const constNode = createNode('const1', 'const/float', { values: { value: 1 } });
+            const getNode = { ...createNode('get1', 'local/get', { values: { localSourceId: 'set1' } }), parentId: 'loopB' };
+
+            const nodes = [loopA, loopB, setNode, constNode, getNode];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'const1', sourceHandle: 'out', target: 'set1', targetHandle: 'value' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).toThrow('due to loop scope');
+        });
+
+        it('supports multiple Get Locals reading from the same Set Local', () => {
+            const nodes = [
+                createNode('constA', 'const/float', { values: { value: 5 } }),
+                createNode('setA', 'local/set', { values: { localName: 'shared' } }),
+                createNode('getA1', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('getA2', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('sum', 'math/add'),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'constA', sourceHandle: 'out', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA1', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+                { id: 'e3', source: 'getA2', sourceHandle: 'out', target: 'sum', targetHandle: 'b' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+            // Both gets should resolve to the same upstream var (_node0)
+            expect(code).toContain('add(_node0, _node0)');
+        });
+
+        it('propagates swizzle through Set/Get locals', () => {
+            const nodes = [
+                createNode('vec', 'const/vec3', { values: { x: 1, y: 2, z: 3 } }),
+                createNode('setA', 'local/set', { values: { localName: 'posX' } }),
+                createNode('getA', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('sum', 'math/add', { values: { b: 10 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'vec', sourceHandle: 'x', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+            // The set node captures _node0.x; the get node re-uses that expression
+            expect(code).toContain('add(_node0.x, 10)');
+        });
+
+        it('supports chained Set→Get→Set→Get (multi-hop portals)', () => {
+            const nodes = [
+                createNode('constA', 'const/float', { values: { value: 7 } }),
+                createNode('set1', 'local/set', { values: { localName: 'hop1' } }),
+                createNode('get1', 'local/get', { values: { localSourceId: 'set1' } }),
+                createNode('set2', 'local/set', { values: { localName: 'hop2' } }),
+                createNode('get2', 'local/get', { values: { localSourceId: 'set2' } }),
+                createNode('sum', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'constA', sourceHandle: 'out', target: 'set1', targetHandle: 'value' },
+                { id: 'e2', source: 'get1', sourceHandle: 'out', target: 'set2', targetHandle: 'value' },
+                { id: 'e3', source: 'get2', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+            // Multi-hop should resolve all the way back to the original const
+            expect(code).toContain('add(_node0, 1)');
+            expect(code).not.toContain('Var(');
+        });
+
+        it('throws on disconnected Set Local (no source edge)', () => {
+            const nodes = [
+                createNode('setA', 'local/set', { values: { localName: 'orphan' } }),
+                createNode('getA', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('sum', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'getA', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+            ];
+
+            expect(() => compileGraph(nodes, edges)).toThrow('is missing its source connection');
         });
     });
 
@@ -762,6 +970,23 @@ describe('compilePostGraph', () => {
         const result = compilePostGraph(nodes, edges);
         expect(result.functionName).toMatch(/^PostGraph/);
         expect(result.code).toContain('return arg_in_color;');
+    });
+
+    it('supports local set/get portals in post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+            createNode('set1', 'local/set', { values: { localName: 'colorCopy' } }),
+            createNode('get1', 'local/get', { values: { localSourceId: 'set1' } }),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'color', target: 'set1', targetHandle: 'value' },
+            { id: 'e2', source: 'get1', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('return arg_in_color;');
+        expect(result.code).not.toContain('Var(');
     });
 
     it('compiles post fx nodes in post graph', () => {

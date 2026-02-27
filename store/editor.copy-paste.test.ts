@@ -3,6 +3,7 @@ import type { Node, Edge } from '@xyflow/react';
 import type { NodeType, TSLNodeData } from '@/lib/types';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { useEditorStore } from './editor';
+import { toast } from 'sonner';
 
 vi.mock('sonner', () => ({
     toast: {
@@ -212,6 +213,88 @@ describe('Editor copy/paste', () => {
         expect(postAnchors).toHaveLength(2);
         expect(pastedNodes).toHaveLength(1);
         expect(pastedNodes[0].data.type).toBe('math/add');
+    });
+
+    it('assigns unique default names for new Set Local nodes', () => {
+        const store = useEditorStore.getState();
+
+        store.addNode('local/set', { x: 10, y: 10 });
+        store.addNode('local/set', { x: 80, y: 10 });
+        store.addNode('local/set', { x: 150, y: 10 });
+
+        const setNodes = useEditorStore.getState().nodes.filter((node) => node.data.type === 'local/set');
+        const names = setNodes.map((node) => String(node.data.values?.localName));
+        expect(names).toEqual(['local', 'local_1', 'local_2']);
+    });
+
+    it('rejects Set Local rename collisions', () => {
+        useEditorStore.setState({
+            nodes: [
+                createNode('set-1', 'local/set', { x: 10, y: 10 }, { values: { localName: 'base' } }),
+                createNode('set-2', 'local/set', { x: 80, y: 10 }, { values: { localName: 'other' } }),
+            ],
+            edges: [],
+        });
+
+        const store = useEditorStore.getState();
+        const first = useEditorStore.getState().nodes.find((node) => node.id === 'set-1');
+        const second = useEditorStore.getState().nodes.find((node) => node.id === 'set-2');
+        expect(first?.data.values?.localName).toBe('base');
+        expect(second?.data.values?.localName).toBe('other');
+
+        store.updateNodeValue('set-2', 'localName', 'base');
+
+        const updatedSecond = useEditorStore.getState().nodes.find((node) => node.id === 'set-2');
+        expect(updatedSecond?.data.values?.localName).toBe('other');
+        expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+
+    it('remaps Get Local source when set and get are pasted together', () => {
+        const setNode = createNode('set-a', 'local/set', { x: 0, y: 0 }, { values: { localName: 'L' } });
+        const getNode = createNode('get-a', 'local/get', { x: 120, y: 0 }, { values: { localSourceId: 'set-a' } });
+
+        useEditorStore.setState({
+            nodes: [setNode, getNode],
+            edges: [],
+            selectedNodeIds: ['set-a', 'get-a'],
+            selectedNodeId: null,
+        });
+
+        const store = useEditorStore.getState();
+        store.copySelection();
+        store.pasteSelection({ x: 300, y: 300 });
+
+        const pasted = useEditorStore.getState().nodes.filter((node) => !['set-a', 'get-a'].includes(node.id));
+        const pastedSet = pasted.find((node) => node.data.type === 'local/set');
+        const pastedGet = pasted.find((node) => node.data.type === 'local/get');
+
+        expect(pastedSet).toBeDefined();
+        expect(pastedGet).toBeDefined();
+        expect(pastedGet?.data.values?.localSourceId).toBe(pastedSet?.id);
+    });
+
+    it('keeps original Get Local source when pasted alone', () => {
+        const setNode = createNode('set-a', 'local/set', { x: 0, y: 0 }, { values: { localName: 'L' } });
+        const getNode = createNode('get-a', 'local/get', { x: 120, y: 0 }, { values: { localSourceId: 'set-a' } });
+
+        useEditorStore.setState({
+            nodes: [setNode, getNode],
+            edges: [],
+            selectedNodeIds: ['get-a'],
+            selectedNodeId: 'get-a',
+        });
+
+        const store = useEditorStore.getState();
+        store.copySelection();
+        store.pasteSelection({ x: 300, y: 300 });
+
+        const pastedGet = useEditorStore
+            .getState()
+            .nodes
+            .find((node) => node.data.type === 'local/get' && node.id !== 'get-a');
+
+        expect(pastedGet).toBeDefined();
+        expect(pastedGet?.data.values?.localSourceId).toBe('set-a');
     });
 
     it('prevents deleting post anchors', () => {

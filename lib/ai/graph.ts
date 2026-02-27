@@ -4,6 +4,14 @@ import { useEditorStore } from '@/store/editor';
 import type { SubgraphDefinition, CodeNodeDefinition, TSLNodeData } from '@/lib/types';
 import type { Node } from '@xyflow/react';
 import { getMultiOpInputHandleIds } from '@/lib/multi-op';
+import {
+  collectLocalSetNames,
+  getLocalName,
+  getLocalSourceId,
+  isLocalGetNode,
+  isLocalScopeAccessible,
+  isLocalSetNode,
+} from '@/lib/local-utils';
 import type { AvailableNode, GraphSnapshot, NodeDefinition, NodeSummary, ValidationIssue, ValidationReport } from './types';
 
 const GROUP_NODE_TYPE = 'group';
@@ -206,6 +214,7 @@ export function validateGraph(): ValidationReport {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const localNameMap = collectLocalSetNames(nodes);
   const globalIdSet = new Set(globals.map((g) => g.id));
   const definitionCache = new Map<string, NodeDefinition | null>();
   const incomingCount = new Map<string, number>();
@@ -239,6 +248,48 @@ export function validateGraph(): ValidationReport {
           message: `Global reference "${node.id}" is missing a valid global binding.`,
         });
       }
+    }
+
+    if (isLocalGetNode(node)) {
+      const sourceId = getLocalSourceId(node);
+      if (!sourceId) {
+        errors.push({
+          type: 'local-missing-source-id',
+          nodeId: node.id,
+          message: `Get Local "${node.id}" is missing a Set Local binding.`,
+        });
+        continue;
+      }
+
+      const setNode = nodeMap.get(sourceId);
+      if (!isLocalSetNode(setNode)) {
+        errors.push({
+          type: 'local-missing-set',
+          nodeId: node.id,
+          message: `Get Local "${node.id}" references missing Set Local "${sourceId}".`,
+        });
+        continue;
+      }
+
+      if (!isLocalScopeAccessible(setNode, node, nodeMap)) {
+        errors.push({
+          type: 'local-scope-invalid',
+          nodeId: node.id,
+          message: `Get Local "${node.id}" cannot access Set Local "${sourceId}" from this loop scope.`,
+        });
+      }
+    }
+  }
+
+  for (const duplicateIds of localNameMap.values()) {
+    if (duplicateIds.length <= 1) continue;
+    for (const duplicateId of duplicateIds) {
+      const duplicateNode = nodeMap.get(duplicateId);
+      errors.push({
+        type: 'local-duplicate-name',
+        nodeId: duplicateId,
+        message: `Set Local name "${getLocalName(duplicateNode) || duplicateId}" is duplicated in this graph.`,
+      });
     }
   }
 

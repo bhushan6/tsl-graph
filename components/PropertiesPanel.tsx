@@ -9,7 +9,7 @@ import { getMaterialActiveInputsSet, getMaterialStoredActiveInputs } from '@/lib
 import { TEXTURE_PROP_INPUTS } from '@/lib/texture-props';
 import { Button } from '@/components/ui/button';
 import { HexColorPicker } from 'react-colorful';
-import { useEdges, useReactFlow } from '@xyflow/react';
+import { useReactFlow } from '@xyflow/react';
 import { VectorInput } from './inputs/VectorInput';
 import { BooleanInput } from './inputs/BooleanInput';
 import { AnyInput } from './inputs/AnyInput';
@@ -42,6 +42,15 @@ import {
     DEFAULT_GRADIENT_STOPS,
     normalizeGradientStops,
 } from '@/lib/gradient-utils';
+import {
+    getLocalName,
+    getLocalSetReferenceLabel,
+    getLocalSourceId,
+    getValidLocalSetNodesForGetNode,
+    isLocalGetNode,
+    isLocalScopeAccessible,
+    isLocalSetNode,
+} from '@/lib/local-utils';
 import { LinearGradientUI, type LinearGradientUIChange } from '@/components/gradient/linear-gradient-ui';
 import { toast } from 'sonner';
 
@@ -84,6 +93,10 @@ const LOOP_COMPARE_OPTIONS = [
     { label: '>', value: '>' },
     { label: '>=', value: '>=' },
 ];
+
+function useGraphEdgesSnapshot() {
+    return useEditorStore((s) => s.edges);
+}
 
 interface AnchorNodePortEditorProps {
     nodeId: string;
@@ -353,7 +366,7 @@ function LoopGroupPanel({ node }: { node: AppNode }) {
             <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">Loop</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {node.data.localName || node.id}
+                    {getLocalName(node) || node.id}
                 </p>
             </div>
 
@@ -474,7 +487,7 @@ function UniformNodePanel({
             <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">Uniform</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {node.data.localName || node.id}
+                    {getLocalName(node) || node.id}
                 </p>
             </div>
 
@@ -542,7 +555,7 @@ function MultiOpNodePanel({
             <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">Multi-op</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {node.data.localName || node.id}
+                    {getLocalName(node) || node.id}
                 </p>
             </div>
 
@@ -766,7 +779,7 @@ function UniformsPanelContent() {
             .map((node) => ({
                 kind: 'node' as const,
                 key: `node-${node.id}`,
-                label: (node.data.localName || node.id).toLowerCase(),
+                label: (getLocalName(node) || node.id).toLowerCase(),
                 node,
             }));
 
@@ -1061,6 +1074,138 @@ function GlobalRefPanel({ node }: { node: AppNode }) {
     );
 }
 
+function LocalSetPanel({ node }: { node: AppNode }) {
+    const nodes = useEditorStore((s) => s.nodes);
+    const edges = useGraphEdgesSnapshot();
+    const nodesById = useMemo(() => new Map(nodes.map((candidate) => [candidate.id, candidate])), [nodes]);
+    const usageCount = useMemo(
+        () => nodes.filter((candidate) => isLocalGetNode(candidate) && getLocalSourceId(candidate) === node.id).length,
+        [node.id, nodes]
+    );
+    const sourceVariableLabel = getLocalSetReferenceLabel(node, nodesById, edges);
+    const hasSource = edges.some((edge) => edge.target === node.id && edge.targetHandle === 'value');
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Set Local</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Exposes its input source as a local portal.
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="rounded-md border border-sidebar-border/60 bg-sidebar-accent/30 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Source Variable</div>
+                    <div className="text-sm font-medium mt-1">
+                        {hasSource ? sourceVariableLabel : 'Unbound'}
+                    </div>
+                </div>
+
+                <div className="rounded-md border border-sidebar-border/60 bg-sidebar-accent/30 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Usage</div>
+                    <div className="text-sm font-medium mt-1">
+                        {usageCount} Get Local node{usageCount === 1 ? '' : 's'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function LocalGetPanel({ node }: { node: AppNode }) {
+    const nodes = useEditorStore((s) => s.nodes);
+    const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+    const edges = useGraphEdgesSnapshot();
+    const nodesById = useMemo(() => new Map(nodes.map((candidate) => [candidate.id, candidate])), [nodes]);
+    const selectedSourceId = getLocalSourceId(node) ?? '';
+    const selectedSet = selectedSourceId ? nodesById.get(selectedSourceId) : undefined;
+    const selectedIsSet = isLocalSetNode(selectedSet);
+    const selectedInScope = selectedIsSet
+        ? isLocalScopeAccessible(selectedSet, node, nodesById)
+        : false;
+    const validSets = useMemo(
+        () =>
+            getValidLocalSetNodesForGetNode(node, nodesById)
+                .sort((a, b) => (getLocalName(a) || a.id).localeCompare(getLocalName(b) || b.id)),
+        [node, nodesById]
+    );
+    const getLocalDisplayName = useCallback((setNode: AppNode) => {
+        const explicit = getLocalName(setNode).trim();
+        if (explicit) return explicit;
+        const sourceEdge = edges.find((edge) => edge.target === setNode.id && edge.targetHandle === 'value');
+        if (!sourceEdge) return setNode.id;
+        const sourceNode = nodesById.get(sourceEdge.source);
+        return getLocalName(sourceNode).trim() || sourceNode?.id || setNode.id;
+    }, [edges, nodesById]);
+    const isDangling = !!selectedSourceId && !selectedIsSet;
+    const isOutOfScope = !!selectedSourceId && selectedIsSet && !selectedInScope;
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Get Local</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Reads from a Set Local portal source.
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                        Source
+                    </label>
+                    <select
+                        value={selectedInScope ? selectedSourceId : ''}
+                        onChange={(e) => updateNodeValue(node.id, 'localSourceId', e.target.value)}
+                        className="h-8 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                    >
+                        <option value="">Select Set Local</option>
+                        {validSets.map((setNode) => (
+                            <option key={setNode.id} value={setNode.id}>
+                                {getLocalDisplayName(setNode)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {selectedIsSet && selectedInScope && (
+                    <p className="text-xs text-muted-foreground">
+                        Referencing variable: <span className="font-medium">{getLocalDisplayName(selectedSet)}</span>
+                    </p>
+                )}
+
+                {isDangling && (
+                    <p className="text-xs text-red-500">
+                        Dangling reference: "{selectedSourceId}" does not exist.
+                    </p>
+                )}
+                {isOutOfScope && (
+                    <p className="text-xs text-red-500">
+                        Selected Set Local is out of scope for this node.
+                    </p>
+                )}
+                {!selectedSourceId && validSets.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                        No in-scope Set Local nodes available.
+                    </p>
+                )}
+
+                {(isDangling || isOutOfScope || selectedSourceId) && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        onClick={() => updateNodeValue(node.id, 'localSourceId', '')}
+                    >
+                        Clear Binding
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
@@ -1078,7 +1223,7 @@ function PropertiesPanelContent() {
     const getCodeNode = useEditorStore((s) => s.getCodeNode);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const debugMode = useEditorStore((s) => s.debugMode);
-    const edges = useEdges();
+    const edges = useGraphEdgesSnapshot();
 
     const [editingCodeNodeId, setEditingCodeNodeId] = useState<string | null>(null);
 
@@ -1170,6 +1315,14 @@ function PropertiesPanelContent() {
         return <GlobalRefPanel node={node} />;
     }
 
+    if (node.data.type === 'local/set') {
+        return <LocalSetPanel node={node} />;
+    }
+
+    if (node.data.type === 'local/get') {
+        return <LocalGetPanel node={node} />;
+    }
+
     if (node.data.type === 'utils/linearGradient') {
         return <LinearGradientPanel node={node} tConnected={connectedInputs.has('t')} />;
     }
@@ -1227,7 +1380,7 @@ function PropertiesPanelContent() {
             <div className="px-4 py-3 border-b border-sidebar-border">
                 <h3 className="font-semibold text-sm">{def.label}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {node.data.localName || node.type}
+                    {getLocalName(node) || node.type}
                 </p>
             </div>
 

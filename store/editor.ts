@@ -24,6 +24,12 @@ import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
 import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
+import {
+    getLocalName,
+    isLocalSetNode,
+    isLocalSetType,
+    normalizeLocalName,
+} from '@/lib/local-utils';
 
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder';
@@ -407,6 +413,50 @@ const syncGlobalUniforms = (prev: GlobalContextEntry[], next: GlobalContextEntry
     nextUniforms.forEach((entry) => {
         updateUniformValue(entry.id, entry.type, entry.defaultValue);
     });
+};
+
+const makeUniqueLocalName = (
+    baseName: string,
+    nodes: Node<TSLNodeData>[],
+    excludeNodeId?: string
+): string => {
+    const trimmed = baseName.trim() || 'local';
+    const normalizedSet = new Set(
+        nodes
+            .filter((node) => isLocalSetNode(node) && node.id !== excludeNodeId)
+            .map((node) => normalizeLocalName(getLocalName(node)))
+            .filter((name) => name.length > 0)
+    );
+
+    if (!normalizedSet.has(normalizeLocalName(trimmed))) return trimmed;
+
+    let suffix = 1;
+    let candidate = `${trimmed}_${suffix}`;
+    while (normalizedSet.has(normalizeLocalName(candidate))) {
+        suffix += 1;
+        candidate = `${trimmed}_${suffix}`;
+    }
+    return candidate;
+};
+
+const getDefaultLocalSourceId = (
+    nodes: Node<TSLNodeData>[],
+    position: { x: number; y: number }
+): string | null => {
+    const localSets = nodes.filter((node) => isLocalSetNode(node));
+    if (localSets.length === 0) return null;
+
+    let best: { id: string; dist: number } | null = null;
+    for (const node of localSets) {
+        const dx = node.position.x - position.x;
+        const dy = node.position.y - position.y;
+        const dist = dx * dx + dy * dy;
+        if (!best || dist < best.dist) {
+            best = { id: node.id, dist };
+        }
+    }
+
+    return best?.id ?? null;
 };
 
 const LOOP_INTERNAL_ID_SUFFIX: Record<string, string> = {
@@ -1346,6 +1396,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
         }
 
+        if (isLocalSetType(type)) {
+            const localNameValue = typeof data.values?.localName === 'string'
+                ? data.values.localName
+                : 'local';
+            const uniqueLocalName = makeUniqueLocalName(localNameValue, get().nodes);
+            data.values = {
+                ...data.values,
+                localName: uniqueLocalName,
+            };
+        }
+
+        if (type === 'local/get') {
+            const selectedSourceId = typeof data.values?.localSourceId === 'string'
+                ? data.values.localSourceId
+                : getDefaultLocalSourceId(get().nodes, position);
+            data.values = {
+                ...data.values,
+                localSourceId: selectedSourceId ?? '',
+            };
+        }
+
         if (type === 'utils/linearGradient') {
             data.values = {
                 ...data.values,
@@ -1388,14 +1459,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     updateNodeValue: (nodeId, key, value) => {
-        get().takeSnapshot();
         const prevNodes = get().nodes;
+        const targetNode = prevNodes.find((node) => node.id === nodeId);
+        if (!targetNode) return;
+
+        let nextValue = value;
+        if (key === 'localName' && isLocalSetType(targetNode.data.type)) {
+            const trimmed = String(value ?? '').trim();
+            if (!trimmed) {
+                toast.error('Local name cannot be empty.');
+                return;
+            }
+            const conflict = prevNodes.some((node) => {
+                if (node.id === nodeId || !isLocalSetNode(node)) return false;
+                return normalizeLocalName(getLocalName(node)) === normalizeLocalName(trimmed);
+            });
+            if (conflict) {
+                toast.error(`Local name "${trimmed}" already exists.`);
+                return;
+            }
+            nextValue = trimmed;
+        }
+
+        get().takeSnapshot();
         let uniformKind: UniformKind | null = null;
         let isUniformValueUpdate = false;
 
         const updatedNodes = prevNodes.map((node) => {
             if (node.id !== nodeId) return node;
-            const nextValues = { ...node.data.values, [key]: value };
+            const nextValues = { ...node.data.values, [key]: nextValue };
             if (node.data.type === 'const/uniform' && key === 'value') {
                 isUniformValueUpdate = true;
                 uniformKind = getUniformKindFromNode({ data: { values: nextValues } } as AppNode);
@@ -1410,7 +1502,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         if (isUniformValueUpdate && uniformKind) {
-            updateUniformValue(nodeId, uniformKind, value);
+            updateUniformValue(nodeId, uniformKind, nextValue);
         }
 
         set({
@@ -1874,6 +1966,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...node,
             selected: false,
         }));
+        const takenLocalNames = new Set(
+            newNodes
+                .filter((node) => isLocalSetNode(node))
+                .map((node) => normalizeLocalName(getLocalName(node)))
+                .filter((name) => name.length > 0)
+        );
 
         const pastedNodes: Node<TSLNodeData>[] = nodesToPaste.map((node) => {
             const newId = idMap.get(node.id)!;
@@ -1899,6 +1997,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 selected: true,
                 data: {
                     ...baseClone.data,
+                    values: (() => {
+                        const values = { ...baseClone.data.values };
+                        if (isLocalSetType(mappedType)) {
+                            const rawName = typeof values.localName === 'string' ? values.localName : 'local';
+                            let candidate = rawName.trim() || 'local';
+                            let suffix = 1;
+                            while (takenLocalNames.has(normalizeLocalName(candidate))) {
+                                candidate = `${rawName.trim() || 'local'}_${suffix++}`;
+                            }
+                            values.localName = candidate;
+                            takenLocalNames.add(normalizeLocalName(candidate));
+                        }
+                        if (mappedType === 'local/get') {
+                            const originalSourceId = typeof values.localSourceId === 'string' ? values.localSourceId : '';
+                            values.localSourceId = idMap.get(originalSourceId) ?? originalSourceId;
+                        }
+                        return values;
+                    })(),
                     type: mappedType as NodeType,
                 },
             };

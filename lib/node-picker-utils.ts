@@ -12,6 +12,21 @@ export interface PickerHandle {
     type: TSLType;
 }
 
+export interface LocalGetQuickCreateSeed {
+    id: string;
+    name: string;
+    outputType: TSLType;
+}
+
+export interface LocalGetQuickCreateEntry {
+    key: string;
+    label: string;
+    nodeType: NodeType;
+    handleId: string;
+    localSourceId: string;
+    outputType: TSLType;
+}
+
 export function isTypeMatch(portType: string, sourceDataType: string): boolean {
     if (!sourceDataType) return false;
     if (portType === 'any') return true;
@@ -123,3 +138,18 @@ export const getAllNodes = (): NodeDef[] => {
 export const getAllNodesButExclud = (excludedNodes: NodeType[]): NodeDef[] => {
     return registry.allButExclud(excludedNodes)
 };
+
+export function buildLocalGetQuickCreateEntries(
+    seeds: LocalGetQuickCreateSeed[]
+): LocalGetQuickCreateEntry[] {
+    return [...seeds]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((seed) => ({
+            key: `local/get:${seed.id}`,
+            label: `Get ${seed.name}`,
+            nodeType: 'local/get',
+            handleId: 'out',
+            localSourceId: seed.id,
+            outputType: seed.outputType,
+        }));
+}

@@ -208,6 +208,8 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'geo/time': 'Returns the current time in seconds.',
 
     'global/ref': 'Reads a global value.',
+    'local/set': 'Captures an upstream value as a reusable local portal source.',
+    'local/get': 'Reads from a Set Local portal source.',
 
     'const/uniform': 'Creates a dynamic uniform value.',
 

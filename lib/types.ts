@@ -26,7 +26,10 @@ export interface SubgraphPort {
 // Node data structure
 export interface TSLNodeData extends Record<string, unknown> {
     type: NodeType;
-    values: Record<string, TSLValueType>;
+    values: Record<string, TSLValueType> & {
+        localName?: string;
+        localSourceId?: string;
+    };
     connected: Record<string, boolean>;
     activeInputs?: string[];
     localName?: string;

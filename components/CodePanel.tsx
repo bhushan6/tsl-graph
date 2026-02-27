@@ -85,7 +85,13 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         }
         const materialGraph = getRootGraph('material');
         const postGraph = getRootGraph('post');
-        const materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
+        let materialCode = '// Material graph could not be compiled.';
+        try {
+            materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Material graph could not be compiled.';
+            materialCode = `// ${message}`;
+        }
 
         let postCode = '// Post graph could not be compiled.';
         let postFn: string | null = null;

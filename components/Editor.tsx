@@ -19,7 +19,9 @@ import { useEditorStore } from '@/store/editor';
 import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
+import { getLocalSourceId, isLocalGetNode, isLocalScopeAccessible, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
 import { TSLNode } from './TSLNode';
+import { LocalPortalNode } from './LocalPortalNode';
 import GroupNode from './GroupNode';
 import LoopInternalNode from './LoopInternalNode';
 import { NodePicker } from './NodePicker';
@@ -231,6 +233,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         const types: NodeTypes = {
             group: GroupNode,
             loop: GroupNode,
+            'local/set': LocalPortalNode,
+            'local/get': LocalPortalNode,
             'loop/count': LoopInternalNode,
             'loop/start': LoopInternalNode,
             'loop/end': LoopInternalNode,
@@ -264,6 +268,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
             const edges = getEdges();
             const target = nodes.find((node) => node.id === connection.target);
             const source = nodes.find((node) => node.id === connection.source);
+            const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
             if (!target || !source) {
                 return false;
@@ -299,6 +304,14 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 if (target.data.type === 'loop/output') return false;
             }
 
+            if (isLocalGetNode(source)) {
+                const sourceSetId = getLocalSourceId(source);
+                if (!sourceSetId) return false;
+                const sourceSetNode = nodesById.get(sourceSetId);
+                if (!isLocalSetNode(sourceSetNode)) return false;
+                if (!isLocalScopeAccessible(sourceSetNode, source, nodesById)) return false;
+            }
+
             return !hasCycle(target, source, nodes, edges);
         },
         [getNodes, getEdges]
@@ -328,7 +341,19 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     }
                 } else {
                     direction = 'output';
-                    if (def && def.outputs) {
+                    const state = useEditorStore.getState();
+                    const nodesById = new Map(state.nodes.map((entry) => [entry.id, entry]));
+                    const inferred = resolveNodeOutputTypeById(
+                        node.id,
+                        handleId || 'out',
+                        nodesById,
+                        state.edges,
+                        state.globals,
+                        state.subgraphs
+                    );
+                    if (inferred) {
+                        dataType = inferred;
+                    } else if (def && def.outputs) {
                         const port = def.outputs[handleId];
                         if (port) dataType = port.type;
                     }

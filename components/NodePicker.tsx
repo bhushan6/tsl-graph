@@ -12,6 +12,8 @@ import { useEditorStore } from '@/store/editor';
 import { cn, getErrorMessage } from '@/lib/utils';
 import { NodeType, SubgraphPort, TSLNodeData } from '@/lib/types';
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
+import { buildLocalGetQuickCreateEntries } from '@/lib/node-picker-utils';
+import { getLocalSetReferenceLabel, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
 import { X, ChevronDown, Search, Code, Plus, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -73,6 +75,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     const editorMode = useEditorStore((s) => s.editorMode);
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
     const nodes = useEditorStore((s) => s.nodes);
+    const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const globals = useEditorStore((s) => s.globals);
     const { screenToFlowPosition } = useReactFlow();
@@ -424,14 +427,41 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
         ));
     }, [globals, normalizedSearchQuery]);
 
+    const localPickerEntries = useMemo(() => {
+        const nodesById = new Map(nodes.map((node) => [node.id, node]));
+        const seeds = nodes
+            .filter((node) => isLocalSetNode(node))
+            .map((setNode) => ({
+                id: setNode.id,
+                name: getLocalSetReferenceLabel(setNode, nodesById, edges),
+                outputType: resolveNodeOutputTypeById(setNode.id, 'out', nodesById, edges, globals, subgraphs),
+            }));
+        const entries = buildLocalGetQuickCreateEntries(seeds).map((entry) => ({
+            pickerKey: entry.key,
+            label: entry.label,
+            localSourceId: entry.localSourceId,
+            searchText: `${entry.label.toLowerCase()} local`,
+        }));
+
+        if (!normalizedSearchQuery) return entries;
+        return entries.filter((entry) => (
+            entry.label.toLowerCase().includes(normalizedSearchQuery) ||
+            entry.searchText.includes(normalizedSearchQuery)
+        ));
+    }, [edges, globals, nodes, normalizedSearchQuery, subgraphs]);
+
     const categoryEntries = useMemo(() => {
         const entries = Object.entries(filteredNodesByCategory);
         const hasGlobalsCategory = entries.some(([category]) => category === 'Globals');
         if (!hasGlobalsCategory && globalPickerEntries.length > 0) {
             entries.push(['Globals', []]);
         }
+        const hasLocalsCategory = entries.some(([category]) => category === 'Locals');
+        if (!hasLocalsCategory && localPickerEntries.length > 0) {
+            entries.push(['Locals', []]);
+        }
         return entries.sort(([catA], [catB]) => catA.localeCompare(catB));
-    }, [filteredNodesByCategory, globalPickerEntries]);
+    }, [filteredNodesByCategory, globalPickerEntries, localPickerEntries]);
 
     // Menu button styles matching shadcn SidebarMenuButton
     const menuButtonStyles = cn(
@@ -477,6 +507,16 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                                 <SidebarMenuItem key={entry.pickerKey}>
                                     <button
                                         onClick={() => handleAddNode('global/ref', { values: { globalId: entry.globalId } })}
+                                        className={menuButtonStyles}
+                                    >
+                                        {entry.label}
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
+                            {category === 'Locals' && localPickerEntries.map((entry) => (
+                                <SidebarMenuItem key={entry.pickerKey}>
+                                    <button
+                                        onClick={() => handleAddNode('local/get', { values: { localSourceId: entry.localSourceId } })}
                                         className={menuButtonStyles}
                                     >
                                         {entry.label}
