@@ -2341,6 +2341,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
         );
         if (hasMaterialNode) {
+            toast.error('Material nodes cannot be used inside subgraphs.');
             console.warn('Cannot create subgraph: Material nodes cannot be included in a subgraph.');
             return null;
         }

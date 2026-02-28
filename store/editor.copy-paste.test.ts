@@ -33,6 +33,7 @@ const createNode = (
 
 describe('Editor copy/paste', () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         useEditorStore.getState().resetEditor();
     });
 
@@ -187,6 +188,26 @@ describe('Editor copy/paste', () => {
         expect(
             pastedNodes.some((node) => (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type))
         ).toBe(false);
+    });
+
+    it('shows toast when creating subgraph with material node selection', () => {
+        const materialType = MATERIAL_NODE_TYPES[0];
+        const materialNode = createNode('mat-1', materialType, { x: 0, y: 0 });
+        const addNode = createNode('add-1', 'math/add', { x: 140, y: 0 });
+
+        useEditorStore.setState({
+            nodes: [materialNode, addNode],
+            edges: [],
+            selectedNodeIds: [materialNode.id, addNode.id],
+            selectedNodeId: null,
+        });
+
+        const store = useEditorStore.getState();
+        const created = store.createSubgraph('Subgraph', [materialNode.id, addNode.id]);
+
+        expect(created).toBeNull();
+        expect(useEditorStore.getState().subgraphs).toEqual({});
+        expect(vi.mocked(toast.error)).toHaveBeenCalledWith('Material nodes cannot be used inside subgraphs.');
     });
 
     it('does not copy or paste post anchor nodes', () => {
