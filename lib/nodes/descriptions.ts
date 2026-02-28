@@ -101,6 +101,8 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
     modelDirection: 'Returns the model direction vector.',
     modelScale: 'Returns the model scale.',
     modelViewPosition: 'Returns the model position in view space.',
+    cameraPosition: 'Returns the camera position in world space.',
+    cameraViewMatrix: 'Returns the camera view matrix.',
 
     // Screen / Viewport
     screenUV: 'Returns the screen-space UV coordinates.',
@@ -202,6 +204,8 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'advanced/hashBlur': 'Applies a fast hash-based blur to a texture input.',
 
     'geo/camera': 'Returns camera near and far plane values.',
+    'geo/cameraPosition': 'Returns the camera position in world space.',
+    'geo/cameraViewMatrix': 'Returns the camera view matrix.',
     'geo/screenUV': 'Returns screen-space UV coordinates.',
     'geo/screenCoordinate': 'Returns screen-space coordinates in pixels.',
     'geo/resolution': 'Returns the screen resolution.',

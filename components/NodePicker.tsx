@@ -37,11 +37,12 @@ const ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'] as const;
 interface CategoryGroupProps {
     title: string;
     children: React.ReactNode;
+    count?: number;
     defaultOpen?: boolean;
     forceOpen?: boolean;
 }
 
-function CategoryGroup({ title, children, defaultOpen = true, forceOpen = false }: CategoryGroupProps) {
+function CategoryGroup({ title, children, count, defaultOpen = false, forceOpen = false }: CategoryGroupProps) {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const show = forceOpen || isOpen;
 
@@ -51,7 +52,14 @@ function CategoryGroup({ title, children, defaultOpen = true, forceOpen = false 
                 className="w-full justify-between hover:bg-sidebar-accent/50 cursor-pointer h-8 group/label"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className="text-xs font-medium text-sidebar-foreground/70 group-hover/label:text-sidebar-foreground transition-colors">{title}</span>
+                <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-medium text-sidebar-foreground/70 group-hover/label:text-sidebar-foreground transition-colors truncate">{title}</span>
+                    {typeof count === 'number' && (
+                        <span className="inline-flex items-center justify-center rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+                            {count}
+                        </span>
+                    )}
+                </span>
                 <ChevronDown className={cn("h-3.5 w-3.5 transition-transform text-muted-foreground/70", !show && "-rotate-90")} />
             </SidebarGroupLabel>
             {show && (
@@ -501,7 +509,16 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
             {/* Content */}
             <div className="flex-1 overflow-y-auto">
                 {categoryEntries.map(([category, categoryNodes]) => (
-                    <CategoryGroup key={category} title={category} forceOpen={!!searchQuery}>
+                    <CategoryGroup
+                        key={category}
+                        title={category}
+                        count={
+                            categoryNodes.length +
+                            (category === 'Globals' ? globalPickerEntries.length : 0) +
+                            (category === 'Locals' ? localPickerEntries.length : 0)
+                        }
+                        forceOpen={!!searchQuery}
+                    >
                         <SidebarMenu>
                             {category === 'Globals' && globalPickerEntries.map((entry) => (
                                 <SidebarMenuItem key={entry.pickerKey}>
@@ -539,7 +556,17 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
 
                 {/* Custom Nodes Section - User's templates + Community templates */}
                 {(showCustomSection || hasProjectSubgraphs || hasUserTemplates || hasPublicTemplates) && (
-                    <CategoryGroup title="Custom Nodes" forceOpen={!!searchQuery}>
+                    <CategoryGroup
+                        title="Custom Nodes"
+                        count={
+                            filteredProjectSubgraphs.length +
+                            filteredUserSubgraphTemplates.length +
+                            filteredUserCodeNodeTemplates.length +
+                            filteredPublicSubgraphTemplates.length +
+                            filteredPublicCodeNodeTemplates.length
+                        }
+                        forceOpen={!!searchQuery}
+                    >
                         <SidebarMenu>
                             {/* Create Node from Code button */}
                             {onOpenCodeNodeDialog && (

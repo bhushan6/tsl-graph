@@ -124,6 +124,8 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'frontFacing', type: 'variable', detail: 'bool', info: 'Is front face' },
     { label: 'instanceIndex', type: 'variable', detail: 'uint', info: 'Instance index' },
     { label: 'instanceCount', type: 'variable', detail: 'int', info: 'Instance count' },
+    { label: 'cameraPosition', type: 'variable', detail: 'vec3', info: 'Camera position (world)' },
+    { label: 'cameraViewMatrix', type: 'variable', detail: 'mat4', info: 'Camera view matrix' },
     { label: 'time', type: 'variable', detail: 'float', info: 'Elapsed time', boost: 5 },
 
     // -- Model matrices --

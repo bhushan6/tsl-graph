@@ -220,6 +220,7 @@ Verified swizzle operations:
 | `modelWorldMatrix` | `mat4` | World matrix |
 | `modelNormalMatrix` | `mat3` | Normal matrix |
 | `cameraPosition` | `vec3` | Camera world position |
+| `cameraViewMatrix` | `mat4` | Camera view matrix |
 
 ---
 

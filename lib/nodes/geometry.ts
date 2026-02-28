@@ -15,6 +15,10 @@ const vec2Outputs = {
     out: { label: 'XY', type: 'vec2' as const },
 };
 
+const mat4Outputs = {
+    out: { label: 'Out', type: 'mat4' as const },
+};
+
 export const geometryNodes = [
     // Position
     {
@@ -151,6 +155,22 @@ export const geometryNodes = [
             out: { label: 'Near/Far', type: 'vec2' as const },
         },
         tsl: 'camera',
+        pure: true,
+    },
+    {
+        type: 'geo/cameraPosition',
+        label: 'Camera Position',
+        category: 'Geometry',
+        outputs: vec3Outputs,
+        tsl: 'cameraPosition',
+        pure: true,
+    },
+    {
+        type: 'geo/cameraViewMatrix',
+        label: 'Camera View Matrix',
+        category: 'Geometry',
+        outputs: mat4Outputs,
+        tsl: 'cameraViewMatrix',
         pure: true,
     },
     {
