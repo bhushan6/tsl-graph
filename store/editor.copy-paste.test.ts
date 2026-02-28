@@ -190,6 +190,34 @@ describe('Editor copy/paste', () => {
         ).toBe(false);
     });
 
+    it('replaces all existing material nodes when adding a new material node', () => {
+        const oldStandard = createNode('mat-standard', 'material/standard', { x: 0, y: 0 });
+        const oldBasic = createNode('mat-basic', 'material/basic', { x: 200, y: 0 });
+        const addNode = createNode('math-add', 'math/add', { x: -200, y: 0 });
+
+        useEditorStore.setState({
+            nodes: [oldStandard, oldBasic, addNode],
+            edges: [
+                { id: 'edge-1', source: 'math-add', sourceHandle: 'out', target: 'mat-standard', targetHandle: 'colorNode' },
+                { id: 'edge-2', source: 'math-add', sourceHandle: 'out', target: 'mat-basic', targetHandle: 'colorNode' },
+            ],
+            activeRootGraph: 'material',
+        });
+
+        const store = useEditorStore.getState();
+        const added = store.addNode('material/physical', { x: 400, y: 0 });
+        expect(added).toBe(true);
+
+        const state = useEditorStore.getState();
+        const materialNodes = state.nodes.filter((node) =>
+            (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)
+        );
+
+        expect(materialNodes).toHaveLength(1);
+        expect(materialNodes[0].data.type).toBe('material/physical');
+        expect(state.edges).toEqual([]);
+    });
+
     it('shows toast when creating subgraph with material node selection', () => {
         const materialType = MATERIAL_NODE_TYPES[0];
         const materialNode = createNode('mat-1', materialType, { x: 0, y: 0 });

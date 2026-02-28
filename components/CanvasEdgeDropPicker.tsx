@@ -176,26 +176,22 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 return;
             }
 
-            if (activeRootGraph === 'material' && isMaterialNode && sourceNodeId) {
-                const existingMaterial = nodes.find(n =>
-                    (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
-                );
+            if (activeRootGraph === 'material' && isMaterialNode) {
+                const existingMaterialIds = nodes
+                    .filter((n) => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type))
+                    .map((n) => n.id);
 
-                if (existingMaterial) {
-                    // Prevent if we are connecting FROM the existing material node
-                    // Paradox: replacing the source node of the new connection
-                    if (existingMaterial.id === sourceNodeId) {
-                        // We could warn or just return
-                        // For now, simple return effectively cancels the action
-                        console.warn("Cannot replace material node when extending from it.");
-                        return;
-                    }
-                    const existingId = existingMaterial.id;
-                    // Remove node
-                    setNodes((nds) => nds.filter((n) => n.id !== existingId));
-                    // Remove connected edges
+                if (sourceNodeId && existingMaterialIds.includes(sourceNodeId)) {
+                    // Prevent replacing the node we are currently extending from.
+                    console.warn("Cannot replace material node when extending from it.");
+                    return;
+                }
+
+                if (existingMaterialIds.length > 0) {
+                    const existingIds = new Set(existingMaterialIds);
+                    setNodes((nds) => nds.filter((n) => !existingIds.has(n.id)));
                     setEdges((eds) => eds.filter(
-                        (e) => e.source !== existingId && e.target !== existingId
+                        (e) => !existingIds.has(e.source) && !existingIds.has(e.target)
                     ));
                 }
             }

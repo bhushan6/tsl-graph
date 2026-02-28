@@ -1356,16 +1356,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // If trying to add a material node, check if one already exists
         if (activeRootGraph === 'material' && isMaterialNode) {
-            const existingMaterial = get().nodes.find(n =>
-                (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type)
-            );
+            const existingMaterialIds = get().nodes
+                .filter((n) => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type))
+                .map((n) => n.id);
 
-            if (existingMaterial) {
-                // Remove the existing material node and its edges
+            if (existingMaterialIds.length > 0) {
+                const existingIds = new Set(existingMaterialIds);
+                // Remove existing material nodes and their edges before adding the new one.
                 set({
-                    nodes: get().nodes.filter(n => n.id !== existingMaterial.id),
+                    nodes: get().nodes.filter((n) => !existingIds.has(n.id)),
                     edges: get().edges.filter(
-                        e => e.source !== existingMaterial.id && e.target !== existingMaterial.id
+                        (e) => !existingIds.has(e.source) && !existingIds.has(e.target)
                     ),
                 });
             }
