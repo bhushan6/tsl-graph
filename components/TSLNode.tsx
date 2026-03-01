@@ -287,9 +287,6 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                         <div className="flex flex-col gap-0.5 min-w-0">
                                             {params.length === 0 ? (
                                                 <></>
-                                                // <span className="text-[9px] text-muted-foreground ml-2">
-                                                //     No inputs
-                                                // </span>
                                             ) : (
                                                 params.map((param) => {
                                                     const handleId = getMultiOpHandleId(op.id, param.key);
@@ -318,9 +315,6 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                             )}
                                         </div>
                                         <div className="flex items-center gap-1 pr-2">
-                                            {/* <span className="text-[9px] text-gray-400 font-mono tabular-nums">
-                                                {index + 1}
-                                            </span> */}
                                             <div className="nodrag nopan ml-2 max-w-[100px]">
                                                 <Combobox
                                                     items={MULTI_OP_OPTIONS.map((option) => option.value)}
@@ -389,7 +383,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                         </button>
                     </div>
 
-                    <div className="flex items-center justify-end pr-2">
+                    <div className="flex items-center justify-end">
                         <TSLHandle
                             id="out"
                             type="source"
