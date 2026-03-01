@@ -21,6 +21,7 @@ import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { sobel } from 'three/addons/tsl/display/SobelOperatorNode.js';
 import { transition } from 'three/addons/tsl/display/TransitionNode.js';
 import { ensureUniform, setUniformFactory } from './uniform-store';
+import { withLocalDependencyEdges } from './local-utils';
 
 function createTSLRuntimeScope() {
     return {
@@ -177,7 +178,7 @@ function getAncestorNodeIds(targetNodeId: string, edges: Edge[]): Set<string> {
 /**
  * Build a preview material for a specific node.
  * This compiles only the portion of the graph feeding into the target node
- * and maps its output to colorNode on a MeshBasicNodeMaterial.
+ * and maps its output to fragmentNode on a NodeMaterial.
  */
 export function buildNodePreviewMaterial(
     targetNodeId: string,
@@ -187,8 +188,10 @@ export function buildNodePreviewMaterial(
     codeNodes?: Record<string, CodeNodeDefinition>,
     globals?: GlobalContextEntry[]
 ): THREE.Material {
+    const dependencyEdges = withLocalDependencyEdges(nodes, edges);
+
     // 1. Find all ancestor nodes (including target)
-    const ancestorIds = getAncestorNodeIds(targetNodeId, edges);
+    const ancestorIds = getAncestorNodeIds(targetNodeId, dependencyEdges);
 
     // 2. Filter nodes and edges to only include ancestors
     const partialNodes = nodes.filter(n => ancestorIds.has(n.id));
@@ -232,12 +235,12 @@ export function buildNodePreviewMaterial(
     const functionBody = `
         ${code}
         
-        const material = new MeshBasicNodeMaterial();
+        const material = new NodeMaterial();
         
-        // Map the target node output to color
+        // Map the target node output to fragment
         // Use unique variable name to avoid collision with compiled code
         const __preview_target__ = ${targetVarName};
-        material.colorNode = __preview_target__;
+        material.fragmentNode = __preview_target__;
         
         return material;
     `;
