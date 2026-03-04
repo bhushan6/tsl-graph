@@ -115,6 +115,7 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
     // UV / Interpolation
     uvTransform: 'Transforms UVs using scale and offset.',
     spherizeUV: 'Applies a spherical warping effect to UV coordinates.',
+    rotateUV: 'Rotates UV coordinates around a center point by an angle.',
     remap: 'Maps a value from one range to another.',
 
     // Transforms
@@ -188,6 +189,7 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'utils/transformDirection': 'Transforms a direction vector by a matrix.',
     'utils/fresnel': 'Computes a Fresnel term from normal and view direction.',
     'utils/spherizeUV': 'Applies a spherical warping effect to UV coordinates.',
+    'utils/rotateUV': 'Rotates UV coordinates around a center point by an angle.',
     'utils/hslToRgb': 'Converts HSL values to RGB.',
     'utils/checker': 'Generates a checker pattern from UV coordinates.',
     'utils/linearGradient': 'Generates a linear color gradient using ordered color stops.',

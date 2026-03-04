@@ -387,6 +387,17 @@ export const utilsNodes = [
         tsl: 'spherizeUV',
     },
     {
+        type: 'utils/rotateUV',
+        label: 'Rotate UV',
+        category: 'Utils',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+            rotation: { label: 'Angle', type: 'float', default: 0 },
+        },
+        outputs: { out: { label: 'Out', type: 'vec2' } },
+        tsl: 'rotateUV',
+    },
+    {
         type: 'utils/linearGradient',
         label: 'Linear Gradient',
         category: 'Utils',
