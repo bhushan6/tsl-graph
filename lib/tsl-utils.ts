@@ -1,4 +1,4 @@
-import { Fn, float, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, color } from 'three/tsl';
+import { Fn, float, vec2, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, length, max, min, color } from 'three/tsl';
 
 //@ts-expect-error: this is valid but TSL types seems off
 export const rotation3d = Fn(([pos, axis, angle]) => {
@@ -28,6 +28,60 @@ export const rotate2D = Fn(([pos, angle]) => {
 //@ts-expect-error: this is valid but TSL types seems off
 export const uvTransform = Fn(([uv, scale, offset]) => {
     return uv.mul(scale).add(offset);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const sdfCircle2D = Fn(([uv, center, radius]) => {
+    const p = uv.sub(center);
+    return length(p).sub(radius);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const sdfBox2D = Fn(([uv, center, size]) => {
+    const p = uv.sub(center);
+    const halfSize = size.mul(0.5);
+    const d = p.abs().sub(halfSize);
+    const outside = length(max(d, vec2(0, 0)));
+    const inside = min(max(d.x, d.y), 0.0);
+    return outside.add(inside);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const sdfRoundedBox2D = Fn(([uv, center, size, radius]) => {
+    const p = uv.sub(center);
+    const halfSize = size.mul(0.5);
+    const q = p.abs().sub(halfSize.sub(vec2(radius, radius)));
+    const outside = length(max(q, vec2(0, 0)));
+    const inside = min(max(q.x, q.y), 0.0);
+    return outside.add(inside).sub(radius);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const sdfCapsule2D = Fn(([uv, pointA, pointB, radius]) => {
+    const p = uv.sub(pointA);
+    const ba = pointB.sub(pointA);
+    const baLengthSq = max(dot(ba, ba), 0.000001);
+    const h = clamp(dot(p, ba).div(baLengthSq), 0.0, 1.0);
+    return length(p.sub(ba.mul(h))).sub(radius);
+});
+
+//@ts-expect-error: this is valid but TSL types seems off
+export const sdfCross2D = Fn(([uv, center, armLength, thickness]) => {
+    const p = uv.sub(center);
+    const halfArm = armLength.mul(0.5);
+    const halfThickness = thickness.mul(0.5);
+
+    const verticalQ = p.abs().sub(vec2(halfThickness, halfArm));
+    const verticalOutside = length(max(verticalQ, vec2(0, 0)));
+    const verticalInside = min(max(verticalQ.x, verticalQ.y), 0.0);
+    const vertical = verticalOutside.add(verticalInside);
+
+    const horizontalQ = p.abs().sub(vec2(halfArm, halfThickness));
+    const horizontalOutside = length(max(horizontalQ, vec2(0, 0)));
+    const horizontalInside = min(max(horizontalQ.x, horizontalQ.y), 0.0);
+    const horizontal = horizontalOutside.add(horizontalInside);
+
+    return min(vertical, horizontal);
 });
 
 //@ts-expect-error: this is valid but TSL types seems off
