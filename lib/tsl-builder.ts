@@ -22,11 +22,13 @@ import { sobel } from 'three/addons/tsl/display/SobelOperatorNode.js';
 import { transition } from 'three/addons/tsl/display/TransitionNode.js';
 import { ensureUniform, setUniformFactory } from './uniform-store';
 import { withLocalDependencyEdges } from './local-utils';
+import * as tslEasings from './tsl-easings';
 
 function createTSLRuntimeScope() {
     return {
         ...TSL,
         ...customTSLUtils,
+        ...tslEasings,
         wgslFn: TSL.wgslFn,
         MeshStandardNodeMaterial: THREE.MeshStandardNodeMaterial,
         MeshBasicNodeMaterial: THREE.MeshBasicNodeMaterial,

@@ -1,6 +1,7 @@
 import { registry } from '../registry';
 import { constantNodes } from './constants';
 import { mathNodes } from './math';
+import { easingNodes } from './easing';
 import { geometryNodes } from './geometry';
 import { materialNodes, MATERIAL_NODE_TYPES } from './output';
 import { subgraphNodes } from './subgraph';
@@ -23,6 +24,7 @@ import { withNodeDescriptions } from './descriptions';
 export function initializeNodes() {
     registry.registerMany(withNodeDescriptions(constantNodes));
     registry.registerMany(withNodeDescriptions(mathNodes));
+    registry.registerMany(withNodeDescriptions(easingNodes));
     registry.registerMany(withNodeDescriptions(geometryNodes));
     registry.registerMany(withNodeDescriptions(materialNodes));
     registry.registerMany(withNodeDescriptions(subgraphNodes));
@@ -42,4 +44,4 @@ export function initializeNodes() {
 
 
 // Re-export for convenience
-export { constantNodes, mathNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes, logicNodes, loopNodes, assignNodes, globalNodes, localNodes, postNodes, POST_ANCHOR_NODE_TYPES, postEffectNodes, POST_FX_NODE_TYPES };
+export { constantNodes, mathNodes, easingNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes, logicNodes, loopNodes, assignNodes, globalNodes, localNodes, postNodes, POST_ANCHOR_NODE_TYPES, postEffectNodes, POST_FX_NODE_TYPES };

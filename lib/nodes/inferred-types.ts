@@ -1,6 +1,7 @@
 
 import { constantNodes } from './constants';
 import { mathNodes } from './math';
+import { easingNodes } from './easing';
 import { geometryNodes } from './geometry';
 import { materialNodes } from './output';
 import { subgraphNodes } from './subgraph';
@@ -22,6 +23,7 @@ import { postEffectNodes } from './post-effects';
 export const allNodes = [
     ...constantNodes,
     ...mathNodes,
+    ...easingNodes,
     ...geometryNodes,
     ...materialNodes,
     ...subgraphNodes,
