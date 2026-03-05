@@ -591,6 +591,7 @@ interface EditorState {
     selectedNodeIds: string[]; // For multi-selection
     clipboard: ClipboardData | null;
     graphStructureVersion: number;
+    commentDraftSnapshotTakenFor: Record<string, true>;
     hoveredGroupId: string | null;
     setHoveredGroupId: (groupId: string | null) => void;
     setActiveRootGraph: (mode: RootGraphMode) => void;
@@ -685,6 +686,8 @@ interface EditorState {
 
     addNode: (type: NodeType, position: { x: number; y: number }, data?: Partial<TSLNodeData>) => boolean;
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
+    updateCommentNodeDraft: (nodeId: string, updates: { title?: string; markdown?: string }) => void;
+    commitCommentNodeDraft: (nodeId: string) => void;
     setNodeActiveInput: (nodeId: string, inputKey: string, isActive: boolean) => void;
     setUniformType: (nodeId: string, newKind: UniformKind) => void;
     addMultiOp: (nodeId: string, op?: MultiOpType) => void;
@@ -773,6 +776,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectedNodeIds: [],
     clipboard: null,
     graphStructureVersion: 0,
+    commentDraftSnapshotTakenFor: {},
     hoveredGroupId: null,
     setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
     setActiveRootGraph: (mode) => {
@@ -1426,11 +1430,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             };
         }
 
+        if (type === 'utils/comment') {
+            data.values = {
+                ...data.values,
+                title: typeof data.values?.title === 'string' ? data.values.title : 'Comment',
+                markdown: typeof data.values?.markdown === 'string' ? data.values.markdown : '',
+            };
+        }
+
         const newNode: Node<TSLNodeData> = {
             id,
             type,
             position,
             selected: true,
+            style: type === 'utils/comment' ? { width: 320, height: 220 } : undefined,
             data: {
                 type,
                 values: {},
@@ -1511,6 +1524,51 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             graphStructureVersion: isUniformValueUpdate ? get().graphStructureVersion : get().graphStructureVersion + 1,
         });
         get().markDirty();
+    },
+
+    updateCommentNodeDraft: (nodeId, updates) => {
+        if (updates.title === undefined && updates.markdown === undefined) return;
+
+        const state = get();
+        const targetNode = state.nodes.find((node) => node.id === nodeId);
+        if (!targetNode || targetNode.data.type !== 'utils/comment') return;
+
+        const hasSnapshot = !!state.commentDraftSnapshotTakenFor[nodeId];
+        if (!hasSnapshot) {
+            state.takeSnapshot();
+        }
+
+        const nextNodes = state.nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: {
+                        ...node.data.values,
+                        ...(updates.title !== undefined ? { title: updates.title } : {}),
+                        ...(updates.markdown !== undefined ? { markdown: updates.markdown } : {}),
+                    },
+                },
+            };
+        });
+
+        set({
+            nodes: nextNodes,
+            commentDraftSnapshotTakenFor: hasSnapshot
+                ? state.commentDraftSnapshotTakenFor
+                : { ...state.commentDraftSnapshotTakenFor, [nodeId]: true },
+        });
+        state.markDirty();
+    },
+
+    commitCommentNodeDraft: (nodeId) => {
+        const marker = get().commentDraftSnapshotTakenFor;
+        if (!marker[nodeId]) return;
+
+        const nextMarker = { ...marker };
+        delete nextMarker[nodeId];
+        set({ commentDraftSnapshotTakenFor: nextMarker });
     },
 
     setNodeActiveInput: (nodeId, inputKey, isActive) => {
@@ -1718,6 +1776,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: nodes.filter((node) => !idsToRemove.has(node.id)),
             edges: get().edges.filter(
                 (edge) => !idsToRemove.has(edge.source) && !idsToRemove.has(edge.target)
+            ),
+            commentDraftSnapshotTakenFor: Object.fromEntries(
+                Object.entries(get().commentDraftSnapshotTakenFor).filter(([key]) => !idsToRemove.has(key))
             ),
             // Clear selection if the deleted node was selected
             selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
@@ -2219,6 +2280,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     selectedNodeId: null,
                     selectedNodeIds: [],
                     clipboard: null,
+                    commentDraftSnapshotTakenFor: {},
                     globals: data.globals ?? data.graph?.globals ?? [],
                     subgraphs: data.subgraphs ?? data.graph?.subgraphs ?? {},
                     codeNodes: data.codeNodes ?? data.graph?.codeNodes ?? {},
@@ -2276,6 +2338,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeId: null,
             selectedNodeIds: [],
             clipboard: null,
+            commentDraftSnapshotTakenFor: {},
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
@@ -3180,6 +3243,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: previous.edges,
             subgraphs: previous.subgraphs,
             globals: previous.globals,
+            commentDraftSnapshotTakenFor: {},
             history: {
                 past: newPast,
                 future: [currentSnapshot, ...history.future],
@@ -3216,6 +3280,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: next.edges,
             subgraphs: next.subgraphs,
             globals: next.globals,
+            commentDraftSnapshotTakenFor: {},
             history: {
                 past: [...history.past, currentSnapshot],
                 future: newFuture,
@@ -3914,6 +3979,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeId: null,
             selectedNodeIds: [],
             clipboard: null,
+            commentDraftSnapshotTakenFor: {},
             graphStructureVersion: 0,
             globals: [],
             subgraphs: {},

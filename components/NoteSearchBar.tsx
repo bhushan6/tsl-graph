@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
+import { nodeMatchesNoteQuery } from '@/lib/note-search';
 import type { AppNode } from '@/lib/types';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
 
@@ -54,28 +55,7 @@ export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
         if (!normalizedQuery) return [];
 
         return nodes
-            .filter((node) => {
-                const fields: string[] = [];
-
-                const displayName = getDisplayName(node);
-                if (displayName) fields.push(displayName);
-
-                const localName = typeof node.data.values?.localName === 'string' ? node.data.values.localName : '';
-                if (localName) fields.push(localName);
-
-                const isGroupLike = node.type === 'group' || node.data.type === 'group' || node.data.type === 'loop';
-                if (isGroupLike) {
-                    const labelValue =
-                        typeof node.data.values?.label === 'string'
-                            ? node.data.values.label
-                            : node.data.type === 'loop'
-                                ? 'Loop'
-                                : 'Group';
-                    if (labelValue) fields.push(labelValue);
-                }
-
-                return fields.some((field) => field.toLowerCase().includes(normalizedQuery));
-            })
+            .filter((node) => nodeMatchesNoteQuery(node, getDisplayName(node), normalizedQuery))
             .map((node) => node.id);
     }, [nodes, debouncedQuery, getDisplayName]);
 

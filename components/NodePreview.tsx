@@ -43,6 +43,7 @@ export function NodePreview() {
         if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(selectedNode.data.type)) return false;
         if (selectedNode.type === 'group' || selectedNode.type === 'loop') return false;
         if (selectedNode.data.type.startsWith('loop/')) return false;
+        if (selectedNode.data.type === 'utils/comment') return false;
         return true;
     }, [selectedNode]);
 

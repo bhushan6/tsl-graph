@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useCallback, useEffect, useMemo } from 'react';
+import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
@@ -1206,6 +1206,138 @@ function LocalGetPanel({ node }: { node: AppNode }) {
     );
 }
 
+function CommentNodePanel({ node }: { node: AppNode }) {
+    const updateCommentNodeDraft = useEditorStore((s) => s.updateCommentNodeDraft);
+    const commitCommentNodeDraft = useEditorStore((s) => s.commitCommentNodeDraft);
+
+    const liveTitle = useEditorStore((s) => {
+        const target = s.nodes.find((entry) => entry.id === node.id);
+        const value = target?.data.values?.title;
+        return typeof value === 'string' ? value : 'Comment';
+    });
+    const liveMarkdown = useEditorStore((s) => {
+        const target = s.nodes.find((entry) => entry.id === node.id);
+        const value = target?.data.values?.markdown;
+        return typeof value === 'string' ? value : '';
+    });
+
+    const [titleDraft, setTitleDraft] = useState(liveTitle);
+    const [markdownDraft, setMarkdownDraft] = useState(liveMarkdown);
+    const [isTitleEditing, setIsTitleEditing] = useState(false);
+    const [isMarkdownEditing, setIsMarkdownEditing] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const debouncedTitleUpdate = useDebouncedCallback((nextTitle: string) => {
+        updateCommentNodeDraft(node.id, { title: nextTitle });
+    }, 140);
+
+    const debouncedMarkdownUpdate = useDebouncedCallback((nextMarkdown: string) => {
+        updateCommentNodeDraft(node.id, { markdown: nextMarkdown });
+    }, 140);
+
+    const commitDraft = useCallback(() => {
+        const nextTitle = (isTitleEditing ? titleDraft : liveTitle).trim() || 'Comment';
+        const nextMarkdown = isMarkdownEditing ? markdownDraft : liveMarkdown;
+
+        updateCommentNodeDraft(node.id, {
+            title: nextTitle,
+            markdown: nextMarkdown,
+        });
+        commitCommentNodeDraft(node.id);
+        setIsTitleEditing(false);
+        setIsMarkdownEditing(false);
+        setTitleDraft(nextTitle);
+        setMarkdownDraft(nextMarkdown);
+    }, [
+        commitCommentNodeDraft,
+        isMarkdownEditing,
+        isTitleEditing,
+        liveMarkdown,
+        liveTitle,
+        markdownDraft,
+        node.id,
+        titleDraft,
+        updateCommentNodeDraft,
+    ]);
+
+    const handleBlurCapture = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+        const nextTarget = event.relatedTarget as Node | null;
+        if (nextTarget && containerRef.current?.contains(nextTarget)) {
+            return;
+        }
+        commitDraft();
+    }, [commitDraft]);
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-4 py-3 border-b border-sidebar-border">
+                <h3 className="font-semibold text-sm">Comment</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Visual markdown notes for graph documentation.
+                </p>
+            </div>
+
+            <div ref={containerRef} onBlurCapture={handleBlurCapture} className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                        Title
+                    </label>
+                    <SidebarInput
+                        value={isTitleEditing ? titleDraft : liveTitle}
+                        onFocus={() => {
+                            setTitleDraft(liveTitle);
+                            setIsTitleEditing(true);
+                        }}
+                        onChange={(event) => {
+                            const next = event.target.value;
+                            setTitleDraft(next);
+                            if (!isTitleEditing) {
+                                setIsTitleEditing(true);
+                            }
+                            debouncedTitleUpdate(next);
+                        }}
+                        onBlur={() => {
+                            const normalizedTitle = titleDraft.trim() || 'Comment';
+                            updateCommentNodeDraft(node.id, { title: normalizedTitle });
+                            setTitleDraft(normalizedTitle);
+                            setIsTitleEditing(false);
+                        }}
+                        className="h-8 text-xs"
+                        placeholder="Comment"
+                    />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                        Markdown
+                    </label>
+                    <Textarea
+                        value={isMarkdownEditing ? markdownDraft : liveMarkdown}
+                        onFocus={() => {
+                            setMarkdownDraft(liveMarkdown);
+                            setIsMarkdownEditing(true);
+                        }}
+                        onChange={(event) => {
+                            const next = event.target.value;
+                            setMarkdownDraft(next);
+                            if (!isMarkdownEditing) {
+                                setIsMarkdownEditing(true);
+                            }
+                            debouncedMarkdownUpdate(next);
+                        }}
+                        onBlur={() => {
+                            updateCommentNodeDraft(node.id, { markdown: markdownDraft });
+                            setIsMarkdownEditing(false);
+                        }}
+                        placeholder="Write markdown notes..."
+                        className="min-h-[220px] text-xs"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
@@ -1325,6 +1457,10 @@ function PropertiesPanelContent() {
 
     if (node.data.type === 'utils/linearGradient') {
         return <LinearGradientPanel node={node} tConnected={connectedInputs.has('t')} />;
+    }
+
+    if (node.data.type === 'utils/comment') {
+        return <CommentNodePanel key={node.id} node={node} />;
     }
 
     const def = registry.get(node.data.type);

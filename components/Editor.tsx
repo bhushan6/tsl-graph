@@ -21,6 +21,7 @@ import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
 import { getLocalSourceId, isLocalGetNode, isLocalScopeAccessible, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
 import { TSLNode } from './TSLNode';
+import { CommentNode } from './CommentNode';
 import { LocalPortalNode } from './LocalPortalNode';
 import GroupNode from './GroupNode';
 import LoopInternalNode from './LoopInternalNode';
@@ -233,6 +234,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         const types: NodeTypes = {
             group: GroupNode,
             loop: GroupNode,
+            'utils/comment': CommentNode,
             'local/set': LocalPortalNode,
             'local/get': LocalPortalNode,
             'loop/count': LoopInternalNode,

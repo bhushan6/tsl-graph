@@ -29,6 +29,8 @@ export interface TSLNodeData extends Record<string, unknown> {
     values: Record<string, TSLValueType> & {
         localName?: string;
         localSourceId?: string;
+        title?: string;
+        markdown?: string;
     };
     connected: Record<string, boolean>;
     activeInputs?: string[];

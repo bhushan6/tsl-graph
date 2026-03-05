@@ -341,6 +341,12 @@ const mockDefs: NodeDef[] = [
             value: { type: 'any', default: 0, label: 'Value' }
         },
         outputs: { out: { type: 'any', label: 'Out' } }
+    },
+    {
+        type: 'utils/comment',
+        label: 'Comment',
+        category: 'Notes',
+        tsl: '__comment',
     }
 ];
 
@@ -367,6 +373,17 @@ describe('compileGraph', () => {
         it('should handle empty graph', () => {
             const code = compileGraph([], []);
             expect(code).toBe('// No nodes in graph');
+        });
+
+        it('should ignore comment nodes during code generation', () => {
+            const nodes = [
+                createNode('comment-1', 'utils/comment', { values: { title: 'Todo', markdown: '**hello**' } }),
+                createNode('add1', 'math/add', { values: { a: 1, b: 2 } }),
+            ];
+            const code = compileGraph(nodes, []);
+            expect(code).toContain('const _node0 = add(1, 2);');
+            expect(code).not.toContain('__comment');
+            expect(code).not.toContain('Unknown node type: utils/comment');
         });
 
         it('should compile a simple material node', () => {
@@ -1542,6 +1559,13 @@ describe('getRequiredImports', () => {
 
     it('should return empty array for no nodes', () => {
         const imports = getRequiredImports([]);
+        expect(imports).toEqual([]);
+    });
+
+    it('should not add imports for comment nodes', () => {
+        const imports = getRequiredImports([
+            createNode('comment-1', 'utils/comment', { values: { markdown: '# Heading' } }),
+        ]);
         expect(imports).toEqual([]);
     });
 

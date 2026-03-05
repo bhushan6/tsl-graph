@@ -60,6 +60,40 @@ describe('Editor Store Persistence', () => {
         expect(useEditorStore.getState().previewSettings.mesh).toBe('fullscreenQuad');
     });
 
+    it('should round-trip comment node values and dimensions', () => {
+        const store = useEditorStore.getState();
+        store.addNode('utils/comment', { x: 100, y: 200 });
+        const commentNode = useEditorStore.getState().nodes.find((node) => node.data.type === 'utils/comment');
+        expect(commentNode).toBeDefined();
+
+        const commentId = commentNode!.id;
+        store.updateCommentNodeDraft(commentId, {
+            title: 'Architecture Notes',
+            markdown: '## Heading\n- item 1\n- item 2',
+        });
+        store.commitCommentNodeDraft(commentId);
+
+        useEditorStore.setState({
+            nodes: useEditorStore.getState().nodes.map((node) =>
+                node.id === commentId
+                    ? { ...node, style: { ...node.style, width: 480, height: 300 } }
+                    : node
+            ),
+        });
+
+        const json = store.saveToJSON();
+        store.resetEditor();
+
+        const success = store.loadFromJSON(json);
+        expect(success).toBe(true);
+
+        const restored = useEditorStore.getState().nodes.find((node) => node.id === commentId);
+        expect(restored?.data.values?.title).toBe('Architecture Notes');
+        expect(restored?.data.values?.markdown).toBe('## Heading\n- item 1\n- item 2');
+        expect(restored?.style?.width).toBe(480);
+        expect(restored?.style?.height).toBe(300);
+    });
+
     it('should migrate v1 data by creating post anchors and material root mode', () => {
         const store = useEditorStore.getState();
 

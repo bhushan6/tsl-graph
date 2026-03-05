@@ -365,4 +365,80 @@ describe('Editor copy/paste', () => {
         expect(state.nodes.some((node) => node.id === 'post-input')).toBe(true);
         expect(state.nodes.some((node) => node.id === 'post-output')).toBe(true);
     });
+
+    it('initializes comment nodes with defaults and persisted size', () => {
+        const store = useEditorStore.getState();
+        const added = store.addNode('utils/comment', { x: 40, y: 50 });
+        expect(added).toBe(true);
+
+        const commentNode = useEditorStore.getState().nodes.find((node) => node.data.type === 'utils/comment');
+        expect(commentNode).toBeDefined();
+        expect(commentNode?.data.values?.title).toBe('Comment');
+        expect(commentNode?.data.values?.markdown).toBe('');
+        expect(commentNode?.style?.width).toBe(320);
+        expect(commentNode?.style?.height).toBe(220);
+    });
+
+    it('updates comment drafts without bumping graph structure and commits a single undo snapshot', () => {
+        const store = useEditorStore.getState();
+        store.addNode('utils/comment', { x: 0, y: 0 });
+        const commentNode = useEditorStore.getState().nodes.find((node) => node.data.type === 'utils/comment');
+        expect(commentNode).toBeDefined();
+
+        const nodeId = commentNode!.id;
+        const initialGraphVersion = useEditorStore.getState().graphStructureVersion;
+        const initialHistoryLength = useEditorStore.getState().history.past.length;
+
+        store.updateCommentNodeDraft(nodeId, { title: 'Draft title' });
+        let state = useEditorStore.getState();
+        expect(state.graphStructureVersion).toBe(initialGraphVersion);
+        expect(state.history.past.length).toBe(initialHistoryLength + 1);
+        expect(state.nodes.find((node) => node.id === nodeId)?.data.values?.title).toBe('Draft title');
+
+        store.updateCommentNodeDraft(nodeId, { markdown: 'Draft body' });
+        state = useEditorStore.getState();
+        expect(state.graphStructureVersion).toBe(initialGraphVersion);
+        expect(state.history.past.length).toBe(initialHistoryLength + 1);
+        expect(state.nodes.find((node) => node.id === nodeId)?.data.values?.markdown).toBe('Draft body');
+
+        store.commitCommentNodeDraft(nodeId);
+        expect(useEditorStore.getState().commentDraftSnapshotTakenFor[nodeId]).toBeUndefined();
+
+        store.undo();
+        const revertedNode = useEditorStore.getState().nodes.find((node) => node.id === nodeId);
+        expect(revertedNode?.data.values?.title).toBe('Comment');
+        expect(revertedNode?.data.values?.markdown).toBe('');
+    });
+
+    it('preserves comment title, markdown, and size when copied and pasted', () => {
+        const commentNode = createNode(
+            'comment-1',
+            'utils/comment',
+            { x: 30, y: 45 },
+            { values: { title: 'Note', markdown: 'Hello **world**' } },
+            { style: { width: 420, height: 260 } }
+        );
+
+        useEditorStore.setState({
+            nodes: [commentNode],
+            edges: [],
+            selectedNodeIds: ['comment-1'],
+            selectedNodeId: 'comment-1',
+        });
+
+        const store = useEditorStore.getState();
+        store.copySelection();
+        store.pasteSelection({ x: 400, y: 400 });
+
+        const pastedComment = useEditorStore
+            .getState()
+            .nodes
+            .find((node) => node.data.type === 'utils/comment' && node.id !== 'comment-1');
+
+        expect(pastedComment).toBeDefined();
+        expect(pastedComment?.data.values?.title).toBe('Note');
+        expect(pastedComment?.data.values?.markdown).toBe('Hello **world**');
+        expect(pastedComment?.style?.width).toBe(420);
+        expect(pastedComment?.style?.height).toBe(260);
+    });
 });

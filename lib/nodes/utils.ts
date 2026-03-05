@@ -3,6 +3,12 @@ import { DEFAULT_GRADIENT_STOPS } from '@/lib/gradient-utils';
 
 export const utilsNodes = [
     {
+        type: 'utils/comment',
+        label: 'Comment',
+        category: 'Notes',
+        tsl: '__comment',
+    },
+    {
         type: 'utils/rotation3d',
         label: 'Rotation 3D',
         category: 'Utils',

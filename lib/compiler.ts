@@ -68,6 +68,8 @@ const LOOP_INTERNAL_NODE_TYPES = new Set([
     'loop/output',
 ]);
 
+const COMMENT_NODE_TYPE = 'utils/comment';
+
 const ASSIGN_NODE_METHODS: Record<string, string> = {
     'assign/assign': 'assign',
     'assign/addAssign': 'addAssign',
@@ -462,7 +464,7 @@ function compileSubgraphDefinition(
     // Prepare for internal graph compilation
     // Filter out anchor nodes for topological sort
     const nodesToSort = internalNodes.filter(
-        n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output' && !isLoopInternalNode(n)
+        n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output' && !isLoopInternalNode(n) && n.data.type !== COMMENT_NODE_TYPE
     );
     const sorted = topologicalSort(nodesToSort, loopAwareEdges);
     const compiledNodes = new Map<string, CompiledNode>();
@@ -470,6 +472,10 @@ function compileSubgraphDefinition(
     let nodeIndex = 0;
 
     const compileSubgraphNode = (node: Node<TSLNodeData>, targetLines: string[], indent: string = '    ') => {
+        if (node.data.type === COMMENT_NODE_TYPE) {
+            return;
+        }
+
         // Handle Subgraph Instance inside Subgraph
         if (node.data.type.startsWith('custom/')) {
             const funcName = usedSubgraphs.get(node.data.type);
@@ -1589,6 +1595,7 @@ export function compileGraph(
         !(MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type) &&
         n.data.type !== 'subgraph/input' &&
         n.data.type !== 'subgraph/output' &&
+        n.data.type !== COMMENT_NODE_TYPE &&
         !isLoopInternalNode(n)
     );
 
@@ -1598,6 +1605,10 @@ export function compileGraph(
     let nodeIndex = 0;
 
     const compileSingleNode = (node: Node<TSLNodeData>, targetLines: string[], edgesForInputs: Edge[], inFn: boolean = false) => {
+        if (node.data.type === COMMENT_NODE_TYPE) {
+            return;
+        }
+
         if (node.data.type === 'global/ref') {
             const globalId = node.data.values?.globalId as string | undefined;
             const globalVar = globalId ? globalVarMap.get(globalId) : undefined;
@@ -2426,6 +2437,9 @@ export function getRequiredImports(
         hasSubgraphs = true;
 
         for (const node of subgraph.nodes) {
+            if (node.data.type === COMMENT_NODE_TYPE) {
+                continue;
+            }
             // If internal node is subgraph instance (nested), recurse
             if (node.data.type.startsWith('custom/') && subgraphs) {
                 const nested = subgraphs[node.data.type];
@@ -2471,6 +2485,7 @@ export function getRequiredImports(
     for (const node of nodes) {
         if ((MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type)) continue;
         if (node.data.type === 'subgraph/input' || node.data.type === 'subgraph/output') continue;
+        if (node.data.type === COMMENT_NODE_TYPE) continue;
 
         // Handle subgraph instances
         if (node.data.type.startsWith('custom/') && subgraphs) {
@@ -2566,6 +2581,9 @@ function collectImportSourceOverrides(
     visitedSubgraphs: Set<string>
 ) {
     for (const node of nodes) {
+        if (node.data.type === COMMENT_NODE_TYPE) {
+            continue;
+        }
         if (node.data.type.startsWith('custom/') && subgraphs) {
             const subgraph = subgraphs[node.data.type];
             if (subgraph && !visitedSubgraphs.has(subgraph.id)) {
