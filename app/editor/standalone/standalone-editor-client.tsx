@@ -1,35 +1,403 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { EditorHost } from '@/components/editor-host/EditorHost';
+import { compileGraph, compilePostGraph } from '@/lib/compiler';
+import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
+import { useEditorStore, type MaterialNodeType } from '@/store/editor';
 import {
-    createLocalStorageEditorAdapter,
-    createLocalStorageEditorServices,
-    type LocalStorageEditorRef,
-} from '@/lib/editor-host/adapters/local-storage-adapter';
-import type { EditorHostConfig } from '@/lib/editor-host/types';
+    createPostMessageEditorAdapter,
+    postEditorResponse,
+    type PostMessageEditorRef,
+} from '@/lib/editor-host/adapters/postmessage-adapter';
+import {
+    EDITOR_POSTMESSAGE_SOURCE,
+    isHostMessage,
+    postMessageToHost,
+    type EditorGraphChangedPayload,
+    type EditorReadyPayload,
+    type GetUniformSchemaResponsePayload,
+    type SetUniformValuesPayload,
+    type SetUniformValuesResponsePayload,
+    type UniformSchemaEntry,
+    type UniformsChangedPayload,
+} from '@/lib/editor-host/postmessage';
+import type { EditorGraphKind, EditorHostConfig } from '@/lib/editor-host/types';
+import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
+
+const parseEnabledGraphs = (rawValue: string | null): EditorGraphKind[] | undefined => {
+    if (!rawValue) return undefined;
+
+    const parsed = rawValue
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry): entry is EditorGraphKind => entry === 'material' || entry === 'postprocessing');
+
+    return parsed.length > 0 ? normalizeEnabledGraphs(parsed) : undefined;
+};
+
+const isMaterialNodeType = (value: string): value is MaterialNodeType => (
+    value === 'material/node'
+    || value === 'material/standard'
+    || value === 'material/basic'
+    || value === 'material/physical'
+    || value === 'material/phong'
+    || value === 'material/sprite'
+);
+
+const resolveRootMaterialType = (payload: unknown): MaterialNodeType | null => {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    const commandPayload = payload as { materialType?: string };
+    return typeof commandPayload.materialType === 'string' && isMaterialNodeType(commandPayload.materialType)
+        ? commandPayload.materialType
+        : null;
+};
+
+const isUniformKind = (value: string): value is UniformKind =>
+    UNIFORM_KINDS.includes(value as UniformKind);
+
+const buildUniformSchema = (): UniformSchemaEntry[] => {
+    const state = useEditorStore.getState();
+    const nodes = state.getRootGraph('material').nodes;
+    const globals = state.globals;
+
+    const nodeUniforms: UniformSchemaEntry[] = nodes
+        .filter((node) => node.data.type === 'const/uniform')
+        .map((node) => {
+            const uniformType = getUniformKindFromNode(node);
+            const rawName = node.data.values?.localName;
+            const name = typeof rawName === 'string' && rawName.trim().length > 0
+                ? rawName.trim()
+                : node.id;
+
+            return {
+                scope: 'node',
+                id: node.id,
+                name,
+                uniformType,
+                value: coerceUniformValue(uniformType, node.data.values?.value),
+            };
+        });
+
+    const globalUniforms: UniformSchemaEntry[] = globals
+        .filter((entry) => entry.kind === 'uniform' && isUniformKind(entry.type))
+        .map((entry) => {
+            const uniformType = entry.type as UniformKind;
+            return {
+                scope: 'global',
+                id: entry.id,
+                name: entry.name,
+                uniformType,
+                value: coerceUniformValue(uniformType, entry.defaultValue),
+            };
+        });
+
+    return [...globalUniforms, ...nodeUniforms].sort((a, b) => {
+        if (a.scope !== b.scope) return a.scope.localeCompare(b.scope);
+        return a.name.localeCompare(b.name);
+    });
+};
+
+const getUniformEntryKey = (entry: Pick<UniformSchemaEntry, 'scope' | 'id'>): string =>
+    `${entry.scope}:${entry.id}`;
+
+const createUniformsSignature = (uniforms: UniformSchemaEntry[]): string => JSON.stringify(
+    uniforms.map((entry) => ({
+        scope: entry.scope,
+        id: entry.id,
+        uniformType: entry.uniformType,
+        value: entry.value,
+    }))
+);
+
+const stripMaterialDeclarationBlock = (code: string): string => {
+    const marker = '// Material\n';
+    const markerIndex = code.lastIndexOf(marker);
+    if (markerIndex < 0) {
+        return code.trimEnd();
+    }
+    return code.slice(0, markerIndex).trimEnd();
+};
 
 export default function StandaloneEditorClient() {
-    const persistence = useMemo(() => createLocalStorageEditorAdapter(), []);
-    const services = useMemo(() => createLocalStorageEditorServices(), []);
+    const searchParams = useSearchParams();
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
+    const nodes = useEditorStore((s) => s.nodes);
+    const globals = useEditorStore((s) => s.globals);
+    const lastUniformsSignatureRef = useRef<string>('');
 
-    const hostConfig = useMemo<EditorHostConfig<LocalStorageEditorRef>>(
+    const targetOrigin = searchParams.get('targetOrigin') ?? '*';
+    const docId = searchParams.get('docId') ?? 'standalone';
+    const requestedEnabledGraphs = useMemo(
+        () => parseEnabledGraphs(searchParams.get('graphs')),
+        [searchParams]
+    );
+    const enabledGraphs = useMemo(
+        () => normalizeEnabledGraphs(requestedEnabledGraphs),
+        [requestedEnabledGraphs]
+    );
+
+    const persistence = useMemo(
+        () => createPostMessageEditorAdapter({ targetOrigin }),
+        [targetOrigin]
+    );
+
+    const buildCodePayload = useCallback(() => {
+        const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
+        const materialEnabled = enabledGraphs.includes('material');
+        const postEnabled = enabledGraphs.includes('postprocessing');
+
+        let materialCode: string | null = null;
+        let materialError: string | null = null;
+        if (materialEnabled) {
+            try {
+                const materialGraph = getRootGraph('material');
+                const fullMaterialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
+                materialCode = stripMaterialDeclarationBlock(fullMaterialCode);
+            } catch (error) {
+                materialError = error instanceof Error ? error.message : 'Failed to compile material graph';
+            }
+        }
+
+        let postCode: string | null = null;
+        let postFunctionName: string | null = null;
+        let postError: string | null = null;
+        if (postEnabled) {
+            try {
+                const postGraph = getRootGraph('post');
+                const compiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
+                postCode = compiled.code;
+                postFunctionName = compiled.functionName;
+            } catch (error) {
+                postError = error instanceof Error ? error.message : 'Failed to compile post graph';
+            }
+        }
+
+        return {
+            enabledGraphs,
+            material: {
+                code: materialCode,
+                error: materialError,
+            },
+            postprocessing: {
+                code: postCode,
+                functionName: postFunctionName,
+                error: postError,
+            },
+        };
+    }, [enabledGraphs]);
+
+    useEffect(() => {
+        const payload: EditorReadyPayload = {
+            version: 1,
+            enabledGraphs,
+        };
+
+        postMessageToHost(
+            {
+                source: EDITOR_POSTMESSAGE_SOURCE,
+                type: 'tsl:event:ready',
+                payload,
+            },
+            targetOrigin
+        );
+    }, [enabledGraphs, targetOrigin]);
+
+    useEffect(() => {
+        const payload: EditorGraphChangedPayload = {
+            revision: graphStructureVersion,
+        };
+
+        postMessageToHost(
+            {
+                source: EDITOR_POSTMESSAGE_SOURCE,
+                type: 'tsl:event:graph-changed',
+                payload,
+            },
+            targetOrigin
+        );
+    }, [graphStructureVersion, targetOrigin]);
+
+    useEffect(() => {
+        const uniforms = buildUniformSchema();
+        const signature = createUniformsSignature(uniforms);
+        if (signature === lastUniformsSignatureRef.current) {
+            return;
+        }
+
+        lastUniformsSignatureRef.current = signature;
+        const payload: UniformsChangedPayload = { uniforms };
+
+        postMessageToHost(
+            {
+                source: EDITOR_POSTMESSAGE_SOURCE,
+                type: 'tsl:event:uniforms-changed',
+                payload,
+            },
+            targetOrigin
+        );
+    }, [globals, nodes, targetOrigin]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const handleMessage = async (event: MessageEvent) => {
+            const data = event.data;
+            if (!isHostMessage(data)) return;
+
+            if (data.type === 'tsl:command:get-graph') {
+                const graphData = JSON.parse(useEditorStore.getState().saveToJSON()) as unknown;
+                postEditorResponse({
+                    type: 'tsl:response:get-graph',
+                    requestId: data.requestId,
+                    payload: { graphData },
+                }, targetOrigin);
+                return;
+            }
+
+            if (data.type === 'tsl:command:get-code') {
+                const codePayload = buildCodePayload();
+                postEditorResponse({
+                    type: 'tsl:response:get-code',
+                    requestId: data.requestId,
+                    payload: codePayload,
+                }, targetOrigin);
+                return;
+            }
+
+            if (data.type === 'tsl:command:get-uniform-schema') {
+                const payload: GetUniformSchemaResponsePayload = {
+                    uniforms: buildUniformSchema(),
+                };
+
+                postEditorResponse({
+                    type: 'tsl:response:get-uniform-schema',
+                    requestId: data.requestId,
+                    payload,
+                }, targetOrigin);
+                return;
+            }
+
+            if (data.type === 'tsl:command:set-uniform-values') {
+                const payload = data.payload as SetUniformValuesPayload | undefined;
+                if (!payload || !Array.isArray(payload.updates)) {
+                    postEditorResponse({
+                        type: 'tsl:response:set-uniform-values',
+                        requestId: data.requestId,
+                        error: 'Invalid payload: expected { updates: [...] }',
+                    }, targetOrigin);
+                    return;
+                }
+
+                const uniformMap = new Map(
+                    buildUniformSchema().map((entry) => [getUniformEntryKey(entry), entry])
+                );
+
+                const store = useEditorStore.getState();
+                const rejected: SetUniformValuesResponsePayload['rejected'] = [];
+
+                payload.updates.forEach((update) => {
+                    if (!update || typeof update !== 'object') {
+                        return;
+                    }
+
+                    const scope = update.scope;
+                    const id = update.id;
+                    if ((scope !== 'node' && scope !== 'global') || typeof id !== 'string') {
+                        return;
+                    }
+
+                    const uniform = uniformMap.get(getUniformEntryKey({ scope, id }));
+                    if (!uniform) {
+                        rejected?.push({ scope, id, reason: 'Uniform not found' });
+                        return;
+                    }
+
+                    const value = coerceUniformValue(uniform.uniformType, update.value);
+                    if (scope === 'node') {
+                        if (store.editorMode !== 'main' || store.activeRootGraph !== 'material') {
+                            rejected?.push({
+                                scope,
+                                id,
+                                reason: 'Node uniform updates require material root to be active',
+                            });
+                            return;
+                        }
+                        store.updateNodeValue(id, 'value', value);
+                    } else {
+                        store.updateGlobal(id, { defaultValue: value });
+                    }
+                });
+
+                const responsePayload: SetUniformValuesResponsePayload = {
+                    ok: rejected.length === 0,
+                    uniforms: buildUniformSchema(),
+                    ...(rejected.length > 0 ? { rejected } : {}),
+                };
+
+                postEditorResponse({
+                    type: 'tsl:response:set-uniform-values',
+                    requestId: data.requestId,
+                    payload: responsePayload,
+                }, targetOrigin);
+                return;
+            }
+
+            if (data.type === 'tsl:command:set-root-material') {
+                const materialType = resolveRootMaterialType(data.payload);
+                if (!materialType) {
+                    postEditorResponse({
+                        type: 'tsl:response:set-root-material',
+                        requestId: data.requestId,
+                        error: 'Invalid material payload: expected { materialType }',
+                    }, targetOrigin);
+                    return;
+                }
+
+                const success = useEditorStore.getState().setRootMaterial(materialType);
+                if (!success) {
+                    postEditorResponse({
+                        type: 'tsl:response:set-root-material',
+                        requestId: data.requestId,
+                        error: 'Failed to set root material',
+                    }, targetOrigin);
+                    return;
+                }
+
+                useEditorStore.getState().markSaved();
+                postEditorResponse({
+                    type: 'tsl:response:set-root-material',
+                    requestId: data.requestId,
+                    payload: { ok: true, materialType },
+                }, targetOrigin);
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => {
+            window.removeEventListener('message', handleMessage);
+        };
+    }, [buildCodePayload, targetOrigin]);
+
+    const hostConfig = useMemo<EditorHostConfig<PostMessageEditorRef>>(
         () => ({
-            ref: { docId: 'standalone' },
+            ref: { docId },
             persistence,
-            services,
             autosaveDebounceMs: 2000,
             capabilities: {
                 canRenameProject: false,
                 canShare: false,
-                canUploadAssets: true,
+                canUploadAssets: false,
                 canUseAI: false,
             },
-            enabledGraphs: ['material'],
-
+            enabledGraphs,
         }),
-        [persistence, services]
+        [docId, enabledGraphs, persistence]
     );
 
-    return <EditorHost config={hostConfig} projectName="" />;
+    return <EditorHost config={hostConfig} projectName="TSL Graph" />;
 }

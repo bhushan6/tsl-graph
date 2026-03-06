@@ -34,6 +34,7 @@ import {
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder' | 'fullscreenQuad';
 export type RootGraphMode = 'material' | 'post';
+export type MaterialNodeType = (typeof MATERIAL_NODE_TYPES)[number];
 
 // Geometry configuration
 export interface GeometryConfig {
@@ -162,6 +163,9 @@ const isLoopInternalNode = (node: Node<TSLNodeData>) => LOOP_INTERNAL_NODE_TYPES
 
 const isPostAnchorNodeType = (type: string) =>
     (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(type);
+
+const isMaterialNodeType = (type: string): type is MaterialNodeType =>
+    (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
 
 const isSubgraphAnchorNode = (node: Node<TSLNodeData>) =>
     node.id === SUBGRAPH_INPUT_ID ||
@@ -588,6 +592,65 @@ const createRootGraphSnapshot = (snapshot?: Partial<RootGraphSnapshot>): RootGra
     selectedNodeIds: snapshot?.selectedNodeIds ? [...snapshot.selectedNodeIds] : [],
 });
 
+const createMaterialNode = (
+    nodeId: string,
+    type: MaterialNodeType,
+    position: { x: number; y: number } = { x: 0, y: 0 }
+): Node<TSLNodeData> => ({
+    id: nodeId,
+    type,
+    position: { ...position },
+    data: {
+        type,
+        values: {},
+        connected: {},
+    },
+});
+
+const enforceMaterialNodeOnGraph = ({
+    nodes,
+    edges,
+    materialType,
+    forcedNodeId,
+}: {
+    nodes: Node<TSLNodeData>[];
+    edges: Edge[];
+    materialType: MaterialNodeType;
+    forcedNodeId?: string;
+}) => {
+    const materialNodes = nodes.filter((node) => isMaterialNodeType(node.data.type));
+    const materialNodeIds = new Set(materialNodes.map((node) => node.id));
+    const fallbackMaterialNode = materialNodes.find((node) => node.id === forcedNodeId) ?? materialNodes[0];
+    const materialNodeId = forcedNodeId ?? fallbackMaterialNode?.id ?? 'root-material';
+    const materialNodePosition = fallbackMaterialNode?.position ?? { x: 0, y: 0 };
+
+    const baseMaterialNode = materialNodes.find((node) => node.id === materialNodeId);
+    const normalizedMaterialNode: Node<TSLNodeData> = {
+        ...(baseMaterialNode ? cloneNode(baseMaterialNode) : createMaterialNode(materialNodeId, materialType, materialNodePosition)),
+        id: materialNodeId,
+        type: materialType,
+        data: {
+            ...(baseMaterialNode ? cloneNode(baseMaterialNode).data : { values: {}, connected: {} }),
+            type: materialType,
+        },
+    };
+
+    const normalizedNodes = [
+        ...nodes.filter((node) => !materialNodeIds.has(node.id)),
+        normalizedMaterialNode,
+    ];
+
+    const normalizedEdges = edges.filter(
+        (edge) => !materialNodeIds.has(edge.source) && !materialNodeIds.has(edge.target)
+    );
+
+    return {
+        nodes: normalizedNodes,
+        edges: normalizedEdges,
+        nodeId: materialNodeId,
+    };
+};
+
 
 interface EditorState {
     nodes: Node<TSLNodeData>[];
@@ -595,6 +658,7 @@ interface EditorState {
     activeRootGraph: RootGraphMode;
     materialRootGraph: RootGraphSnapshot;
     postRootGraph: RootGraphSnapshot;
+    forcedRootMaterial: { nodeId: string; type: MaterialNodeType } | null;
     selectedNodeId: string | null;
     selectedNodeIds: string[]; // For multi-selection
     clipboard: ClipboardData | null;
@@ -720,6 +784,7 @@ interface EditorState {
     // Helper to check if a material node exists
     hasMaterialNode: () => boolean;
     getMaterialNode: () => Node<TSLNodeData> | undefined;
+    setRootMaterial: (materialType: MaterialNodeType) => boolean;
 
     // History actions
     takeSnapshot: () => void;
@@ -780,6 +845,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     activeRootGraph: 'material',
     materialRootGraph: createRootGraphSnapshot(),
     postRootGraph: createRootGraphSnapshot(normalizePostGraph(undefined, undefined)),
+    forcedRootMaterial: null,
     selectedNodeId: null,
     selectedNodeIds: [],
     clipboard: null,
@@ -1061,12 +1127,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         const currentNodes = get().nodes;
+        const forcedRootMaterial = get().forcedRootMaterial;
 
         // Prevent deletion of anchor nodes and loop internal nodes
         let filteredChanges = changes.filter(change => {
             if (change.type === 'remove') {
                 const nodeId = change.id;
                 const node = currentNodes.find(n => n.id === nodeId);
+                if (forcedRootMaterial && nodeId === forcedRootMaterial.nodeId) {
+                    return false;
+                }
                 if (
                     nodeId === SUBGRAPH_INPUT_ID ||
                     nodeId === SUBGRAPH_OUTPUT_ID ||
@@ -1271,7 +1341,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             return false;
         }
 
-        const { activeRootGraph } = get();
+        const { activeRootGraph, forcedRootMaterial } = get();
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
         const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(type);
         if (activeRootGraph === 'post' && isMaterialNode) {
@@ -1293,6 +1363,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // If trying to add a material node, check if one already exists
         if (activeRootGraph === 'material' && isMaterialNode) {
+            if (forcedRootMaterial) {
+                toast.error('Root material is locked by host.');
+                return false;
+            }
+
             const existingMaterialIds = get().nodes
                 .filter((n) => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type))
                 .map((n) => n.id);
@@ -1680,6 +1755,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const nodes = get().nodes;
         const target = nodes.find(n => n.id === nodeId);
         if (!target) return;
+        const forcedRootMaterial = get().forcedRootMaterial;
+        if (forcedRootMaterial && nodeId === forcedRootMaterial.nodeId) {
+            toast.error('Root material is locked by host.');
+            return;
+        }
 
         if (isAnchorNode(target)) {
             return;
@@ -2173,6 +2253,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             if (nodes && edges) {
                 clearUniforms();
+                const forcedRootMaterial = get().forcedRootMaterial;
                 const defaultPreviewSettings = createDefaultPreviewSettings();
 
                 const persistedPreview = data.previewSettings ?? data.graph?.previewSettings;
@@ -2200,15 +2281,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 const loadedActiveRootGraph = data.activeRootGraph ?? data.graph?.activeRootGraph;
                 const activeRootGraph: RootGraphMode = loadedActiveRootGraph === 'post' ? 'post' : 'material';
 
+                const normalizedMaterialGraph = forcedRootMaterial
+                    ? enforceMaterialNodeOnGraph({
+                        nodes,
+                        edges,
+                        materialType: forcedRootMaterial.type,
+                        forcedNodeId: forcedRootMaterial.nodeId,
+                    })
+                    : { nodes, edges, nodeId: null as string | null };
+
                 const initialGraph = activeRootGraph === 'post'
                     ? postGraph
-                    : { nodes: cloneNodes(nodes), edges: cloneEdges(edges) };
+                    : {
+                        nodes: cloneNodes(normalizedMaterialGraph.nodes),
+                        edges: cloneEdges(normalizedMaterialGraph.edges),
+                    };
 
                 set({
                     nodes: initialGraph.nodes,
                     edges: initialGraph.edges,
                     activeRootGraph,
-                    materialRootGraph: createRootGraphSnapshot({ nodes, edges }),
+                    materialRootGraph: createRootGraphSnapshot({
+                        nodes: normalizedMaterialGraph.nodes,
+                        edges: normalizedMaterialGraph.edges,
+                    }),
                     postRootGraph: createRootGraphSnapshot(postGraph),
                     selectedNodeId: null,
                     selectedNodeIds: [],
@@ -2226,6 +2322,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     editingSubgraphScopeDraft: null,
                     subgraphStack: [],
                     history: createEmptyHistoryState(),
+                    forcedRootMaterial: forcedRootMaterial
+                        ? {
+                            nodeId: normalizedMaterialGraph.nodeId ?? forcedRootMaterial.nodeId,
+                            type: forcedRootMaterial.type,
+                        }
+                        : null,
                 });
                 return true;
             }
@@ -2261,12 +2363,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     clearGraph: () => {
         get().takeSnapshot();
         clearUniforms();
+        const forcedRootMaterial = get().forcedRootMaterial;
         const postGraph = normalizePostGraph(undefined, undefined);
+        const materialGraph = forcedRootMaterial
+            ? enforceMaterialNodeOnGraph({
+                nodes: [],
+                edges: [],
+                materialType: forcedRootMaterial.type,
+                forcedNodeId: forcedRootMaterial.nodeId,
+            })
+            : { nodes: [] as Node<TSLNodeData>[], edges: [] as Edge[], nodeId: null as string | null };
         set({
-            nodes: [],
-            edges: [],
+            nodes: cloneNodes(materialGraph.nodes),
+            edges: cloneEdges(materialGraph.edges),
             activeRootGraph: 'material',
-            materialRootGraph: createRootGraphSnapshot(),
+            materialRootGraph: createRootGraphSnapshot({
+                nodes: materialGraph.nodes,
+                edges: materialGraph.edges,
+            }),
             postRootGraph: createRootGraphSnapshot(postGraph),
             globals: [],
             selectedNodeId: null,
@@ -2274,6 +2388,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             clipboard: null,
             commentDraftSnapshotTakenFor: {},
             graphStructureVersion: get().graphStructureVersion + 1,
+            forcedRootMaterial: forcedRootMaterial
+                ? {
+                    nodeId: materialGraph.nodeId ?? forcedRootMaterial.nodeId,
+                    type: forcedRootMaterial.type,
+                }
+                : null,
         });
         get().markDirty();
     },
@@ -2284,6 +2404,63 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     getMaterialNode: () => {
         return get().nodes.find(n => (MATERIAL_NODE_TYPES as readonly string[]).includes(n.data.type));
+    },
+
+    setRootMaterial: (materialType) => {
+        if (!isMaterialNodeType(materialType)) {
+            return false;
+        }
+
+        const state = get();
+        const isMaterialRootActive = state.editorMode === 'main' && state.activeRootGraph === 'material';
+        const sourceNodes = isMaterialRootActive ? state.nodes : state.materialRootGraph.nodes;
+        const sourceEdges = isMaterialRootActive ? state.edges : state.materialRootGraph.edges;
+        const sourceHistory = isMaterialRootActive ? state.history : state.materialRootGraph.history;
+        const sourceSelectedNodeId = isMaterialRootActive
+            ? state.selectedNodeId
+            : state.materialRootGraph.selectedNodeId;
+        const sourceSelectedNodeIds = isMaterialRootActive
+            ? state.selectedNodeIds
+            : state.materialRootGraph.selectedNodeIds;
+
+        const normalizedMaterialGraph = enforceMaterialNodeOnGraph({
+            nodes: sourceNodes,
+            edges: sourceEdges,
+            materialType,
+            forcedNodeId: state.forcedRootMaterial?.nodeId,
+        });
+
+        const normalizedNodeIdSet = new Set(normalizedMaterialGraph.nodes.map((node) => node.id));
+        const nextSelectedNodeIds = sourceSelectedNodeIds.filter((nodeId) => normalizedNodeIdSet.has(nodeId));
+        const nextSelectedNodeId = sourceSelectedNodeId && normalizedNodeIdSet.has(sourceSelectedNodeId)
+            ? sourceSelectedNodeId
+            : null;
+
+        set({
+            ...(isMaterialRootActive
+                ? {
+                    nodes: cloneNodes(normalizedMaterialGraph.nodes),
+                    edges: cloneEdges(normalizedMaterialGraph.edges),
+                    selectedNodeId: nextSelectedNodeId,
+                    selectedNodeIds: [...nextSelectedNodeIds],
+                    graphStructureVersion: state.graphStructureVersion + 1,
+                }
+                : {}),
+            materialRootGraph: createRootGraphSnapshot({
+                nodes: normalizedMaterialGraph.nodes,
+                edges: normalizedMaterialGraph.edges,
+                history: sourceHistory,
+                selectedNodeId: nextSelectedNodeId,
+                selectedNodeIds: nextSelectedNodeIds,
+            }),
+            forcedRootMaterial: {
+                nodeId: normalizedMaterialGraph.nodeId,
+                type: materialType,
+            },
+        });
+
+        get().markDirty();
+        return true;
     },
 
     // Subgraph actions
@@ -3883,6 +4060,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             activeRootGraph: 'material',
             materialRootGraph: createRootGraphSnapshot(),
             postRootGraph: createRootGraphSnapshot(postGraph),
+            forcedRootMaterial: null,
             selectedNodeId: null,
             selectedNodeIds: [],
             clipboard: null,

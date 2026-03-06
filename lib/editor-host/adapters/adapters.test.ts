@@ -11,6 +11,7 @@ import {
     createLocalStorageAssetsAdapter,
     createLocalStorageEditorAdapter,
 } from './local-storage-adapter';
+import { createPostMessageEditorAdapter } from './postmessage-adapter';
 
 describe('editor host adapters', () => {
     afterEach(() => {
@@ -209,5 +210,90 @@ describe('editor host adapters', () => {
         });
 
         expect(localStorageMock.removeItem).toHaveBeenCalledWith('tsl-editor:asset:standalone:node-1:map');
+    });
+
+    it('postMessage adapter exchanges load/save payloads with host window', async () => {
+        const listeners = new Set<(event: MessageEvent) => void>();
+        const dispatchMessage = (data: unknown) => {
+            for (const listener of listeners) {
+                listener({ data } as MessageEvent);
+            }
+        };
+
+        const parentPostMessage = vi.fn((message: { type: string; requestId?: string; payload?: unknown }) => {
+            if (message.type === 'tsl:request:load') {
+                queueMicrotask(() => {
+                    dispatchMessage({
+                        source: 'tsl-graph-host',
+                        type: 'tsl:response:load',
+                        requestId: message.requestId,
+                        payload: {
+                            graphData: { version: 2, nodes: [], edges: [] },
+                            projectName: 'Iframe Project',
+                        },
+                    });
+                });
+            }
+
+            if (message.type === 'tsl:request:save') {
+                queueMicrotask(() => {
+                    dispatchMessage({
+                        source: 'tsl-graph-host',
+                        type: 'tsl:response:save',
+                        requestId: message.requestId,
+                        payload: { ok: true },
+                    });
+                });
+            }
+        });
+
+        const parentWindowMock = {
+            postMessage: parentPostMessage,
+        };
+
+        const windowMock = {
+            parent: parentWindowMock,
+            addEventListener: vi.fn((type: string, handler: (event: MessageEvent) => void) => {
+                if (type === 'message') {
+                    listeners.add(handler);
+                }
+            }),
+            removeEventListener: vi.fn((type: string, handler: (event: MessageEvent) => void) => {
+                if (type === 'message') {
+                    listeners.delete(handler);
+                }
+            }),
+        };
+
+        vi.stubGlobal('window', windowMock as unknown as Window & typeof globalThis);
+
+        const adapter = createPostMessageEditorAdapter();
+
+        const loaded = await adapter.load({ docId: 'iframe-doc' });
+        expect(loaded).toEqual({
+            graphData: { version: 2, nodes: [], edges: [] },
+            projectName: 'Iframe Project',
+        });
+
+        await adapter.save({
+            ref: { docId: 'iframe-doc' },
+            graphData: { version: 2, nodes: [{ id: 'n1' }], edges: [] },
+            reason: 'autosave',
+        });
+
+        expect(parentPostMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                source: 'tsl-graph-editor',
+                type: 'tsl:request:load',
+            }),
+            '*'
+        );
+        expect(parentPostMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                source: 'tsl-graph-editor',
+                type: 'tsl:request:save',
+            }),
+            '*'
+        );
     });
 });
