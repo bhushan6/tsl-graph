@@ -45,6 +45,7 @@ import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 import type { Id } from '@/convex/_generated/dataModel';
+import { DEFAULT_EDITOR_HOST_CAPABILITIES, type EditorHostCapabilities } from '@/lib/editor-host/types';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -56,6 +57,7 @@ const edgeTypes = {
 interface NavbarProps {
     projectName?: string;
     projectId?: Id<"projects">;
+    capabilities?: EditorHostCapabilities;
 }
 
 interface EditorProps extends NavbarProps {
@@ -94,9 +96,16 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [isFindOpen, setIsFindOpen] = useState(false);
     const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
     const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
+    const canUseAI = navbarProps?.capabilities?.canUseAI ?? DEFAULT_EDITOR_HOST_CAPABILITIES.canUseAI;
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
+
+    useEffect(() => {
+        if (!canUseAI && bottomBarMode === 'ai') {
+            setBottomBarMode('toolbar');
+        }
+    }, [bottomBarMode, canUseAI]);
 
     // Keyboard shortcuts for Undo/Redo + Copy/Paste
     useEffect(() => {
@@ -599,6 +608,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         {...navbarProps}
                         projectId={projectId}
                         isReadOnly={isReadOnly}
+                        capabilities={navbarProps?.capabilities}
                         noteSearchBar={
                             isFindOpen ? (
                                 <NoteSearchBar
@@ -647,12 +657,14 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                                 <div className={bottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
                                     <Toolbar
                                         onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                                        onOpenAiDock={() => setBottomBarMode('ai')}
+                                        onOpenAiDock={canUseAI ? () => setBottomBarMode('ai') : undefined}
                                     />
                                 </div>
-                                <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
-                                    <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} isOpen={bottomBarMode === 'ai'} />
-                                </div>
+                                {canUseAI && (
+                                    <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
+                                        <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} isOpen={bottomBarMode === 'ai'} />
+                                    </div>
+                                )}
                             </div>
                         )}
                     </UILayer.BottomBar>

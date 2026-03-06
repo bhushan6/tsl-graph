@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,23 +20,33 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useEditorStore } from '@/store/editor';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
 import { Logo } from '@/components/ui/logo';
 import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
 import { HelpDialog } from '@/components/HelpDialog';
 import Link from 'next/link';
+import {
+    DEFAULT_EDITOR_HOST_CAPABILITIES,
+    normalizeEnabledGraphs,
+    type EditorHostCapabilities,
+} from '@/lib/editor-host/types';
+import { useEditorHostConfig } from '@/lib/editor-host/context';
 
 interface NavbarProps {
     projectName?: string;
-    projectId?: Id<"projects">;
+    projectId?: string;
     isReadOnly?: boolean;
     noteSearchBar?: React.ReactNode;
+    capabilities?: EditorHostCapabilities;
 }
 
-export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: NavbarProps) {
+export function Navbar({
+    projectName,
+    projectId,
+    isReadOnly,
+    noteSearchBar,
+    capabilities = DEFAULT_EDITOR_HOST_CAPABILITIES,
+}: NavbarProps) {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const {
@@ -51,25 +61,78 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
         editorMode,
     } = useEditorStore();
 
-    const updateProject = useMutation(api.projects.update);
-    const project = useQuery(api.projects.get, projectId ? { id: projectId } : "skip");
+    const hostConfig = useEditorHostConfig();
+    const projectService = hostConfig?.services?.project;
+    const hostRef = hostConfig?.ref;
+    const enabledGraphs = normalizeEnabledGraphs(hostConfig?.enabledGraphs);
+    const materialGraphEnabled = enabledGraphs.includes('material');
+    const postGraphEnabled = enabledGraphs.includes('postprocessing');
+
+    const canRenameProject = capabilities.canRenameProject
+        && !isReadOnly
+        && !!projectId
+        && !!projectService
+        && hostRef !== undefined;
+    const canShareProject = capabilities.canShare
+        && !isReadOnly
+        && !!projectId
+        && !!projectService?.getProject
+        && !!projectService?.setProjectPublic
+        && hostRef !== undefined;
+
     const [isRenaming, setIsRenaming] = useState(false);
     const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
     const [tempName, setTempName] = useState(projectName || "");
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+    const [projectIsPublic, setProjectIsPublic] = useState(false);
+    const [isShareStateLoaded, setIsShareStateLoaded] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!canShareProject || !projectService?.getProject || hostRef === undefined) {
+            setIsShareStateLoaded(false);
+            return;
+        }
+
+        setIsShareStateLoaded(false);
+        void projectService
+            .getProject({ ref: hostRef })
+            .then((project) => {
+                if (cancelled) return;
+                setProjectIsPublic(Boolean(project?.isPublic));
+                setIsShareStateLoaded(true);
+            })
+            .catch((error) => {
+                console.error("Failed to load project sharing state:", error);
+                if (cancelled) return;
+                setProjectIsPublic(false);
+                setIsShareStateLoaded(true);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [canShareProject, hostRef, projectService]);
 
     const handleRenameStart = () => {
-        if (projectId) {
+        if (canRenameProject) {
             setIsRenaming(true);
             setTempName(projectName || "");
         }
     };
 
     const handleRenameSave = async () => {
-        if (tempName.trim() && tempName.trim() !== projectName && projectId) {
+        if (
+            tempName.trim()
+            && tempName.trim() !== projectName
+            && canRenameProject
+            && projectService
+            && hostRef !== undefined
+        ) {
             try {
                 setIsRenamingInProgress(true);
-                await updateProject({ id: projectId, name: tempName.trim() });
+                await projectService.renameProject({ ref: hostRef, name: tempName.trim() });
                 setIsRenaming(false);
             } catch (error) {
                 console.error("Failed to rename project:", error);
@@ -80,6 +143,14 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
             setIsRenaming(false);
         }
     };
+
+    const handleShareVisibilityChange = useCallback(async (nextIsPublic: boolean) => {
+        if (!projectService?.setProjectPublic || hostRef === undefined) {
+            throw new Error('Project sharing service is unavailable.');
+        }
+        await projectService.setProjectPublic({ ref: hostRef, isPublic: nextIsPublic });
+        setProjectIsPublic(nextIsPublic);
+    }, [hostRef, projectService]);
 
     const handleRenameCancel = () => {
         if (isRenamingInProgress) return;
@@ -146,6 +217,9 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
         clearGraph();
         setShowClearDialog(false);
     }, [clearGraph]);
+    const shareUrl = projectId && typeof window !== "undefined"
+        ? `${window.location.origin}/share/${projectId}`
+        : "";
 
     return (
         <div className="w-full flex items-center justify-between px-3 h-10 bg-card border-b border-border pointer-events-auto rounded-md">
@@ -178,35 +252,39 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
                 ) : (
                     projectName && (
                         <div
-                            onDoubleClick={handleRenameStart}
+                            onDoubleClick={canRenameProject ? handleRenameStart : undefined}
                             className="text-sm font-medium mr-2 hidden sm:inline-block text-muted-foreground cursor-text hover:text-foreground transition-colors select-none !flex !items-center !gap-1 group"
-                            title="Double-click to rename"
+                            title={canRenameProject ? "Double-click to rename" : undefined}
                         >
                             <span>{projectName}</span>
-                            <Pen className="w-3 h-3 ml-1 hidden group-hover:block" />
+                            {canRenameProject && <Pen className="w-3 h-3 ml-1 hidden group-hover:block" />}
                         </div>
                     )
                 )}
 
                 <div className="flex items-center rounded-md border border-border p-0.5">
-                    <Button
-                        variant={activeRootGraph === 'material' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 px-2 text-[11px]"
-                        disabled={editorMode === 'subgraph' || !!isReadOnly}
-                        onClick={() => setActiveRootGraph('material')}
-                    >
-                        Material
-                    </Button>
-                    <Button
-                        variant={activeRootGraph === 'post' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 px-2 text-[11px]"
-                        disabled={editorMode === 'subgraph' || !!isReadOnly}
-                        onClick={() => setActiveRootGraph('post')}
-                    >
-                        Post
-                    </Button>
+                    {materialGraphEnabled && (
+                        <Button
+                            variant={activeRootGraph === 'material' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-6 px-2 text-[11px]"
+                            disabled={editorMode === 'subgraph' || !!isReadOnly}
+                            onClick={() => setActiveRootGraph('material')}
+                        >
+                            Material
+                        </Button>
+                    )}
+                    {postGraphEnabled && (
+                        <Button
+                            variant={activeRootGraph === 'post' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-6 px-2 text-[11px]"
+                            disabled={editorMode === 'subgraph' || !!isReadOnly}
+                            onClick={() => setActiveRootGraph('post')}
+                        >
+                            Post
+                        </Button>
+                    )}
                 </div>
 
                 <DropdownMenu>
@@ -259,7 +337,7 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
                 )}
 
                 {/* Share Button - Only show for project owners, not in read-only mode */}
-                {!isReadOnly && projectId && (
+                {canShareProject && projectId && (
                     <Button
                         variant="ghost"
                         size="icon"
@@ -318,12 +396,13 @@ export function Navbar({ projectName, projectId, isReadOnly, noteSearchBar }: Na
             </Dialog>
 
             {/* Share Dialog */}
-            {projectId && project && (
+            {canShareProject && projectId && isShareStateLoaded && (
                 <ShareDialog
                     open={isShareDialogOpen}
                     onOpenChange={setIsShareDialogOpen}
-                    projectId={projectId}
-                    currentIsPublic={project.isPublic}
+                    isPublic={projectIsPublic}
+                    onTogglePublic={handleShareVisibilityChange}
+                    shareUrl={shareUrl}
                 />
             )}
         </div>

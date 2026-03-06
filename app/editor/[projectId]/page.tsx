@@ -1,162 +1,69 @@
 "use client";
 
-import { use } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
+import { useConvex, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { Editor } from "@/components/Editor";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useEditorStore } from "@/store/editor";
-import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { PresetSelector } from "@/components/PresetSelector";
-import { useState } from "react";
+import { EditorHost } from "@/components/editor-host/EditorHost";
+import {
+    createConvexProjectAdapter,
+    createConvexProjectServices,
+    type ConvexProjectRef,
+} from "@/lib/editor-host/adapters/convex-adapter";
+import type { EditorHostConfig } from "@/lib/editor-host/types";
 
 function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
+    const convex = useConvex();
     const project = useQuery(api.projects.get, { id: projectId });
-    const updateProject = useMutation(api.projects.update);
-
-    // Template mutations
-    const createSubgraphTemplate = useMutation(api.templates.createSubgraphTemplate);
-    const updateSubgraphTemplate = useMutation(api.templates.updateSubgraphTemplate);
-    const createCodeNodeTemplate = useMutation(api.templates.createCodeNodeTemplate);
-    const updateCodeNodeTemplate = useMutation(api.templates.updateCodeNodeTemplate);
 
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
-    const setAutoSaveCallback = useEditorStore((s) => s.setAutoSaveCallback);
-    const setTemplateCallbacks = useEditorStore((s) => s.setTemplateCallbacks);
-    const setProjectId = useEditorStore((s) => s.setProjectId);
-    const resetEditor = useEditorStore((s) => s.resetEditor);
+    const markSaved = useEditorStore((s) => s.markSaved);
 
-    const hasLoadedRef = useRef(false);
     const [showPresetSelector, setShowPresetSelector] = useState(false);
+    const presetSelectorInitializedRef = useRef(false);
 
-    // Reset editor on unmount
-    useEffect(() => {
-        return () => {
-            resetEditor();
-        };
-    }, [resetEditor]);
+    const persistence = useMemo(() => createConvexProjectAdapter(convex), [convex]);
+    const services = useMemo(() => createConvexProjectServices(convex), [convex]);
 
-    // Register auto-save callback for this project
-    useEffect(() => {
-        const saveCallback = async () => {
-            const graphDataJson = useEditorStore.getState().saveToJSON();
-            const graphData = JSON.parse(graphDataJson);
-            await updateProject({
-                id: projectId,
-                graphData,
-            });
-        };
-
-        setAutoSaveCallback(saveCallback);
-
-        // Cleanup: remove callback when unmounting
-        return () => {
-            setAutoSaveCallback(null);
-        };
-    }, [projectId, updateProject, setAutoSaveCallback]);
-
-    // Register template callbacks
-    useEffect(() => {
-        setTemplateCallbacks({
-            onSubgraphTemplateCreate: async (subgraph) => {
-                const result = await createSubgraphTemplate({
-                    name: subgraph.name,
-                    data: {
-                        id: subgraph.id,
-                        name: subgraph.name,
-                        scope: subgraph.scope ?? 'project',
-                        inputs: subgraph.inputs,
-                        outputs: subgraph.outputs,
-                        nodes: subgraph.nodes,
-                        edges: subgraph.edges,
-                        inputNodePosition: subgraph.inputNodePosition,
-                        outputNodePosition: subgraph.outputNodePosition,
-                    },
-                    isPublic: false,
-                });
-                return { templateId: result.templateId, version: result.version };
+    const hostConfig = useMemo<EditorHostConfig<ConvexProjectRef>>(
+        () => ({
+            ref: { projectId },
+            persistence,
+            services,
+            autosaveDebounceMs: 2000,
+            capabilities: {
+                canRenameProject: true,
+                canShare: true,
+                canUploadAssets: true,
+                canUseAI: true,
             },
-            onSubgraphTemplateUpdate: async (templateId, subgraph) => {
-                const result = await updateSubgraphTemplate({
-                    id: templateId as Id<"subgraphTemplates">,
-                    name: subgraph.name, // Update the top-level name in DB
-                    data: {
-                        id: subgraph.id,
-                        name: subgraph.name,
-                        scope: subgraph.scope ?? 'project',
-                        inputs: subgraph.inputs,
-                        outputs: subgraph.outputs,
-                        nodes: subgraph.nodes,
-                        edges: subgraph.edges,
-                        inputNodePosition: subgraph.inputNodePosition,
-                        outputNodePosition: subgraph.outputNodePosition,
-                    },
-                });
-                return { version: result.version };
-            },
-            onCodeNodeTemplateCreate: async (codeNode) => {
-                const result = await createCodeNodeTemplate({
-                    name: codeNode.name,
-                    data: {
-                        id: codeNode.id,
-                        name: codeNode.name,
-                        language: codeNode.language ?? 'tsl',
-                        code: codeNode.code,
-                        inputs: codeNode.inputs,
-                        output: codeNode.output,
-                    },
-                    isPublic: false,
-                });
-                return { templateId: result.templateId, version: result.version };
-            },
-            onCodeNodeTemplateUpdate: async (templateId, codeNode) => {
-                const result = await updateCodeNodeTemplate({
-                    id: templateId as Id<"codeNodeTemplates">,
-                    name: codeNode.name, // Update the top-level name in DB
-                    data: {
-                        id: codeNode.id,
-                        name: codeNode.name,
-                        language: codeNode.language ?? 'tsl',
-                        code: codeNode.code,
-                        inputs: codeNode.inputs,
-                        output: codeNode.output,
-                    },
-                });
-                return { version: result.version };
-            },
-        });
+        }),
+        [projectId, persistence, services]
+    );
 
-        return () => {
-            setTemplateCallbacks({});
-        };
-    }, [createSubgraphTemplate, updateSubgraphTemplate, createCodeNodeTemplate, updateCodeNodeTemplate, setTemplateCallbacks]);
-
-    // Load project data when it arrives
     useEffect(() => {
-        if (project && !hasLoadedRef.current) {
-            const graphData = project.graphData;
-            const hasNodes = graphData && graphData.nodes && graphData.nodes.length > 0;
+        if (!project || presetSelectorInitializedRef.current) return;
 
-            setProjectId(projectId);
+        const graphData = project.graphData as { nodes?: unknown[] } | null | undefined;
+        const hasNodes = Array.isArray(graphData?.nodes) && graphData.nodes.length > 0;
+        setShowPresetSelector(!hasNodes);
+        presetSelectorInitializedRef.current = true;
+    }, [project]);
 
-            if (hasNodes) {
-                const json = JSON.stringify(graphData);
-                loadFromJSON(json);
-                // Set lastSavedVersion to current to prevent immediate re-save
-                useEditorStore.setState({
-                    isDirty: false
-                });
-            } else {
-                // Empty project - show selector
-                setShowPresetSelector(true);
-            }
-            hasLoadedRef.current = true;
-        }
-    }, [project, loadFromJSON, projectId, setProjectId]);
+    const hasProjectData = project !== undefined && project !== null;
+    const initialData = useMemo(() => {
+        if (!hasProjectData || !project) return undefined;
+        return {
+            graphData: project.graphData,
+            projectName: project.name,
+        };
+    }, [project, hasProjectData]);
 
     const handlePresetSelect = async (url: string) => {
         try {
@@ -164,20 +71,20 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
             if (!response.ok) throw new Error("Failed to fetch preset");
 
             const json = await response.text();
-            loadFromJSON(json);
+            const success = loadFromJSON(json);
+            if (!success) throw new Error('Invalid preset payload');
 
-            // Save to backend immediately
-            const graphData = JSON.parse(json);
-            await updateProject({
-                id: projectId,
+            const graphData = JSON.parse(json) as unknown;
+            await persistence.save({
+                ref: { projectId },
                 graphData,
+                reason: 'manual',
             });
 
-            useEditorStore.setState({ isDirty: false });
+            markSaved();
             setShowPresetSelector(false);
         } catch (error) {
             console.error("Error loading preset:", error);
-            // Optionally show toast error here
         }
     };
 
@@ -204,21 +111,21 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
     }
 
     return (
-        <div className="w-screen h-screen flex flex-col">
-            <main className="flex-1 overflow-hidden relative">
-                <Editor
-                    projectName={project.name}
-                    projectId={projectId}
-                    hasThumbnail={!!project.thumbnail}
+        <>
+            <EditorHost
+                config={hostConfig}
+                projectId={projectId}
+                projectName={project.name}
+                hasThumbnail={!!project.thumbnail}
+                initialData={initialData}
+            />
+            {showPresetSelector && (
+                <PresetSelector
+                    onSelect={handlePresetSelect}
+                    onCancel={() => setShowPresetSelector(false)}
                 />
-                {showPresetSelector && (
-                    <PresetSelector
-                        onSelect={handlePresetSelect}
-                        onCancel={() => setShowPresetSelector(false)}
-                    />
-                )}
-            </main>
-        </div>
+            )}
+        </>
     );
 }
 

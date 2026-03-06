@@ -30,6 +30,7 @@ interface CapturedFrame {
 export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DProps>(function PreviewCanvas3D(
     {
         layoutMode,
+        postGraphEnabled,
         onUploadPreviewBlob,
         onMaterialErrorChange,
         onPostErrorChange,
@@ -182,7 +183,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             postProcessingRef.current = new THREE.PostProcessing(rendererRef.current);
         }
 
-        if (!(previewSettings.postEnabled ?? true)) {
+        if (!(previewSettings.postEnabled ?? true) || !postGraphEnabled) {
             usePostProcessingRef.current = false;
             onPostErrorChange(null);
             return;
@@ -225,6 +226,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     }, [
         graphStructureVersion,
         isReady,
+        postGraphEnabled,
         previewSettings.mesh,
         previewSettings.postEnabled,
         onPostErrorChange,

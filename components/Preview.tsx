@@ -10,9 +10,14 @@ import { Id } from '@/convex/_generated/dataModel';
 import { PreviewCanvas3D } from './preview/PreviewCanvas3D';
 import { PreviewControls } from './preview/PreviewControls';
 import type { PreviewCanvasHandle, PreviewCaptureUploadArgs } from './preview/types';
+import { useEditorHostConfig } from '@/lib/editor-host/context';
+import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
 
 export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const canvasRef = useRef<PreviewCanvasHandle | null>(null);
+    const hostConfig = useEditorHostConfig();
+    const enabledGraphs = normalizeEnabledGraphs(hostConfig?.enabledGraphs);
+    const postGraphEnabled = enabledGraphs.includes('postprocessing');
 
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
@@ -29,9 +34,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     const [geometryScriptDraft, setGeometryScriptDraft] = useState(previewSettings.geometryScript ?? '');
 
     const convex = useConvex();
-    const generateThumbnailUploadUrl = useMutation(api.projects.generateThumbnailUploadUrl);
-    const updateThumbnail = useMutation(api.projects.updateThumbnail);
     const generatePreviewUploadUrl = useMutation(api.ai.generatePreviewUploadUrl);
+    const projectService = hostConfig?.services?.project;
+    const hostRef = hostConfig?.ref;
+    const canUploadThumbnail = Boolean(projectService?.uploadThumbnail && hostRef !== undefined);
 
     const lastSnapshotNodeCount = useRef(nodeCount);
     const initialSnapshotTaken = useRef(false);
@@ -57,30 +63,19 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         purpose,
     }: PreviewCaptureUploadArgs) => {
         if (purpose === 'thumbnail') {
-            if (!props.projectId) {
-                throw new Error('Project ID is required for thumbnail capture');
+            if (!projectService?.uploadThumbnail || hostRef === undefined) {
+                throw new Error('Thumbnail upload is not available for this host.');
             }
 
-            const uploadUrl = await generateThumbnailUploadUrl();
-            const response = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': mimeType },
-                body: blob,
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to upload thumbnail');
-            }
-
-            const { storageId } = await response.json();
-            await updateThumbnail({
-                id: props.projectId as Id<'projects'>,
-                storageId,
+            const result = await projectService.uploadThumbnail({
+                ref: hostRef,
+                blob,
+                mimeType,
             });
 
             return {
                 imageUrl: '',
-                storageId,
+                storageId: result.storageId,
                 width,
                 height,
                 format,
@@ -113,9 +108,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     }, [
         convex,
         generatePreviewUploadUrl,
-        generateThumbnailUploadUrl,
-        props.projectId,
-        updateThumbnail,
+        hostRef,
+        projectService,
     ]);
 
     const capturePreviewForAi = useCallback(async (options?: { format?: 'png' | 'jpeg'; quality?: number }) => {
@@ -135,7 +129,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
     }, [capturePreviewForAi, setPreviewSnapshotProvider]);
 
     const captureSnapshot = useCallback(async () => {
-        if (!props.projectId || !canvasRef.current) return;
+        if (!canUploadThumbnail || !canvasRef.current) return;
 
         try {
             await canvasRef.current.capturePreviewForAi({
@@ -146,24 +140,24 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         } catch (err) {
             console.error('Failed to update thumbnail:', err);
         }
-    }, [props.projectId]);
+    }, [canUploadThumbnail]);
 
     const handleDownloadSnapshot = useCallback(() => {
         canvasRef.current?.downloadSnapshot();
     }, []);
 
     useEffect(() => {
-        if (isReady && props.projectId && !props.hasThumbnail && !initialSnapshotTaken.current) {
+        if (isReady && canUploadThumbnail && !props.hasThumbnail && !initialSnapshotTaken.current) {
             const timeout = setTimeout(() => {
                 captureSnapshot();
                 initialSnapshotTaken.current = true;
             }, 1000);
             return () => clearTimeout(timeout);
         }
-    }, [isReady, props.projectId, props.hasThumbnail, captureSnapshot]);
+    }, [canUploadThumbnail, isReady, props.hasThumbnail, captureSnapshot]);
 
     useEffect(() => {
-        if (!isReady || !props.projectId) return;
+        if (!isReady || !canUploadThumbnail) return;
 
         if (nodeCount < lastSnapshotNodeCount.current) {
             lastSnapshotNodeCount.current = nodeCount;
@@ -177,7 +171,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             }, 1000);
             return () => clearTimeout(timeout);
         }
-    }, [nodeCount, isReady, props.projectId, captureSnapshot]);
+    }, [nodeCount, canUploadThumbnail, isReady, captureSnapshot]);
 
     useEffect(() => {
         const { nodes: currentNodes, updateNodeValue } = useEditorStore.getState();
@@ -225,6 +219,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
                 onToggleFullScreen={() => setIsFullScreen((prev) => !prev)}
                 onDownloadSnapshot={handleDownloadSnapshot}
                 isReady={isReady}
+                allowPostProcessingToggle={postGraphEnabled}
                 previewSettings={previewSettings}
                 updatePreviewSettings={updatePreviewSettings}
                 updatePreviewSettingsDebounced={updatePreviewSettingsDebounced}
@@ -242,6 +237,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             <PreviewCanvas3D
                 ref={canvasRef}
                 layoutMode={isFullScreen ? 'fullscreen' : 'inline'}
+                postGraphEnabled={postGraphEnabled}
                 onUploadPreviewBlob={handleUploadPreviewBlob}
                 onMaterialErrorChange={setMaterialError}
                 onPostErrorChange={setPostError}

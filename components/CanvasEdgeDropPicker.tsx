@@ -2,8 +2,6 @@
 
 import { memo, useCallback } from "react";
 import { addEdge, useReactFlow, Edge } from "@xyflow/react";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { EdgeDropNodePicker, MULTI_OP_INPUT_HANDLE_PREFIX, type EdgeDropSelection } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
 import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
@@ -13,6 +11,7 @@ import { useEditorStore } from "@/store/editor";
 import { CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 import { getAbsolutePosition } from "@/lib/utils";
 import { replaceEdgeOnTargetHandle } from "@/lib/graph-utils";
+import { useTemplateLibrary } from "@/lib/editor-host/template-library";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -28,9 +27,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     const close = useEdgeDropPickerStore(state => state.close);
     const activeRootGraph = useEditorStore(state => state.activeRootGraph);
 
-    // Fetch templates (cached by Convex, no extra network request if NodePicker already subscribed)
-    const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
-    const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
+    const { userCodeNodeTemplates, userSubgraphTemplates } = useTemplateLibrary();
 
     const handleNodeSelect = useCallback(
         (selection: EdgeDropSelection) => {
@@ -58,7 +55,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             let codeTemplateId: string | undefined;
             let codeTemplateVersion: number | undefined;
 
-            if (isCodeNode && userCodeNodeTemplates) {
+            if (isCodeNode) {
                 const tplId = nodeType.slice('code/'.length); // Extract template ID
                 const template = userCodeNodeTemplates.find(t => t._id === tplId);
                 if (template) {
@@ -97,7 +94,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             let subgraphTemplateId: string | undefined;
             let subgraphTemplateVersion: number | undefined;
 
-            if (isSubgraphNode && userSubgraphTemplates) {
+            if (isSubgraphNode) {
                 const tplId = nodeType.slice('subgraph/'.length); // Extract template ID
                 const template = userSubgraphTemplates.find(t => t._id === tplId);
                 if (template) {

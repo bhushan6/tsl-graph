@@ -233,8 +233,14 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             <ShareDialog
                 open={isShareDialogOpen}
                 onOpenChange={setIsShareDialogOpen}
-                projectId={project._id}
-                currentIsPublic={project.isPublic}
+                isPublic={project.isPublic}
+                onTogglePublic={async (nextIsPublic) => {
+                    await updateProject({
+                        id: project._id,
+                        isPublic: nextIsPublic,
+                    });
+                }}
+                shareUrl={typeof window !== "undefined" ? `${window.location.origin}/share/${project._id}` : ""}
             />
         </>
     );

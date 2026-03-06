@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,40 +10,32 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
 import { Copy, Check, Share2, Globe, Lock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface ShareDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    projectId: Id<"projects">;
-    currentIsPublic: boolean;
+    isPublic: boolean;
+    onTogglePublic: (nextIsPublic: boolean) => Promise<void>;
+    shareUrl: string;
 }
 
-export function ShareDialog({ open, onOpenChange, projectId, currentIsPublic }: ShareDialogProps) {
-    const updateProject = useMutation(api.projects.update);
-    const [isPublic, setIsPublic] = useState(currentIsPublic);
+export function ShareDialog({
+    open,
+    onOpenChange,
+    isPublic,
+    onTogglePublic,
+    shareUrl,
+}: ShareDialogProps) {
     const [copied, setCopied] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
-    const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${projectId}` : "";
-
-    // Update local state when prop changes
-    useEffect(() => {
-        setIsPublic(currentIsPublic);
-    }, [currentIsPublic]);
 
     const handleTogglePublic = async () => {
         try {
             setIsUpdating(true);
             const newIsPublic = !isPublic;
-            await updateProject({
-                id: projectId,
-                isPublic: newIsPublic,
-            });
-            setIsPublic(newIsPublic);
+            await onTogglePublic(newIsPublic);
             toast.success(newIsPublic ? "Project is now public" : "Project is now private");
         } catch (error) {
             console.error("Failed to update project visibility:", error);

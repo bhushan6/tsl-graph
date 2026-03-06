@@ -32,6 +32,7 @@ export interface PreviewCanvasHandle {
 
 export interface PreviewCanvas3DProps {
     layoutMode: 'inline' | 'fullscreen';
+    postGraphEnabled: boolean;
     onUploadPreviewBlob: (args: PreviewCaptureUploadArgs) => Promise<PreviewCaptureResult>;
     onMaterialErrorChange: (error: string | null) => void;
     onPostErrorChange: (error: string | null) => void;
@@ -44,6 +45,7 @@ export interface PreviewControlsProps {
     onToggleFullScreen: () => void;
     onDownloadSnapshot: () => void;
     isReady: boolean;
+    allowPostProcessingToggle: boolean;
     previewSettings: PreviewSettings;
     updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
     updatePreviewSettingsDebounced: (updates: Partial<PreviewSettings>) => void;
