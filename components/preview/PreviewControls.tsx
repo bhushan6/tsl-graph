@@ -50,6 +50,7 @@ export function PreviewControls({
     onToggleFullScreen,
     onDownloadSnapshot,
     isReady,
+    allowPostProcessingToggle,
     previewSettings,
     updatePreviewSettings,
     updatePreviewSettingsDebounced,
@@ -212,15 +213,17 @@ export function PreviewControls({
                                     </>
                                 )}
 
-                                <div className="flex items-center justify-between">
-                                    <Label>Enable Post-Processing</Label>
-                                    <input
-                                        type="checkbox"
-                                        className="h-4 w-4 rounded border-primary"
-                                        checked={previewSettings.postEnabled ?? true}
-                                        onChange={(e) => updatePreviewSettingsDebounced({ postEnabled: e.target.checked })}
-                                    />
-                                </div>
+                                {allowPostProcessingToggle && (
+                                    <div className="flex items-center justify-between">
+                                        <Label>Enable Post-Processing</Label>
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-primary"
+                                            checked={previewSettings.postEnabled ?? true}
+                                            onChange={(e) => updatePreviewSettingsDebounced({ postEnabled: e.target.checked })}
+                                        />
+                                    </div>
+                                )}
 
                                 {previewSettings.mesh === 'box' && (
                                     <>

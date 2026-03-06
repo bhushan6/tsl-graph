@@ -28,8 +28,9 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
         editorMode,
         exitSubgraphEditor,
         editingSubgraphId,
+        editingSubgraphScopeDraft,
+        setEditingSubgraphScopeDraft,
         subgraphs,
-        updateSubgraphDefinition,
         undo,
         redo,
         history,
@@ -144,12 +145,8 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                         <select
                             className="h-7 rounded-md border border-border bg-background/60 px-2 text-xs text-foreground"
                             title="Scope: Project = only in this project. Library = available in all your projects."
-                            value={subgraphs[editingSubgraphId]?.scope ?? (subgraphs[editingSubgraphId]?.templateId ? 'library' : 'project')}
-                            onChange={(e) =>
-                                updateSubgraphDefinition(editingSubgraphId, {
-                                    scope: e.target.value as 'project' | 'library',
-                                })
-                            }
+                            value={editingSubgraphScopeDraft ?? (subgraphs[editingSubgraphId]?.scope ?? (subgraphs[editingSubgraphId]?.templateId ? 'library' : 'project'))}
+                            onChange={(e) => setEditingSubgraphScopeDraft(e.target.value as 'project' | 'library')}
                         >
                             <option value="project">Project</option>
                             <option value="library">Library</option>

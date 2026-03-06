@@ -1,8 +1,6 @@
 'use client';
 
 import { useMemo, useEffect, useRef, useState } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '@/convex/_generated/api';
 import {
     buildLocalGetQuickCreateEntries,
     getAllNodesButExclud,
@@ -28,9 +26,21 @@ import {
     CommandItem,
     CommandList,
 } from "@/components/ui/command";
+import { useTemplateLibrary } from '@/lib/editor-host/template-library';
 
 export const MULTI_OP_INPUT_HANDLE_PREFIX = 'multiop:param:';
 const SUBGRAPH_ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'] as const;
+
+const getSubgraphScope = (def: { scope?: string; templateId?: string }) => {
+    if (def.scope === 'library' || def.scope === 'project') return def.scope;
+    return def.templateId ? 'library' : 'project';
+};
+
+const getTemplateSubgraphId = (template: { _id: string; data?: unknown }) => {
+    const data = (template.data ?? {}) as { id?: string };
+    const rawId = typeof data.id === 'string' && data.id.trim().length > 0 ? data.id : template._id;
+    return rawId.startsWith('custom/') ? rawId : `custom/${rawId}`;
+};
 
 export interface EdgeDropSelection {
     nodeType: NodeType;
@@ -130,10 +140,7 @@ export function EdgeDropNodePicker({
         };
     }, [onClose]);
 
-    // Fetch user's code node templates from server (cached by Convex)
-    const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
-    // Fetch user's subgraph templates from server (cached by Convex)
-    const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
+    const { userCodeNodeTemplates, userSubgraphTemplates } = useTemplateLibrary();
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
@@ -166,8 +173,6 @@ export function EdgeDropNodePicker({
 
     // Build code nodes from templates (fetched from server, cached by Convex)
     const codeNodes = useMemo((): EdgeDropPickerNode[] => {
-        if (!userCodeNodeTemplates) return [];
-
         return userCodeNodeTemplates
             .map(template => {
                 const data = template.data as {
@@ -194,18 +199,14 @@ export function EdgeDropNodePicker({
     }, [userCodeNodeTemplates]);
 
     // Build subgraph nodes from templates (fetched from server, cached by Convex)
-    const getSubgraphScope = (def: { scope?: string; templateId?: string }) => {
-        if (def.scope === 'library' || def.scope === 'project') return def.scope;
-        return def.templateId ? 'library' : 'project';
-    };
-
     const subgraphTemplateNodes = useMemo((): EdgeDropPickerNode[] => {
-        if (!userSubgraphTemplates) return [];
-
         return userSubgraphTemplates
             .filter(template => {
                 const scope = getSubgraphScope((template.data as { scope?: string; templateId?: string }) || {});
-                return scope !== 'project';
+                if (scope === 'project') return false;
+                const localSubgraph = subgraphs[getTemplateSubgraphId(template)];
+                if (localSubgraph && getSubgraphScope(localSubgraph) === 'project') return false;
+                return true;
             })
             .map(template => {
                 const data = template.data as {
@@ -228,7 +229,12 @@ export function EdgeDropNodePicker({
                     }, {} as Record<string, { label: string; type: TSLType }>),
                 };
             });
-    }, [userSubgraphTemplates]);
+    }, [subgraphs, userSubgraphTemplates]);
+
+    const userSubgraphTemplateIds = useMemo(
+        () => new Set(userSubgraphTemplates.map((template) => template._id)),
+        [userSubgraphTemplates]
+    );
 
     const projectSubgraphNodes = useMemo((): EdgeDropPickerNode[] => {
         return Object.values(subgraphs)
@@ -248,6 +254,29 @@ export function EdgeDropNodePicker({
                 }, {} as Record<string, { label: string; type: TSLType }>),
             }));
     }, [subgraphs]);
+
+    const embeddedLibrarySubgraphNodes = useMemo((): EdgeDropPickerNode[] => {
+        return Object.values(subgraphs)
+            .filter((sg) => {
+                if (getSubgraphScope(sg) !== 'library') return false;
+                if (!sg.templateId) return true;
+                return !userSubgraphTemplateIds.has(sg.templateId);
+            })
+            .map((sg) => ({
+                type: sg.id as NodeType,
+                label: sg.name,
+                category: 'Custom' as const,
+                isSubgraphNode: true,
+                inputs: sg.inputs.reduce((acc, inp) => {
+                    acc[inp.id] = { label: inp.label, type: inp.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                outputs: sg.outputs.reduce((acc, out) => {
+                    acc[out.id] = { label: out.label, type: out.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+            }));
+    }, [subgraphs, userSubgraphTemplateIds]);
 
     const globalRefNodes = useMemo((): EdgeDropPickerNode[] => {
         return buildGlobalPickerEntries(globals).map((entry) => ({
@@ -301,10 +330,11 @@ export function EdgeDropNodePicker({
             ...globalRefNodes,
             ...(filteredRegistryNodes as EdgeDropPickerNode[]),
             ...projectSubgraphNodes,
+            ...embeddedLibrarySubgraphNodes,
             ...subgraphTemplateNodes,
             ...codeNodes,
         ];
-    }, [localGetQuickNodes, globalRefNodes, filteredRegistryNodes, projectSubgraphNodes, subgraphTemplateNodes, codeNodes]);
+    }, [localGetQuickNodes, globalRefNodes, filteredRegistryNodes, projectSubgraphNodes, embeddedLibrarySubgraphNodes, subgraphTemplateNodes, codeNodes]);
 
     const groupedNodes = useMemo(() => {
         return getGroupedCompatibleNodes<EdgeDropPickerNode>(allNodes);

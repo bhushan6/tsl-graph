@@ -2,14 +2,12 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import posthog from "posthog-js";
-import { useQuery, useMutation, useConvex } from 'convex/react';
-import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
 import { useEditorStore } from '@/store/editor';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, X, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
+import { useTemplateLibrary } from '@/lib/editor-host/template-library';
 
 interface StaleTemplate {
     id: string;
@@ -34,7 +32,20 @@ export function StaleTemplatesNotification() {
     const [dismissedCloneable, setDismissedCloneable] = useState<Set<string>>(new Set());
     const [updating, setUpdating] = useState<Set<string>>(new Set());
     const [cloning, setCloning] = useState<Set<string>>(new Set());
-    const convex = useConvex();
+    const [subgraphVersions, setSubgraphVersions] = useState<Record<string, { version: number; updatedAt: number; isOwned: boolean } | null> | null>(null);
+    const [codeNodeVersions, setCodeNodeVersions] = useState<Record<string, { version: number; updatedAt: number; isOwned: boolean } | null> | null>(null);
+
+    const {
+        enabled: templateLibraryEnabled,
+        userSubgraphTemplates,
+        userCodeNodeTemplates,
+        createSubgraphTemplate,
+        createCodeNodeTemplate,
+        getSubgraphTemplate,
+        getCodeNodeTemplate,
+        getSubgraphTemplateVersions,
+        getCodeNodeTemplateVersions,
+    } = useTemplateLibrary();
 
     // Get embedded definitions and nodes from store
     const nodes = useEditorStore((s) => s.nodes);
@@ -43,20 +54,12 @@ export function StaleTemplatesNotification() {
     const updateSubgraphDefinition = useEditorStore((s) => s.updateSubgraphDefinition);
     const updateCodeNode = useEditorStore((s) => s.updateCodeNode);
 
-    // Mutations for cloning
-    const createSubgraphTemplate = useMutation(api.templates.createSubgraphTemplate);
-    const createCodeNodeTemplate = useMutation(api.templates.createCodeNodeTemplate);
-
-    // Query user's existing templates to avoid duplicate clones
-    const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
-    const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
-
     // Build sets of template names the user already owns
     const userOwnedSubgraphNames = useMemo(() => new Set(
-        (userSubgraphTemplates || []).map(t => t.name.toLowerCase())
+        userSubgraphTemplates.map(t => t.name.toLowerCase())
     ), [userSubgraphTemplates]);
     const userOwnedCodeNodeNames = useMemo(() => new Set(
-        (userCodeNodeTemplates || []).map(t => t.name.toLowerCase())
+        userCodeNodeTemplates.map(t => t.name.toLowerCase())
     ), [userCodeNodeTemplates]);
 
     const getSubgraphScope = (def: { scope?: string; templateId?: string }) => {
@@ -78,28 +81,65 @@ export function StaleTemplatesNotification() {
 
     // Only collect template IDs for definitions that are actually used in the graph
     // Also deduplicate by templateId
-    const subgraphTemplateIds = [...new Set(
-        Object.values(subgraphs)
-            .filter(sg => getSubgraphScope(sg) === 'library' && sg.templateId && usedSubgraphIds.has(sg.id))
-            .map(sg => sg.templateId as Id<"subgraphTemplates">)
-    )];
+    const subgraphTemplateIds = useMemo(() => (
+        [...new Set(
+            Object.values(subgraphs)
+                .filter(sg => getSubgraphScope(sg) === 'library' && sg.templateId && usedSubgraphIds.has(sg.id))
+                .map(sg => sg.templateId as string)
+        )]
+    ), [subgraphs, usedSubgraphIds]);
 
-    const codeNodeTemplateIds = [...new Set(
-        Object.values(codeNodes)
-            .filter(cn => cn.templateId && usedCodeNodeIds.has(cn.id))
-            .map(cn => cn.templateId as Id<"codeNodeTemplates">)
-    )];
+    const codeNodeTemplateIds = useMemo(() => (
+        [...new Set(
+            Object.values(codeNodes)
+                .filter(cn => cn.templateId && usedCodeNodeIds.has(cn.id))
+                .map(cn => cn.templateId as string)
+        )]
+    ), [codeNodes, usedCodeNodeIds]);
 
-    // Query latest versions from DB
-    const subgraphVersions = useQuery(
-        api.templates.getSubgraphTemplateVersions,
-        subgraphTemplateIds.length > 0 ? { ids: subgraphTemplateIds } : 'skip'
-    );
+    useEffect(() => {
+        let cancelled = false;
 
-    const codeNodeVersions = useQuery(
-        api.templates.getCodeNodeTemplateVersions,
-        codeNodeTemplateIds.length > 0 ? { ids: codeNodeTemplateIds } : 'skip'
-    );
+        if (!templateLibraryEnabled) {
+            setSubgraphVersions(null);
+            setCodeNodeVersions(null);
+            return;
+        }
+
+        const loadVersions = async () => {
+            try {
+                const [nextSubgraphVersions, nextCodeNodeVersions] = await Promise.all([
+                    subgraphTemplateIds.length > 0
+                        ? getSubgraphTemplateVersions(subgraphTemplateIds)
+                        : {},
+                    codeNodeTemplateIds.length > 0
+                        ? getCodeNodeTemplateVersions(codeNodeTemplateIds)
+                        : {},
+                ]);
+
+                if (cancelled) return;
+                setSubgraphVersions(nextSubgraphVersions);
+                setCodeNodeVersions(nextCodeNodeVersions);
+            } catch (error) {
+                console.error('Failed to load template versions:', error);
+                if (cancelled) return;
+                setSubgraphVersions({});
+                setCodeNodeVersions({});
+            }
+        };
+
+        void loadVersions();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        codeNodeTemplateIds,
+        getCodeNodeTemplateVersions,
+        getSubgraphTemplateVersions,
+        subgraphTemplateIds,
+        templateLibraryEnabled,
+    ]);
 
     // Check for stale and cloneable templates when versions are loaded
     useEffect(() => {
@@ -122,7 +162,7 @@ export function StaleTemplatesNotification() {
 
                 const latest = subgraphVersions[sg.templateId];
 
-                if (latest === null || !latest.isOwned) {
+                if (!latest || !latest.isOwned) {
                     // Template doesn't exist or user doesn't own it
                     // Check if user already has a template with the same name (already cloned)
                     if (!userOwnedSubgraphNames.has(sg.name.toLowerCase())) {
@@ -160,7 +200,7 @@ export function StaleTemplatesNotification() {
 
                 const latest = codeNodeVersions[cn.templateId];
 
-                if (latest === null || !latest.isOwned) {
+                if (!latest || !latest.isOwned) {
                     // Template doesn't exist or user doesn't own it
                     // Check if user already has a template with the same name (already cloned)
                     if (!userOwnedCodeNodeNames.has(cn.name.toLowerCase())) {
@@ -196,9 +236,7 @@ export function StaleTemplatesNotification() {
         try {
             if (template.type === 'subgraph') {
                 // Fetch the latest template data
-                const latestTemplate = await convex.query(api.templates.getSubgraphTemplate, {
-                    id: template.templateId as Id<"subgraphTemplates">,
-                });
+                const latestTemplate = await getSubgraphTemplate(template.templateId);
 
                 if (latestTemplate?.data) {
                     // Update the embedded definition, keeping the local ID
@@ -211,9 +249,7 @@ export function StaleTemplatesNotification() {
                 }
             } else {
                 // Fetch the latest code node template
-                const latestTemplate = await convex.query(api.templates.getCodeNodeTemplate, {
-                    id: template.templateId as Id<"codeNodeTemplates">,
-                });
+                const latestTemplate = await getCodeNodeTemplate(template.templateId);
 
                 if (latestTemplate?.data) {
                     updateCodeNode(template.id, {
@@ -239,7 +275,7 @@ export function StaleTemplatesNotification() {
                 return next;
             });
         }
-    }, [convex, updateSubgraphDefinition, updateCodeNode]);
+    }, [getCodeNodeTemplate, getSubgraphTemplate, updateSubgraphDefinition, updateCodeNode]);
 
     // Handle clone - create a new template in user's DB from embedded definition
     const handleClone = useCallback(async (template: CloneableTemplate) => {
@@ -327,6 +363,10 @@ export function StaleTemplatesNotification() {
     const handleDismissCloneable = useCallback((templateId: string) => {
         setDismissedCloneable(prev => new Set(prev).add(templateId));
     }, []);
+
+    if (!templateLibraryEnabled) {
+        return null;
+    }
 
     // Filter out dismissed templates
     const visibleStale = staleTemplates.filter(t => !dismissed.has(t.id));

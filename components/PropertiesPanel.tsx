@@ -20,7 +20,6 @@ import { Layers, Plus, Trash2, Upload, Code, Crosshair } from 'lucide-react';
 import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { AssetInput } from './inputs/AssetInput';
-import { Id } from '@/convex/_generated/dataModel';
 import { UNIFORM_KINDS, getUniformKindFromNode, getUniformDefaultValue, type UniformKind } from '@/lib/uniform-utils';
 import {
     SidebarGroup,
@@ -1710,7 +1709,6 @@ function PropertyInputWrapper({
 }: PropertyInputWrapperProps) {
     // Subscribe reactively to this specific value
     const value = useNodeInputValue(nodeId, inputKey, inputDefault);
-    const projectId = useEditorStore((s) => s.projectId);
 
     return (
         <div className="flex flex-col gap-1.5">
@@ -1724,7 +1722,6 @@ function PropertyInputWrapper({
                 onChange={onChange}
                 nodeId={nodeId}
                 propertyName={inputKey}
-                projectId={projectId}
             />
         </div>
     );
@@ -1748,7 +1745,6 @@ function PropertyInputInline({
     onChange,
 }: PropertyInputInlineProps) {
     const value = useNodeInputValue(nodeId, inputKey, inputDefault);
-    const projectId = useEditorStore((s) => s.projectId);
 
     return (
         <PropertyInput
@@ -1758,7 +1754,6 @@ function PropertyInputInline({
             onChange={onChange}
             nodeId={nodeId}
             propertyName={inputKey}
-            projectId={projectId}
         />
     );
 }
@@ -1770,11 +1765,10 @@ interface PropertyInputProps {
     onChange: (value: TSLValueType) => void;
     nodeId?: string;
     propertyName?: string;
-    projectId?: string | null;
     immediate?: boolean;
 }
 
-function PropertyInput({ type, value, options, onChange, nodeId, propertyName, projectId, immediate = false }: PropertyInputProps) {
+function PropertyInput({ type, value, options, onChange, nodeId, propertyName, immediate = false }: PropertyInputProps) {
     const vectorValue = Array.isArray(value) && value.every((entry) => typeof entry === 'number')
         ? value
         : Number(value ?? 0);
@@ -1810,7 +1804,6 @@ function PropertyInput({ type, value, options, onChange, nodeId, propertyName, p
                 <AssetInput
                     value={value as string}
                     onChange={(url) => onChange(url)}
-                    graphId={projectId as Id<"projects"> | undefined}
                     nodeId={nodeId}
                     propertyName={propertyName}
                     accept="image/*"

@@ -2,19 +2,16 @@
 
 import { useState, useCallback } from "react";
 import posthog from "posthog-js";
-import { useMutation } from 'convex/react';
-import { api } from '@/convex/_generated/api';
-import { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { SidebarInput } from '@/components/ui/sidebar';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AssetValue } from '@/lib/types';
+import { useEditorHostConfig } from '@/lib/editor-host/context';
 
 interface AssetInputProps {
     value: AssetValue | string | undefined;
     onChange: (value: AssetValue | string) => void;
-    graphId: Id<"projects"> | undefined;
     nodeId: string;
     propertyName: string;
     accept?: string;
@@ -40,82 +37,39 @@ function getAssetId(value: AssetValue | string | undefined): string | undefined 
 export function AssetInput({
     value,
     onChange,
-    graphId,
     nodeId,
     propertyName,
     accept = 'image/*',
 }: AssetInputProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
-    const registerAsset = useMutation(api.assets.registerAsset);
-    const linkAssetToNode = useMutation(api.assets.linkAssetToNode);
-    const unlinkAssetFromNode = useMutation(api.assets.unlinkAssetFromNode);
+    const hostConfig = useEditorHostConfig();
+    const assetsService = hostConfig?.services?.assets;
+    const canUploadAssets = Boolean(hostConfig?.capabilities.canUploadAssets);
+    const hostRef = hostConfig?.ref;
+    const canManageAssets = Boolean(assetsService && canUploadAssets && hostRef !== undefined);
 
     const displayUrl = getUrl(value);
     const currentAssetId = getAssetId(value);
 
     const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file || !graphId) return;
+        if (!file || !canManageAssets || !assetsService || hostRef === undefined) return;
 
-        const existingAssetId = getAssetId(value);
+        const replaceExisting = Boolean(getAssetId(value));
 
         setIsUploading(true);
         setError(null);
 
         try {
-            // Unlink existing asset first (soft-delete for replacement)
-            if (existingAssetId) {
-                try {
-                    await unlinkAssetFromNode({
-                        nodeId,
-                        graphId,
-                        propertyName,
-                    });
-                } catch {
-                    // Ignore errors if no existing reference
-                }
-            }
-
-            // Get upload URL
-            const uploadUrl = await generateUploadUrl();
-
-            // Upload file to Convex storage
-            const response = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': file.type },
-                body: file,
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to upload file');
-            }
-
-            const { storageId } = await response.json();
-
-            // Register the asset
-            const { assetId, url } = await registerAsset({
-                storageId,
-                filename: file.name,
-                mimeType: file.type,
-                size: file.size,
-            });
-
-            if (!url) {
-                throw new Error('Failed to get asset URL');
-            }
-
-            // Link to node
-            await linkAssetToNode({
-                assetId,
+            const { assetId, url } = await assetsService.uploadAndLinkAsset({
+                ref: hostRef,
                 nodeId,
-                graphId,
                 propertyName,
+                file,
+                replaceExisting,
             });
 
-            // Update with the real Convex URL
             onChange({ url, assetId });
             toast.success('Asset uploaded');
 
@@ -129,18 +83,16 @@ export function AssetInput({
             setIsUploading(false);
             e.target.value = '';
         }
-    }, [graphId, nodeId, propertyName, value, generateUploadUrl, registerAsset, linkAssetToNode, unlinkAssetFromNode, onChange]);
+    }, [assetsService, canManageAssets, hostRef, nodeId, onChange, propertyName, value]);
 
     const handleRemove = useCallback(async () => {
-        if (!graphId) return;
-
         const existingAssetId = getAssetId(value);
 
         try {
-            if (existingAssetId) {
-                await unlinkAssetFromNode({
+            if (existingAssetId && canManageAssets && assetsService && hostRef !== undefined) {
+                await assetsService.unlinkAsset({
+                    ref: hostRef,
                     nodeId,
-                    graphId,
                     propertyName,
                 });
             }
@@ -150,7 +102,7 @@ export function AssetInput({
             toast.error('Failed to remove asset');
             posthog.capture('error_occurred', { context: 'asset_remove_failed', error: 'Failed to remove asset' });
         }
-    }, [graphId, nodeId, propertyName, value, unlinkAssetFromNode, onChange]);
+    }, [assetsService, canManageAssets, hostRef, nodeId, onChange, propertyName, value]);
 
     const handleUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         onChange(e.target.value);
@@ -174,13 +126,13 @@ export function AssetInput({
                         onChange={handleFileChange}
                         className="absolute inset-0 opacity-0 cursor-pointer w-full h-full disabled:cursor-not-allowed"
                         title="Upload image"
-                        disabled={isUploading || !graphId}
+                        disabled={isUploading || !canManageAssets}
                     />
                     <Button
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 shrink-0"
-                        disabled={isUploading || !graphId}
+                        disabled={isUploading || !canManageAssets}
                     >
                         {isUploading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -207,9 +159,9 @@ export function AssetInput({
                 <p className="text-xs text-destructive">{error}</p>
             )}
 
-            {!graphId && (
+            {!canManageAssets && (
                 <p className="text-xs text-muted-foreground">
-                    Save the project first to enable asset uploads
+                    Asset uploads are not available for this host
                 </p>
             )}
 

@@ -524,12 +524,20 @@ const getAncestorLoopId = (node: Node<TSLNodeData>, nodes: Node<TSLNodeData>[]):
     return null;
 };
 
+const resolveSubgraphScope = (
+    subgraph: Pick<SubgraphDefinition, 'scope' | 'templateId'> | undefined
+): 'project' | 'library' => {
+    if (subgraph?.scope === 'library' || subgraph?.scope === 'project') return subgraph.scope;
+    return subgraph?.templateId ? 'library' : 'project';
+};
+
 
 interface SubgraphStackItem {
     nodes: Node<TSLNodeData>[];
     edges: Edge[];
     originalNodeIds: string[];
     subgraphId: string | null; // The ID of the subgraph we were editing (or null for main graph)
+    editingScopeDraft: 'project' | 'library' | null;
     history: HistoryState; // Preserve history of the parent graph
     createInstanceOnSave?: boolean;
 }
@@ -609,6 +617,8 @@ interface EditorState {
     subgraphs: Record<string, SubgraphDefinition>;
     editorMode: EditorMode;
     editingSubgraphId: string | null;
+    editingSubgraphScopeDraft: 'project' | 'library' | null;
+    setEditingSubgraphScopeDraft: (scope: 'project' | 'library') => void;
 
     // Code nodes state
     codeNodes: Record<string, CodeNodeDefinition>;
@@ -655,11 +665,9 @@ interface EditorState {
     // Stack for nested subgraph editing
     subgraphStack: SubgraphStackItem[];
 
-    // Auto-save state
-    autoSaveCallback: (() => Promise<void>) | null;
+    // Save status state
     isSaving: boolean;
     isDirty: boolean; // True when there are unsaved changes
-    autoSaveEnabled: boolean;
 
     // Project ID for asset management
     projectId: string | null;
@@ -675,10 +683,10 @@ interface EditorState {
         onCodeNodeTemplateCreate?: (codeNode: CodeNodeDefinition) => Promise<{ templateId: string; version: number }>;
         onCodeNodeTemplateUpdate?: (templateId: string, codeNode: CodeNodeDefinition) => Promise<{ version: number }>;
     }) => void;
-    setAutoSaveCallback: (callback: (() => Promise<void>) | null) => void;
     setProjectId: (projectId: string | null) => void;
-    triggerAutoSave: () => void;
+    setSaving: (saving: boolean) => void;
     markDirty: () => void;
+    markSaved: () => void;
 
     onNodesChange: OnNodesChange<Node<TSLNodeData>>;
     onEdgesChange: OnEdgesChange;
@@ -984,13 +992,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     subgraphs: {},
     editorMode: 'main',
     editingSubgraphId: null,
+    editingSubgraphScopeDraft: null,
     subgraphStack: [],
 
-    // Auto-save state initialization
-    autoSaveCallback: null,
+    // Save status state initialization
     isSaving: false,
     isDirty: false,
-    autoSaveEnabled: true,
 
     // Project ID initialization
     projectId: null,
@@ -1007,6 +1014,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Canvas Mode
     canvasMode: 'pan',
     setCanvasMode: (mode) => set({ canvasMode: mode }),
+    setEditingSubgraphScopeDraft: (scope) => {
+        if (get().editorMode !== 'subgraph') return;
+        set({ editingSubgraphScopeDraft: scope });
+    },
 
     // Debug Mode - off by default
     debugMode: false,
@@ -1016,8 +1027,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     history: createEmptyHistoryState(),
     isUndoRedoInProgress: false,
 
-    // Auto-save methods
-    setAutoSaveCallback: (callback) => set({ autoSaveCallback: callback }),
+    // Save status methods
     setProjectId: (projectId) => {
         const currentId = get().projectId;
         if (currentId !== projectId && projectId) {
@@ -1025,6 +1035,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
         set({ projectId });
     },
+    setSaving: (saving) => set({ isSaving: saving }),
 
     // Template callbacks setter
     setTemplateCallbacks: (callbacks) => set({
@@ -1034,86 +1045,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         onCodeNodeTemplateUpdate: callbacks.onCodeNodeTemplateUpdate ?? null,
     }),
 
-    markDirty: () => {
-        set({ isDirty: true });
-        // Trigger auto-save when marked dirty
-        useEditorStore.getState().triggerAutoSave();
-    },
-
-    triggerAutoSave: (() => {
-        let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-        return () => {
-            const state = useEditorStore.getState();
-            if (!state.autoSaveEnabled || !state.autoSaveCallback) return;
-
-            // If already saving, just ensure dirty flag is set and exit
-            // The completion handler will pick it up
-            if (state.isSaving) {
-                if (!state.isDirty) {
-                    useEditorStore.setState({ isDirty: true });
-                }
-                return;
-            }
-
-            // If not dirty, nothing to save
-            if (!state.isDirty) return;
-
-            // Clear any pending save
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-            }
-
-            // Debounce: wait 2 seconds before saving
-            timeoutId = setTimeout(async () => {
-                const currentState = useEditorStore.getState();
-
-                // Double-check we're not already saving (race condition guard)
-                if (currentState.isSaving) {
-                    return;
-                }
-
-                if (!currentState.isDirty) return;
-
-                // Clear dirty flag BEFORE starting save - this captures the current state.
-                // If changes happen during the save, markDirty() will set isDirty: true again,
-                // and the follow-up check will trigger another save.
-                useEditorStore.setState({ isSaving: true, isDirty: false });
-
-                try {
-                    await currentState.autoSaveCallback?.();
-
-                    // Track save
-                    if (currentState.projectId) {
-                        posthog.capture('project_saved', { project_id: currentState.projectId });
-                    }
-
-                    useEditorStore.setState({ isSaving: false });
-
-                    // Immediately check if more changes occurred during save
-                    // Use a small delay to ensure state is settled
-                    setTimeout(() => {
-                        const afterSaveState = useEditorStore.getState();
-                        if (afterSaveState.isDirty && !afterSaveState.isSaving) {
-                            afterSaveState.triggerAutoSave();
-                        }
-                    }, 100);
-                } catch (error) {
-                    console.error('Auto-save failed:', error);
-                    // Re-mark as dirty since save failed - the original changes weren't persisted
-                    useEditorStore.setState({ isSaving: false, isDirty: true });
-
-                    // On error, retry after a delay
-                    setTimeout(() => {
-                        const afterErrorState = useEditorStore.getState();
-                        if (afterErrorState.isDirty && !afterErrorState.isSaving) {
-                            afterErrorState.triggerAutoSave();
-                        }
-                    }, 1000);
-                }
-            }, 2000);
-        };
-    })(),
+    markDirty: () => set({ isDirty: true }),
+    markSaved: () => set({ isDirty: false }),
 
     onNodesChange: (changes) => {
         const hasStructuralChange = changes.some(change => {
@@ -2290,6 +2223,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     // Reset subgraph state on load
                     editorMode: 'main',
                     editingSubgraphId: null,
+                    editingSubgraphScopeDraft: null,
                     subgraphStack: [],
                     history: createEmptyHistoryState(),
                 });
@@ -2536,6 +2470,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges,
             originalNodeIds,
             subgraphId: editingSubgraphId,
+            editingScopeDraft: state.editingSubgraphScopeDraft,
             history: get().history, // Save current history
             createInstanceOnSave: options?.createInstanceOnSave ?? false,
         };
@@ -2576,6 +2511,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphStack: [...subgraphStack, stackItem],
             editorMode: 'subgraph',
             editingSubgraphId: subgraphId,
+            editingSubgraphScopeDraft: resolveSubgraphScope(subgraph),
             nodes: [inputNode, outputNode, ...subgraph.nodes],
             edges: [...subgraph.edges],
             selectedNodeId: null,
@@ -2586,13 +2522,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     exitSubgraphEditor: async (save: boolean, nameOverride?: string) => {
-        const { editingSubgraphId, nodes, edges, subgraphs, subgraphStack } = get();
+        const { editingSubgraphId, nodes, edges, subgraphs, subgraphStack, editingSubgraphScopeDraft } = get();
 
         if (subgraphStack.length === 0 || !editingSubgraphId) {
             // Fallback for safety, though stack should not be empty if we are in subgraph mode
             set({
                 editorMode: 'main',
                 editingSubgraphId: null,
+                editingSubgraphScopeDraft: null,
             });
             return null;
         }
@@ -2645,8 +2582,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             // Keep all edges including those connected to anchor nodes so we preserve inputs/outputs wiring
             const internalEdges = edges;
 
+            const currentSubgraph = subgraphs[editingSubgraphId];
+            if (!currentSubgraph) return null;
+
             const updatedSubgraph: SubgraphDefinition = {
-                ...subgraphs[editingSubgraphId],
+                ...currentSubgraph,
                 inputs: inputPorts,
                 outputs: outputPorts,
                 nodes: internalNodes,
@@ -2659,99 +2599,62 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (nameOverride) {
                 updatedSubgraph.name = nameOverride;
             }
-            if (!updatedSubgraph.scope) {
-                updatedSubgraph.scope = subgraphs[editingSubgraphId]?.templateId ? 'library' : 'project';
-            }
+            const targetScope = editingSubgraphScopeDraft ?? resolveSubgraphScope(currentSubgraph);
+            updatedSubgraph.scope = targetScope;
 
-            // Update subgraphs first
-            // Note: We don't snapshot here because exitSubgraphEditor is a meta-action
-            // that restores previous state + new node. The new node addition will be the "change"
-            // in the PARENT history if we wanted to support undoing "Create Subgraph".
-            // But here we are just saving internally.
-
-            // Actually, we SHOULD update the subgraphs definition in the parent context's history
-            // or just let it be. For now, we update the store.
-            set({
-                subgraphs: { ...subgraphs, [editingSubgraphId]: updatedSubgraph },
-            });
-
-            // Push to DB: Create new template OR update existing (library scope only)
-            const currentSubgraph = get().subgraphs[editingSubgraphId];
             const { onSubgraphTemplateCreate, onSubgraphTemplateUpdate } = get();
-            const shouldSyncTemplate = updatedSubgraph.scope === 'library';
+            let nextTemplateId = currentSubgraph.templateId;
+            let nextTemplateVersion = currentSubgraph.templateVersion;
 
-            if (currentSubgraph?.templateId) {
-                // UPDATE existing template
-                if (onSubgraphTemplateUpdate) {
-                    try {
-                        if (shouldSyncTemplate) {
-                            const result = await onSubgraphTemplateUpdate(currentSubgraph.templateId, updatedSubgraph);
-                            // Update local version
-                            const latestSubgraphs = useEditorStore.getState().subgraphs;
-                            if (latestSubgraphs[editingSubgraphId]) {
-                                useEditorStore.setState({
-                                    subgraphs: {
-                                        ...latestSubgraphs,
-                                        [editingSubgraphId]: {
-                                            ...latestSubgraphs[editingSubgraphId],
-                                            templateVersion: result.version,
-                                        },
-                                    },
-                                });
-                            }
-                        } else {
-                            // Mark template as project-scoped so it doesn't appear in library lists
-                            const result = await onSubgraphTemplateUpdate(currentSubgraph.templateId, {
-                                ...updatedSubgraph,
-                                scope: 'project',
-                            });
-                            const latestSubgraphs = useEditorStore.getState().subgraphs;
-                            if (latestSubgraphs[editingSubgraphId]) {
-                                useEditorStore.setState({
-                                    subgraphs: {
-                                        ...latestSubgraphs,
-                                        [editingSubgraphId]: {
-                                            ...latestSubgraphs[editingSubgraphId],
-                                            templateVersion: result.version,
-                                        },
-                                    },
-                                });
-                            }
+            try {
+                if (targetScope === 'library') {
+                    if (nextTemplateId) {
+                        if (!onSubgraphTemplateUpdate) {
+                            throw new Error('Library subgraph sync is not available for this host.');
                         }
-                    } catch (error) {
-                        console.error('Failed to update subgraph template in DB:', error);
-                        const message = getErrorMessage(error);
-                        toast.error(message);
-                        get().trackEvent('error_occurred', { context: 'create_subgraph_template', error: message });
-                    }
-                }
-            } else {
-                // CREATE new template (first time saving this subgraph)
-                if (onSubgraphTemplateCreate && shouldSyncTemplate) {
-                    try {
+                        const result = await onSubgraphTemplateUpdate(nextTemplateId, updatedSubgraph);
+                        nextTemplateVersion = result.version;
+                    } else {
+                        if (!onSubgraphTemplateCreate) {
+                            throw new Error('Library subgraph sync is not available for this host.');
+                        }
                         const result = await onSubgraphTemplateCreate(updatedSubgraph);
-                        // Update local definition with template reference
-                        const latestSubgraphs = useEditorStore.getState().subgraphs;
-                        if (latestSubgraphs[editingSubgraphId]) {
-                            useEditorStore.setState({
-                                subgraphs: {
-                                    ...latestSubgraphs,
-                                    [editingSubgraphId]: {
-                                        ...latestSubgraphs[editingSubgraphId],
-                                        templateId: result.templateId,
-                                        templateVersion: result.version,
-                                    },
-                                },
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Failed to create subgraph template in DB:', error);
-                        const message = getErrorMessage(error);
-                        toast.error(message);
-                        get().trackEvent('error_occurred', { context: 'update_subgraph_template', error: message });
+                        nextTemplateId = result.templateId;
+                        nextTemplateVersion = result.version;
                     }
+                } else if (nextTemplateId) {
+                    if (!onSubgraphTemplateUpdate) {
+                        throw new Error('Subgraph scope conversion is not available for this host.');
+                    }
+                    const result = await onSubgraphTemplateUpdate(nextTemplateId, {
+                        ...updatedSubgraph,
+                        scope: 'project',
+                    });
+                    nextTemplateVersion = result.version;
                 }
+            } catch (error) {
+                console.error('Failed to sync subgraph template:', error);
+                const message = getErrorMessage(error);
+                toast.error(message);
+                get().trackEvent('error_occurred', { context: 'sync_subgraph_template', error: message });
+                return null;
             }
+
+            if (!nextTemplateId) {
+                nextTemplateVersion = undefined;
+            }
+
+            const committedSubgraph: SubgraphDefinition = {
+                ...updatedSubgraph,
+                scope: targetScope,
+                templateId: nextTemplateId,
+                templateVersion: nextTemplateVersion,
+            };
+
+            set({
+                subgraphs: { ...subgraphs, [editingSubgraphId]: committedSubgraph },
+            });
+            get().markDirty();
 
             // Prepare instance node data for deferred creation
             const originalNodeIds = stackItem.originalNodeIds;
@@ -2776,6 +2679,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         selectedNodeIds: [],
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
+                        editingSubgraphScopeDraft: stackItem.editingScopeDraft,
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
@@ -2844,6 +2748,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         selectedNodeIds: [],
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
+                        editingSubgraphScopeDraft: stackItem.editingScopeDraft,
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
@@ -2883,6 +2788,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     selectedNodeIds: [instanceId],
                     editorMode: previousMode,
                     editingSubgraphId: previousSubgraphId,
+                    editingSubgraphScopeDraft: stackItem.editingScopeDraft,
                     history: stackItem.history, // Restore parent history
                 });
             }, 0);
@@ -2899,6 +2805,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphStack: newStack,
             editorMode: previousMode,
             editingSubgraphId: previousSubgraphId,
+            editingSubgraphScopeDraft: stackItem.editingScopeDraft,
             selectedNodeId: null,
             selectedNodeIds: [],
             history: stackItem.history, // Restore parent history
@@ -3985,14 +3892,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphs: {},
             editorMode: 'main',
             editingSubgraphId: null,
+            editingSubgraphScopeDraft: null,
             subgraphStack: [],
-            autoSaveCallback: null,
             isSaving: false,
             isDirty: false,
             history: createEmptyHistoryState(),
             canvasMode: 'pan',
             codeNodes: {},
             previewSettings: createDefaultPreviewSettings(),
+            previewSnapshotProvider: null,
+            projectId: null,
+            onSubgraphTemplateCreate: null,
+            onSubgraphTemplateUpdate: null,
+            onCodeNodeTemplateCreate: null,
+            onCodeNodeTemplateUpdate: null,
         });
     },
 }));

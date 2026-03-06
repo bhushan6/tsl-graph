@@ -10,6 +10,8 @@ import { useEditorStore } from '@/store/editor';
 import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
 import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
+import { useEditorHostConfig } from '@/lib/editor-host/context';
+import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
 import {
     Dialog,
     DialogContent,
@@ -53,8 +55,15 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const editorMode = useEditorStore((s) => s.editorMode);
     const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
     const getRootGraph = useEditorStore((s) => s.getRootGraph);
+    const hostConfig = useEditorHostConfig();
 
     const extensions = useMemo(() => [javascript()], []);
+    const enabledGraphs = useMemo(
+        () => normalizeEnabledGraphs(hostConfig?.enabledGraphs),
+        [hostConfig?.enabledGraphs]
+    );
+    const materialGraphEnabled = enabledGraphs.includes('material');
+    const postGraphEnabled = enabledGraphs.includes('postprocessing');
 
     const subgraphDefinition = useMemo<SubgraphDefinition | null>(() => {
         if (editorMode !== 'subgraph' || !editingSubgraphId) return null;
@@ -83,43 +92,69 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         if (subgraphDefinition) {
             return compileSubgraphCode(subgraphDefinition, subgraphs, codeNodes, { globals });
         }
-        const materialGraph = getRootGraph('material');
-        const postGraph = getRootGraph('post');
-        let materialCode = '// Material graph could not be compiled.';
-        try {
-            materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Material graph could not be compiled.';
-            materialCode = `// ${message}`;
+
+        const sections: string[] = [];
+
+        if (materialGraphEnabled) {
+            const materialGraph = getRootGraph('material');
+            let materialCode = '// Material graph could not be compiled.';
+            try {
+                materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Material graph could not be compiled.';
+                materialCode = `// ${message}`;
+            }
+
+            sections.push('// Material Graph');
+            sections.push(materialCode);
         }
 
-        let postCode = '// Post graph could not be compiled.';
         let postFn: string | null = null;
-        try {
-            const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
-            postCode = postCompiled.code;
-            postFn = postCompiled.functionName;
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Post graph could not be compiled.';
-            postCode = `// ${message}`;
+        if (postGraphEnabled) {
+            const postGraph = getRootGraph('post');
+            let postCode = '// Post graph could not be compiled.';
+            try {
+                const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
+                postCode = postCompiled.code;
+                postFn = postCompiled.functionName;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Post graph could not be compiled.';
+                postCode = `// ${message}`;
+            }
+
+            if (sections.length > 0) {
+                sections.push('');
+            }
+            sections.push('// Post Graph');
+            sections.push(postCode);
+            sections.push('');
+            sections.push('// Pipeline Wiring');
+            sections.push('const scenePass = pass(scene, camera);');
+            sections.push('scenePass.setMRT(mrt({ output, normal: normalView }));');
+            sections.push('const postProcessing = new PostProcessing(renderer);');
+            if (postFn) {
+                sections.push(`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`);
+                sections.push('postProcessing.render();');
+            } else {
+                sections.push('renderer.render(scene, camera);');
+            }
         }
 
-        return [
-            '// Material Graph',
-            materialCode,
-            '',
-            '// Post Graph',
-            postCode,
-            '',
-            '// Pipeline Wiring',
-            'const scenePass = pass(scene, camera);',
-            'scenePass.setMRT(mrt({ output, normal: normalView }));',
-            'const postProcessing = new PostProcessing(renderer);',
-            ...(postFn
-                ? [`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`, 'postProcessing.render();']
-                : ['renderer.render(scene, camera);']),
-        ].join('\n');
-    }, [graphStructureVersion, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+        if (sections.length === 0) {
+            return '// No root graphs are enabled in host configuration.';
+        }
+
+        return sections.join('\n');
+    }, [
+        graphStructureVersion,
+        subgraphs,
+        codeNodes,
+        globals,
+        subgraphDefinition,
+        getRootGraph,
+        materialGraphEnabled,
+        postGraphEnabled,
+    ]);
 
     const importGroups = useMemo<ImportGroup[]>(() => {
         // Keep import list in sync with graph topology changes.
@@ -129,14 +164,30 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
                 getRequiredImportsByModule(subgraphDefinition.nodes, subgraphs, codeNodes, globals)
             );
         }
-        const materialGraph = getRootGraph('material');
-        const postGraph = getRootGraph('post');
-        return mergeImportGroups([
-            ...getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals),
-            ...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals),
-            { from: 'three/tsl', imports: ['pass', 'mrt', 'output', 'normalView'] },
-        ]);
-    }, [graphStructureVersion, subgraphs, codeNodes, globals, subgraphDefinition, getRootGraph]);
+        const groups: ImportGroup[] = [];
+
+        if (materialGraphEnabled) {
+            const materialGraph = getRootGraph('material');
+            groups.push(...getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals));
+        }
+
+        if (postGraphEnabled) {
+            const postGraph = getRootGraph('post');
+            groups.push(...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals));
+            groups.push({ from: 'three/tsl', imports: ['pass', 'mrt', 'output', 'normalView'] });
+        }
+
+        return mergeImportGroups(groups);
+    }, [
+        graphStructureVersion,
+        subgraphs,
+        codeNodes,
+        globals,
+        subgraphDefinition,
+        getRootGraph,
+        materialGraphEnabled,
+        postGraphEnabled,
+    ]);
 
     const importBlock = useMemo(() => {
         return importGroups
@@ -148,19 +199,27 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         const codeWithImports = importBlock
             ? `${importBlock}\n\n${compiledCode}`
             : compiledCode;
+        const needsPostProcessingImport = postGraphEnabled && !subgraphDefinition;
         return subgraphDefinition
             ? codeWithImports
-            : `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`;
-    }, [compiledCode, importBlock, subgraphDefinition]);
+            : needsPostProcessingImport
+                ? `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`
+                : codeWithImports;
+    }, [compiledCode, importBlock, postGraphEnabled, subgraphDefinition]);
 
     const displayedNodeCount = useMemo(() => {
         // Keep displayed count synced when root graph changes.
         void graphStructureVersion;
         if (subgraphDefinition) return subgraphDefinition.nodes.length;
-        const materialGraph = getRootGraph('material');
-        const postGraph = getRootGraph('post');
-        return materialGraph.nodes.length + postGraph.nodes.length;
-    }, [graphStructureVersion, subgraphDefinition, getRootGraph]);
+        let totalNodes = 0;
+        if (materialGraphEnabled) {
+            totalNodes += getRootGraph('material').nodes.length;
+        }
+        if (postGraphEnabled) {
+            totalNodes += getRootGraph('post').nodes.length;
+        }
+        return totalNodes;
+    }, [graphStructureVersion, subgraphDefinition, getRootGraph, materialGraphEnabled, postGraphEnabled]);
 
     useEffect(() => {
         if (!isOpen || tslUtilsSource.length > 0 || tslUtilsSourceError) return;

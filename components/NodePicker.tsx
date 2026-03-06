@@ -3,14 +3,11 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import posthog from "posthog-js";
 import { useReactFlow } from '@xyflow/react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
 import { registry } from '@/lib/registry';
 import { POST_ANCHOR_NODE_TYPES } from '@/lib/nodes';
 import { useEditorStore } from '@/store/editor';
 import { cn, getErrorMessage } from '@/lib/utils';
-import { NodeType, SubgraphPort, TSLNodeData } from '@/lib/types';
+import { CodeNodeDefinition, CodeNodeLanguage, NodeType, SubgraphDefinition, SubgraphPort, TSLNodeData } from '@/lib/types';
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { buildLocalGetQuickCreateEntries } from '@/lib/node-picker-utils';
 import { getLocalSetReferenceLabel, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
@@ -30,6 +27,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useTemplateLibrary } from '@/lib/editor-host/template-library';
 
 // Anchor node types that need special handling
 const ANCHOR_NODE_TYPES = ['subgraph/input', 'subgraph/output'] as const;
@@ -101,35 +99,50 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     // TEMPLATES FROM DATABASE
     // ==========================================
 
-    // Fetch user's saved templates
-    const userSubgraphTemplates = useQuery(api.templates.listSubgraphTemplates);
-    const userCodeNodeTemplates = useQuery(api.templates.listCodeNodeTemplates);
-
-    // Fetch public/community templates
-    const publicSubgraphTemplates = useQuery(api.templates.listPublicSubgraphTemplates);
-    const publicCodeNodeTemplates = useQuery(api.templates.listPublicCodeNodeTemplates);
+    const {
+        userSubgraphTemplates,
+        userCodeNodeTemplates,
+        publicSubgraphTemplates,
+        publicCodeNodeTemplates,
+        deleteSubgraphTemplate,
+        deleteCodeNodeTemplate,
+    } = useTemplateLibrary();
 
     const getSubgraphScope = useCallback((def: { scope?: string; templateId?: string }) => {
         if (def.scope === 'library' || def.scope === 'project') return def.scope;
         return def.templateId ? 'library' : 'project';
     }, []);
 
+    const getTemplateSubgraphId = useCallback((template: { _id: string; data?: unknown }) => {
+        const templateData = (template.data ?? {}) as { id?: string };
+        const rawId = typeof templateData.id === 'string' && templateData.id.trim().length > 0
+            ? templateData.id
+            : template._id;
+        return rawId.startsWith('custom/') ? rawId : `custom/${rawId}`;
+    }, []);
+
     // Filter user's subgraph templates by search
     const filteredUserSubgraphTemplates = useMemo(() => {
-        if (!userSubgraphTemplates) return [];
         const query = searchQuery.toLowerCase();
         return userSubgraphTemplates.filter(
             t => {
                 const scope = getSubgraphScope((t.data as { scope?: string; templateId?: string }) || {});
                 if (scope === 'project') return false;
+                const templateSubgraphId = getTemplateSubgraphId(t);
+                const localSubgraph = subgraphs[templateSubgraphId];
+                if (localSubgraph && getSubgraphScope(localSubgraph) === 'project') return false;
                 return !query || t.name.toLowerCase().includes(query);
             }
         );
-    }, [userSubgraphTemplates, searchQuery, getSubgraphScope]);
+    }, [userSubgraphTemplates, searchQuery, getSubgraphScope, getTemplateSubgraphId, subgraphs]);
+
+    const userSubgraphTemplateIds = useMemo(
+        () => new Set(userSubgraphTemplates.map((template) => template._id)),
+        [userSubgraphTemplates]
+    );
 
     // Filter user's code node templates by search
     const filteredUserCodeNodeTemplates = useMemo(() => {
-        if (!userCodeNodeTemplates) return [];
         const query = searchQuery.toLowerCase();
         return userCodeNodeTemplates.filter(
             t => !query || t.name.toLowerCase().includes(query)
@@ -138,7 +151,6 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
 
     // Filter public subgraph templates by search
     const filteredPublicSubgraphTemplates = useMemo(() => {
-        if (!publicSubgraphTemplates) return [];
         const query = searchQuery.toLowerCase();
         return publicSubgraphTemplates.filter(
             t => !query || t.name.toLowerCase().includes(query)
@@ -147,7 +159,6 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
 
     // Filter public code node templates by search
     const filteredPublicCodeNodeTemplates = useMemo(() => {
-        if (!publicCodeNodeTemplates) return [];
         const query = searchQuery.toLowerCase();
         return publicCodeNodeTemplates.filter(
             t => !query || t.name.toLowerCase().includes(query)
@@ -165,9 +176,24 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
         return projectSubgraphs.filter((sg) => sg.name.toLowerCase().includes(query));
     }, [projectSubgraphs, searchQuery]);
 
+    const embeddedLibrarySubgraphs = useMemo(() => {
+        return Object.values(subgraphs).filter((sg) => {
+            if (getSubgraphScope(sg) !== 'library') return false;
+            if (!sg.templateId) return true;
+            return !userSubgraphTemplateIds.has(sg.templateId);
+        });
+    }, [subgraphs, getSubgraphScope, userSubgraphTemplateIds]);
+
+    const filteredEmbeddedLibrarySubgraphs = useMemo(() => {
+        if (!searchQuery) return embeddedLibrarySubgraphs;
+        const query = searchQuery.toLowerCase();
+        return embeddedLibrarySubgraphs.filter((sg) => sg.name.toLowerCase().includes(query));
+    }, [embeddedLibrarySubgraphs, searchQuery]);
+
     const hasUserTemplates = filteredUserSubgraphTemplates.length > 0 || filteredUserCodeNodeTemplates.length > 0;
     const hasPublicTemplates = filteredPublicSubgraphTemplates.length > 0 || filteredPublicCodeNodeTemplates.length > 0;
     const hasProjectSubgraphs = filteredProjectSubgraphs.length > 0;
+    const hasEmbeddedLibrarySubgraphs = filteredEmbeddedLibrarySubgraphs.length > 0;
 
     const handleAddNode = useCallback(
         (type: NodeType, data?: Partial<TSLNodeData>) => {
@@ -194,7 +220,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     const addCodeNodeDefinition = useEditorStore((s) => s.addCodeNodeDefinition);
 
     const handleAddSubgraphTemplate = useCallback(
-        (template: NonNullable<typeof userSubgraphTemplates>[number]) => {
+        (template: (typeof userSubgraphTemplates)[number]) => {
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
 
@@ -206,26 +232,40 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
             position.x += (Math.random() - 0.5) * 100;
             position.y += (Math.random() - 0.5) * 100;
 
-            const rawId = template.data.id || template._id;
+            const templateData = (template.data ?? {}) as {
+                id?: string;
+                name?: string;
+                scope?: 'project' | 'library';
+                inputs?: SubgraphPort[];
+                outputs?: SubgraphPort[];
+                nodes?: unknown[];
+                edges?: unknown[];
+                createdAt?: number;
+                [key: string]: unknown;
+            };
+            const rawId = templateData.id || template._id;
             const subgraphId = rawId.startsWith('custom/') ? rawId : `custom/${rawId}`;
             const existingDefinition = subgraphs[subgraphId];
 
             // Embed the template definition into the store with template reference
             const definition = {
-                ...template.data,
+                ...templateData,
                 id: subgraphId,
+                name: typeof templateData.name === 'string' ? templateData.name : template.name,
                 templateId: template._id,
                 templateVersion: template.version,
-                scope: (template.data as { scope?: string })?.scope ?? 'library',
-                inputs: template.data.inputs || [],
-                outputs: template.data.outputs || [],
-                nodes: template.data.nodes || [],
-                edges: template.data.edges || [],
+                scope: templateData.scope === 'project' ? 'project' : 'library',
+                inputs: templateData.inputs || [],
+                outputs: templateData.outputs || [],
+                nodes: templateData.nodes || [],
+                edges: templateData.edges || [],
+                createdAt: typeof templateData.createdAt === 'number' ? templateData.createdAt : Date.now(),
+                updatedAt: Date.now(),
             };
 
             if (!existingDefinition) {
                 // First add the definition to the store (using add, not update!)
-                addSubgraphDefinition(definition);
+                addSubgraphDefinition(definition as SubgraphDefinition);
             }
 
             // Then add the node instance
@@ -258,7 +298,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     );
 
     const handleAddCodeNodeTemplate = useCallback(
-        (template: NonNullable<typeof userCodeNodeTemplates>[number]) => {
+        (template: (typeof userCodeNodeTemplates)[number]) => {
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
 
@@ -271,44 +311,54 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
             position.y += (Math.random() - 0.5) * 100;
 
             // Generate a unique ID for this instance in the project
-            const instanceId = `${template.data.id || 'code-template'}-${Date.now()}`;
+            const templateData = (template.data ?? {}) as {
+                id?: string;
+                name?: string;
+                language?: CodeNodeLanguage;
+                code?: string;
+                inputs?: SubgraphPort[];
+                output?: SubgraphPort;
+                createdAt?: number;
+                [key: string]: unknown;
+            };
+            const instanceId = `${templateData.id || 'code-template'}-${Date.now()}`;
 
             // Embed the template definition into the store with template reference
             const definition = {
-                ...template.data,
+                ...templateData,
                 id: instanceId,
+                name: typeof templateData.name === 'string' ? templateData.name : template.name,
                 templateId: template._id,
                 templateVersion: template.version,
-                language: template.data.language ?? 'tsl',
-                code: template.data.code || '',
-                inputs: template.data.inputs || [],
-                output: template.data.output,
+                language: templateData.language ?? 'tsl',
+                code: templateData.code || '',
+                inputs: templateData.inputs || [],
+                output: templateData.output ?? { id: 'out', label: 'Out', type: 'any' },
+                createdAt: typeof templateData.createdAt === 'number' ? templateData.createdAt : Date.now(),
+                updatedAt: Date.now(),
             };
 
             // First add the definition to the store (using add, not update!)
-            addCodeNodeDefinition(definition);
+            addCodeNodeDefinition(definition as CodeNodeDefinition);
 
             // Then add the node instance
             addNode(instanceId as NodeType, position, {
-                dynamicPorts: [...(template.data.inputs || []), template.data.output],
+                dynamicPorts: [...(templateData.inputs || []), templateData.output].filter(Boolean) as SubgraphPort[],
             });
         },
         [screenToFlowPosition, addNode, addCodeNodeDefinition]
     );
 
-    // Delete mutations
-    const deleteSubgraphTemplate = useMutation(api.templates.deleteSubgraphTemplate);
-    const deleteCodeNodeTemplate = useMutation(api.templates.deleteCodeNodeTemplate);
     const [deletingTemplates, setDeletingTemplates] = useState<Set<string>>(new Set());
 
     const handleDeleteSubgraphTemplate = useCallback(
-        async (templateId: Id<"subgraphTemplates">, templateName: string, e: React.MouseEvent) => {
+        async (templateId: string, templateName: string, e: React.MouseEvent) => {
             e.stopPropagation();
             if (deletingTemplates.has(templateId)) return;
 
             setDeletingTemplates(prev => new Set(prev).add(templateId));
             try {
-                await deleteSubgraphTemplate({ id: templateId });
+                await deleteSubgraphTemplate(templateId);
                 toast.success(`Deleted "${templateName}"`);
             } catch (error) {
                 console.error('Failed to delete subgraph template:', error);
@@ -327,13 +377,13 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
     );
 
     const handleDeleteCodeNodeTemplate = useCallback(
-        async (templateId: Id<"codeNodeTemplates">, templateName: string, e: React.MouseEvent) => {
+        async (templateId: string, templateName: string, e: React.MouseEvent) => {
             e.stopPropagation();
             if (deletingTemplates.has(templateId)) return;
 
             setDeletingTemplates(prev => new Set(prev).add(templateId));
             try {
-                await deleteCodeNodeTemplate({ id: templateId });
+                await deleteCodeNodeTemplate(templateId);
                 toast.success(`Deleted "${templateName}"`);
             } catch (error) {
                 console.error('Failed to delete code node template:', error);
@@ -555,11 +605,12 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                 ))}
 
                 {/* Custom Nodes Section - User's templates + Community templates */}
-                {(showCustomSection || hasProjectSubgraphs || hasUserTemplates || hasPublicTemplates) && (
+                {(showCustomSection || hasProjectSubgraphs || hasEmbeddedLibrarySubgraphs || hasUserTemplates || hasPublicTemplates) && (
                     <CategoryGroup
                         title="Custom Nodes"
                         count={
                             filteredProjectSubgraphs.length +
+                            filteredEmbeddedLibrarySubgraphs.length +
                             filteredUserSubgraphTemplates.length +
                             filteredUserCodeNodeTemplates.length +
                             filteredPublicSubgraphTemplates.length +
@@ -619,12 +670,30 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                                 </SidebarMenuItem>
                             ))}
 
-                            {hasUserTemplates && (
+                            {(hasEmbeddedLibrarySubgraphs || hasUserTemplates) && (
                                 <div className="my-1.5 px-2">
                                     {filteredProjectSubgraphs.length > 0 && <div className="h-px bg-sidebar-border/50" />}
                                     <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1 block">Library</span>
                                 </div>
                             )}
+
+                            {filteredEmbeddedLibrarySubgraphs.map((subgraph) => (
+                                <SidebarMenuItem key={`${subgraph.id}:embedded`}>
+                                    <button
+                                        onClick={() => handleAddProjectSubgraph(
+                                            subgraph.id,
+                                            [...(subgraph.inputs || []), ...(subgraph.outputs || [])]
+                                        )}
+                                        className={cn(
+                                            menuButtonStyles,
+                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
+                                        )}
+                                    >
+                                        <Layers className="w-3 h-3" />
+                                        <span className="truncate flex-1 text-left">{subgraph.name}</span>
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
 
                             {/* User's Subgraph Templates */}
                             {filteredUserSubgraphTemplates.map((template) => (
