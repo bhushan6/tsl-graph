@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { EditorHost } from '@/components/editor-host/EditorHost';
-import { compileGraph, compilePostGraph } from '@/lib/compiler';
+import { compileGraph, compilePostGraph, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
+import { inlineTslUtilsImports } from '@/lib/editor-host/tsl-utils-inline';
 import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { useEditorStore, type MaterialNodeType } from '@/store/editor';
 import {
@@ -17,6 +18,7 @@ import {
     postMessageToHost,
     type EditorGraphChangedPayload,
     type EditorReadyPayload,
+    type GetCodeResponsePayload,
     type GetUniformSchemaResponsePayload,
     type SetUniformValuesPayload,
     type SetUniformValuesResponsePayload,
@@ -114,14 +116,82 @@ const createUniformsSignature = (uniforms: UniformSchemaEntry[]): string => JSON
     }))
 );
 
-const stripMaterialDeclarationBlock = (code: string): string => {
-    const marker = '// Material\n';
-    const markerIndex = code.lastIndexOf(marker);
-    if (markerIndex < 0) {
-        return code.trimEnd();
+const MATERIAL_DECLARATION_LINE_PATTERN = /^const material = new ([A-Za-z0-9_]+)\(\);$/;
+const RUNTIME_UNIFORM_LINE_PATTERN = /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*__uniform\("([^"]+)",\s*(.*),\s*"[^"]+"\);$/;
+
+const compileMaterialApplierCode = (code: string, helperCode: string | null = null): string => {
+    const sourceLines = code.split('\n');
+    const bodyLines: string[] = [];
+    const uniformEntries: Array<{ id: string; variableName: string }> = [];
+    let materialClass: string | null = null;
+
+    sourceLines.forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed === '// Generated TSL Code') return;
+
+        const declarationMatch = trimmed.match(MATERIAL_DECLARATION_LINE_PATTERN);
+        if (declarationMatch) {
+            materialClass = declarationMatch[1];
+            return;
+        }
+        if (trimmed === '// Material') return;
+
+        const runtimeUniformMatch = trimmed.match(RUNTIME_UNIFORM_LINE_PATTERN);
+        if (runtimeUniformMatch) {
+            const [, variableName, uniformId, initialValueExpression] = runtimeUniformMatch;
+            uniformEntries.push({ id: uniformId, variableName });
+            bodyLines.push(`const ${variableName} = uniform(${initialValueExpression});`);
+            return;
+        }
+
+        bodyLines.push(line);
+    });
+
+    while (bodyLines.length > 0 && bodyLines[0].trim() === '') {
+        bodyLines.shift();
     }
-    return code.slice(0, markerIndex).trimEnd();
+    while (bodyLines.length > 0 && bodyLines[bodyLines.length - 1].trim() === '') {
+        bodyLines.pop();
+    }
+
+    const contentBlocks: string[] = [];
+    const trimmedHelpers = helperCode?.trim();
+    if (trimmedHelpers) {
+        contentBlocks.push(trimmedHelpers);
+    }
+    if (bodyLines.length > 0) {
+        contentBlocks.push(bodyLines.join('\n'));
+    }
+
+    const uniformMapLines = uniformEntries.length > 0
+        ? uniformEntries.map(({ id, variableName }) => `        "${id}": ${variableName},`)
+        : [];
+    const uniformsBlock = uniformMapLines.length > 0
+        ? `const uniforms = {\n${uniformMapLines.join('\n')}\n    };`
+        : 'const uniforms = {};';
+    contentBlocks.push(uniformsBlock);
+
+    const indentedBody = contentBlocks
+        .map((block) => block
+            .split('\n')
+            .map((line) => (line.trim().length > 0 ? `    ${line}` : ''))
+            .join('\n'))
+        .join('\n\n');
+
+    const header = materialClass ? `// Expected material: ${materialClass}\n` : '';
+    const functionBody = indentedBody ? `${indentedBody}\n\n` : '';
+    return `${header}function tslGraph(material) {\n`
+        + `${functionBody}`
+        + '    return { uniforms };\n'
+        + '}';
 };
+
+const stripMaterialClassImports = (imports: ImportGroup[]): ImportGroup[] => imports
+    .map((group) => ({
+        from: group.from,
+        imports: group.imports.filter((name) => !name.endsWith('NodeMaterial')),
+    }))
+    .filter((group) => group.imports.length > 0);
 
 export default function StandaloneEditorClient() {
     const searchParams = useSearchParams();
@@ -146,18 +216,30 @@ export default function StandaloneEditorClient() {
         [targetOrigin]
     );
 
-    const buildCodePayload = useCallback(() => {
+    const buildCodePayload = useCallback((): GetCodeResponsePayload => {
         const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
         const materialEnabled = enabledGraphs.includes('material');
         const postEnabled = enabledGraphs.includes('postprocessing');
 
         let materialCode: string | null = null;
         let materialError: string | null = null;
+        let materialImports: ImportGroup[] = [];
         if (materialEnabled) {
             try {
                 const materialGraph = getRootGraph('material');
-                const fullMaterialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
-                materialCode = stripMaterialDeclarationBlock(fullMaterialCode);
+                const fullMaterialCode = compileGraph(
+                    materialGraph.nodes,
+                    materialGraph.edges,
+                    subgraphs,
+                    codeNodes,
+                    { globals, uniformMode: 'runtime' }
+                );
+                const importsWithoutMaterialClass = stripMaterialClassImports(
+                    getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals)
+                );
+                const { helperCode, imports } = inlineTslUtilsImports(importsWithoutMaterialClass);
+                materialCode = compileMaterialApplierCode(fullMaterialCode, helperCode);
+                materialImports = imports;
             } catch (error) {
                 materialError = error instanceof Error ? error.message : 'Failed to compile material graph';
             }
@@ -166,12 +248,14 @@ export default function StandaloneEditorClient() {
         let postCode: string | null = null;
         let postFunctionName: string | null = null;
         let postError: string | null = null;
+        let postImports: ImportGroup[] = [];
         if (postEnabled) {
             try {
                 const postGraph = getRootGraph('post');
                 const compiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
                 postCode = compiled.code;
                 postFunctionName = compiled.functionName;
+                postImports = getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals);
             } catch (error) {
                 postError = error instanceof Error ? error.message : 'Failed to compile post graph';
             }
@@ -182,11 +266,13 @@ export default function StandaloneEditorClient() {
             material: {
                 code: materialCode,
                 error: materialError,
+                imports: materialImports,
             },
             postprocessing: {
                 code: postCode,
                 functionName: postFunctionName,
                 error: postError,
+                imports: postImports,
             },
         };
     }, [enabledGraphs]);

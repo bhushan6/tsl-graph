@@ -90,6 +90,26 @@ export interface UniformsChangedPayload {
     uniforms: UniformSchemaEntry[];
 }
 
+export interface CodeImportGroup {
+    from: string;
+    imports: string[];
+}
+
+export interface GetCodeResponsePayload {
+    enabledGraphs: EditorGraphKind[];
+    material: {
+        code: string | null;
+        error: string | null;
+        imports: CodeImportGroup[];
+    };
+    postprocessing: {
+        code: string | null;
+        functionName: string | null;
+        error: string | null;
+        imports: CodeImportGroup[];
+    };
+}
+
 export const createRequestId = () =>
     `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
