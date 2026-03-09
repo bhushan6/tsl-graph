@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Editor } from '@/components/Editor';
 import { useEditorStore } from '@/store/editor';
@@ -56,6 +56,7 @@ export function EditorHost<TRef>({
 
     const [isInitializing, setIsInitializing] = useState(true);
     const [loadedProjectName, setLoadedProjectName] = useState<string | undefined>(undefined);
+    const initialDataRef = useRef(initialData);
 
     const capabilities = useMemo(
         () => ({
@@ -167,6 +168,10 @@ export function EditorHost<TRef>({
     });
 
     useEffect(() => {
+        initialDataRef.current = initialData;
+    }, [config.ref, initialData]);
+
+    useEffect(() => {
         let cancelled = false;
 
         const initialize = async () => {
@@ -178,9 +183,11 @@ export function EditorHost<TRef>({
             setProjectId(shouldEnableProjectAssets ? projectId : null);
 
             try {
-                const loaded = initialData === undefined
+                // Bootstrap from initialData once. Live backend query refreshes should not
+                // reinitialize the editor and overwrite in-progress local edits.
+                const loaded = initialDataRef.current === undefined
                     ? await config.persistence.load(config.ref)
-                    : initialData;
+                    : initialDataRef.current;
 
                 if (cancelled) return;
 
@@ -227,7 +234,6 @@ export function EditorHost<TRef>({
         capabilities.canUploadAssets,
         config.persistence,
         config.ref,
-        initialData,
         loadFromJSON,
         markSaved,
         defaultRootGraph,
