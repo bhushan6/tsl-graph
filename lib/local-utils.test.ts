@@ -18,6 +18,8 @@ import {
     isLocalScopeAccessible,
     withLocalDependencyEdges,
     getValidLocalSetNodesForGetNode,
+    createTypeInferenceResolver,
+    resolveNodeInputTypeById,
     resolveNodeOutputTypeById,
     collectLocalSetNames,
 } from './local-utils';
@@ -83,6 +85,53 @@ beforeAll(() => {
             category: 'Math',
             tsl: 'add',
             inputs: { a: { type: 'any', default: 0, label: 'A' }, b: { type: 'any', default: 0, label: 'B' } },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
+        {
+            type: 'math/split',
+            label: 'Split',
+            category: 'Math',
+            tsl: 'split',
+            inputs: { in: { type: 'any', default: 0, label: 'In' } },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
+        {
+            type: 'math/remap',
+            label: 'Remap',
+            category: 'Math',
+            tsl: 'remap',
+            inputs: {
+                node: { type: 'any', default: 0, label: 'Node' },
+                inLow: { type: 'float', default: 0, label: 'In Low' },
+                inHigh: { type: 'float', default: 1, label: 'In High' },
+                outLow: { type: 'float', default: 0, label: 'Out Low' },
+                outHigh: { type: 'float', default: 1, label: 'Out High' },
+            },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
+        {
+            type: 'math/remapClamp',
+            label: 'Remap Clamp',
+            category: 'Math',
+            tsl: 'remapClamp',
+            inputs: {
+                node: { type: 'any', default: 0, label: 'Node' },
+                inLow: { type: 'float', default: 0, label: 'In Low' },
+                inHigh: { type: 'float', default: 1, label: 'In High' },
+                outLow: { type: 'float', default: 0, label: 'Out Low' },
+                outHigh: { type: 'float', default: 1, label: 'Out High' },
+            },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
+        {
+            type: 'math/range',
+            label: 'Range',
+            category: 'Math',
+            tsl: 'range',
+            inputs: {
+                min: { type: 'any', default: 0, label: 'Min' },
+                max: { type: 'any', default: 1, label: 'Max' },
+            },
             outputs: { out: { type: 'any', label: 'Out' } },
         },
     ]);
@@ -437,6 +486,153 @@ describe('resolveNodeOutputTypeById', () => {
         const get = createNode('get1', 'local/get', { values: { localSourceId: 'nonexistent' } });
         const nodesById = new Map([['get1', get]]);
         expect(resolveNodeOutputTypeById('get1', 'out', nodesById, [], globals)).toBe('any');
+    });
+});
+
+describe('math runtime inference', () => {
+    const globals: GlobalContextEntry[] = [];
+
+    it('infers add(float, float) and keeps both inputs/output as float', () => {
+        const a = createNode('a', 'const/float');
+        const b = createNode('b', 'const/float');
+        const add = createNode('add', 'math/add');
+        const nodesById = new Map([
+            ['a', a],
+            ['b', b],
+            ['add', add],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'a', sourceHandle: 'out', target: 'add', targetHandle: 'a' },
+            { id: 'e2', source: 'b', sourceHandle: 'out', target: 'add', targetHandle: 'b' },
+        ];
+
+        expect(resolveNodeInputTypeById('add', 'a', nodesById, edges, globals)).toBe('float');
+        expect(resolveNodeInputTypeById('add', 'b', nodesById, edges, globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('add', 'out', nodesById, edges, globals)).toBe('float');
+    });
+
+    it('infers add(float, vec3) to vec3 for both inputs and output', () => {
+        const a = createNode('a', 'const/float');
+        const b = createNode('b', 'const/vec3');
+        const add = createNode('add', 'math/add');
+        const nodesById = new Map([
+            ['a', a],
+            ['b', b],
+            ['add', add],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'a', sourceHandle: 'out', target: 'add', targetHandle: 'a' },
+            { id: 'e2', source: 'b', sourceHandle: 'out', target: 'add', targetHandle: 'b' },
+        ];
+
+        expect(resolveNodeInputTypeById('add', 'a', nodesById, edges, globals)).toBe('vec3');
+        expect(resolveNodeInputTypeById('add', 'b', nodesById, edges, globals)).toBe('vec3');
+        expect(resolveNodeOutputTypeById('add', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+
+    it('uses sibling/value/default fallbacks for unconnected math inputs', () => {
+        const add = createNode('add', 'math/add', { values: { a: [1, 2, 3] } });
+        const nodesById = new Map([['add', add]]);
+
+        expect(resolveNodeInputTypeById('add', 'b', nodesById, [], globals)).toBe('vec3');
+        expect(resolveNodeInputTypeById('add', 'a', nodesById, [], globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('add', 'out', nodesById, [], globals)).toBe('vec3');
+    });
+
+    it('split output follows input type', () => {
+        const source = createNode('v', 'const/vec3');
+        const split = createNode('split', 'math/split');
+        const nodesById = new Map([
+            ['v', source],
+            ['split', split],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'v', sourceHandle: 'out', target: 'split', targetHandle: 'in' },
+        ];
+
+        expect(resolveNodeInputTypeById('split', 'in', nodesById, edges, globals)).toBe('vec3');
+        expect(resolveNodeOutputTypeById('split', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+
+    it('remap and remapClamp outputs follow the node input type', () => {
+        const source = createNode('v', 'const/vec3');
+        const remap = createNode('remap', 'math/remap');
+        const remapClamp = createNode('remapClamp', 'math/remapClamp');
+        const nodesById = new Map([
+            ['v', source],
+            ['remap', remap],
+            ['remapClamp', remapClamp],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'v', sourceHandle: 'out', target: 'remap', targetHandle: 'node' },
+            { id: 'e2', source: 'v', sourceHandle: 'out', target: 'remapClamp', targetHandle: 'node' },
+        ];
+
+        expect(resolveNodeOutputTypeById('remap', 'out', nodesById, edges, globals)).toBe('vec3');
+        expect(resolveNodeOutputTypeById('remapClamp', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+
+    it('range output uses dominant type from min/max', () => {
+        const min = createNode('min', 'const/float');
+        const max = createNode('max', 'const/vec3');
+        const range = createNode('range', 'math/range');
+        const nodesById = new Map([
+            ['min', min],
+            ['max', max],
+            ['range', range],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'min', sourceHandle: 'out', target: 'range', targetHandle: 'min' },
+            { id: 'e2', source: 'max', sourceHandle: 'out', target: 'range', targetHandle: 'max' },
+        ];
+
+        expect(resolveNodeOutputTypeById('range', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+
+    it('propagates type through multi-op chains', () => {
+        const a = createNode('a', 'const/float');
+        const b = createNode('b', 'const/vec3');
+        const c = createNode('c', 'const/float');
+        const multiOp = createNode('m', 'math/multiOp', {
+            operations: [
+                { id: 'opA', op: 'add' },
+                { id: 'opB', op: 'mul' },
+            ],
+        });
+        const nodesById = new Map([
+            ['a', a],
+            ['b', b],
+            ['c', c],
+            ['m', multiOp],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'a', sourceHandle: 'out', target: 'm', targetHandle: 'op_opA_a' },
+            { id: 'e2', source: 'b', sourceHandle: 'out', target: 'm', targetHandle: 'op_opA_b' },
+            { id: 'e3', source: 'c', sourceHandle: 'out', target: 'm', targetHandle: 'op_opB_b' },
+        ];
+
+        expect(resolveNodeInputTypeById('m', 'op_opB_b', nodesById, edges, globals)).toBe('vec3');
+        expect(resolveNodeOutputTypeById('m', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+
+    it('createTypeInferenceResolver exposes the same inferred results', () => {
+        const a = createNode('a', 'const/float');
+        const b = createNode('b', 'const/vec3');
+        const add = createNode('add', 'math/add');
+        const nodesById = new Map([
+            ['a', a],
+            ['b', b],
+            ['add', add],
+        ]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'a', sourceHandle: 'out', target: 'add', targetHandle: 'a' },
+            { id: 'e2', source: 'b', sourceHandle: 'out', target: 'add', targetHandle: 'b' },
+        ];
+        const resolver = createTypeInferenceResolver(nodesById, edges, globals);
+
+        expect(resolver.resolveInputType('add', 'a')).toBe('vec3');
+        expect(resolver.resolveInputType('add', 'b')).toBe('vec3');
+        expect(resolver.resolveOutputType('add', 'out')).toBe('vec3');
     });
 });
 

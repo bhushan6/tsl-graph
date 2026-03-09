@@ -30,6 +30,7 @@ import { MULTI_OP_OPTIONS, getMultiOpHandleId, getMultiOpLabel, getMultiOpParams
 import { Separator } from './ui/separator';
 import { getUniformKindFromNode, getUniformOutputs } from '@/lib/uniform-utils';
 import { generateGradientString, normalizeGradientStops } from '@/lib/gradient-utils';
+import { useTypeInferenceResolver } from '@/lib/type-inference-context';
 
 type TSLNodeProps = NodeProps<AppNode>;
 
@@ -62,7 +63,18 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
     const { resolvedTheme } = useTheme();
+    const typeInferenceResolver = useTypeInferenceResolver();
     const isDark = resolvedTheme === 'dark';
+
+    const resolveInputDataType = useCallback((handleId: string, fallbackType: TSLType): TSLType => {
+        const inferred = typeInferenceResolver.resolveInputType(id, handleId);
+        return inferred === 'any' ? fallbackType : inferred;
+    }, [id, typeInferenceResolver]);
+
+    const resolveOutputDataType = useCallback((handleId: string, fallbackType: TSLType): TSLType => {
+        const inferred = typeInferenceResolver.resolveOutputType(id, handleId);
+        return inferred === 'any' ? fallbackType : inferred;
+    }, [id, typeInferenceResolver]);
 
     const connectedInputs = useMemo(() => {
         return new Set(
@@ -296,7 +308,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                                                 id={handleId}
                                                                 type="target"
                                                                 position={Position.Left}
-                                                                dataType={param.type as TSLType}
+                                                                dataType={resolveInputDataType(handleId, param.type as TSLType)}
                                                                 label={param.label}
                                                                 isConnected={connectedInputs.has(handleId)}
                                                                 isDark={isDark}
@@ -388,7 +400,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                             id="out"
                             type="source"
                             position={Position.Right}
-                            dataType={'any'}
+                            dataType={resolveOutputDataType('out', 'any')}
                             label="Out"
                             isConnected={connectedOutputs.has('out')}
                             isDark={isDark}
@@ -478,7 +490,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                             id={row.input[0]}
                                             type="target"
                                             position={Position.Left}
-                                            dataType={row.input[1].type as TSLType}
+                                            dataType={resolveInputDataType(row.input[0], row.input[1].type as TSLType)}
                                             label={row.input[1].label}
                                             isConnected={connectedInputs.has(row.input[0])}
                                             isDark={isDark}
@@ -513,7 +525,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     id={row.output[0]}
                                     type="source"
                                     position={Position.Right}
-                                    dataType={row.output[1].type as TSLType}
+                                    dataType={resolveOutputDataType(row.output[0], row.output[1].type as TSLType)}
                                     label={row.output[1].label}
                                     isConnected={connectedOutputs.has(row.output[0])}
                                     isDark={isDark}

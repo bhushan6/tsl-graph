@@ -19,7 +19,13 @@ import { useEditorStore } from '@/store/editor';
 import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
-import { getLocalSourceId, isLocalGetNode, isLocalScopeAccessible, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
+import {
+    createTypeInferenceResolver,
+    getLocalSourceId,
+    isLocalGetNode,
+    isLocalScopeAccessible,
+    isLocalSetNode,
+} from '@/lib/local-utils';
 import { TSLNode } from './TSLNode';
 import { CommentNode } from './CommentNode';
 import { LocalPortalNode } from './LocalPortalNode';
@@ -46,6 +52,7 @@ import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 import type { Id } from '@/convex/_generated/dataModel';
 import { DEFAULT_EDITOR_HOST_CAPABILITIES, type EditorHostCapabilities } from '@/lib/editor-host/types';
+import { TypeInferenceProvider } from '@/lib/type-inference-context';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -84,6 +91,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         pasteSelection,
         editingSubgraphId,
         activeRootGraph,
+        graphStructureVersion,
     } = useEditorStore();
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
@@ -273,6 +281,19 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         return types;
     }, [subgraphs, codeNodes]);
 
+    const typeInferenceResolver = useMemo(() => {
+        const resolverVersion = graphStructureVersion;
+        void resolverVersion;
+        const state = useEditorStore.getState();
+        const nodesById = new Map(state.nodes.map((entry) => [entry.id, entry]));
+        return createTypeInferenceResolver(
+            nodesById,
+            state.edges,
+            state.globals,
+            state.subgraphs
+        );
+    }, [graphStructureVersion]);
+
     const isValidConnection = useCallback(
         (connection: Connection | Edge) => {
             const nodes = getNodes();
@@ -346,22 +367,16 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
                 if (connectionState.fromHandle.type === 'target') {
                     direction = 'input';
-                    if (def && def.inputs) {
+                    const inferred = typeInferenceResolver.resolveInputType(node.id, handleId);
+                    if (inferred) {
+                        dataType = inferred;
+                    } else if (def && def.inputs) {
                         const port = def.inputs[handleId];
                         if (port) dataType = port.type;
                     }
                 } else {
                     direction = 'output';
-                    const state = useEditorStore.getState();
-                    const nodesById = new Map(state.nodes.map((entry) => [entry.id, entry]));
-                    const inferred = resolveNodeOutputTypeById(
-                        node.id,
-                        handleId || 'out',
-                        nodesById,
-                        state.edges,
-                        state.globals,
-                        state.subgraphs
-                    );
+                    const inferred = typeInferenceResolver.resolveOutputType(node.id, handleId || 'out');
                     if (inferred) {
                         dataType = inferred;
                     } else if (def && def.outputs) {
@@ -380,7 +395,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 });
             }
         },
-        [screenToFlowPosition, openEdgeDropPicker]
+        [screenToFlowPosition, openEdgeDropPicker, typeInferenceResolver]
     );
 
     const onNodeDragStop = useCallback(
@@ -553,7 +568,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     );
 
     return (
-        <>
+        <TypeInferenceProvider resolver={typeInferenceResolver}>
             {/* Canvas Layer */}
             <div className="absolute inset-0">
                 <ReactFlow
@@ -692,7 +707,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     <StaleTemplatesNotification />
                 </>
             )}
-        </>
+        </TypeInferenceProvider>
     );
 }
 

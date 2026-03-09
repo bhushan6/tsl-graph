@@ -52,6 +52,7 @@ import {
 } from '@/lib/local-utils';
 import { LinearGradientUI, type LinearGradientUIChange } from '@/components/gradient/linear-gradient-ui';
 import { toast } from 'sonner';
+import { useTypeInferenceResolver } from '@/lib/type-inference-context';
 
 // Type options for port type selector
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -92,6 +93,13 @@ const LOOP_COMPARE_OPTIONS = [
     { label: '>', value: '>' },
     { label: '>=', value: '>=' },
 ];
+
+function formatTypeWithInference(declaredType: string, inferredType: TSLType): string {
+    if (inferredType === 'any' || inferredType === declaredType) {
+        return declaredType;
+    }
+    return `${declaredType} • inferred ${inferredType}`;
+}
 
 function useGraphEdgesSnapshot() {
     return useEditorStore((s) => s.edges);
@@ -537,6 +545,7 @@ function MultiOpNodePanel({
     node: AppNode;
     connectedInputs: Set<string | null | undefined>;
 }) {
+    const typeInferenceResolver = useTypeInferenceResolver();
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const debugMode = useEditorStore((s) => s.debugMode);
     const operations = Array.isArray(node.data.operations) ? (node.data.operations as MultiOp[]) : [];
@@ -584,6 +593,7 @@ function MultiOpNodePanel({
                                                     nodeId={node.id}
                                                     inputKey={input.handleId}
                                                     inputType={input.param.type}
+                                                    inputResolvedType={typeInferenceResolver.resolveInputType(node.id, input.handleId)}
                                                     inputLabel={input.param.label}
                                                     inputDefault={input.param.default}
                                                     onChange={(v) => updateNodeValue(node.id, input.handleId, v)}
@@ -1338,6 +1348,7 @@ function CommentNodePanel({ node }: { node: AppNode }) {
 }
 
 function PropertiesPanelContent() {
+    const typeInferenceResolver = useTypeInferenceResolver();
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
     // Subscribe to the selected node reactively
     const node = useEditorStore((s) =>
@@ -1541,6 +1552,7 @@ function PropertiesPanelContent() {
                                     const isActive = activeInputsSet.has(key);
                                     const isExplicitlyActive = storedActiveInputs.includes(key);
                                     const isInlineEditable = isActive && !isConnected && !input.connectionOnly;
+                                    const inferredInputType = typeInferenceResolver.resolveInputType(node.id, key);
                                     const hints: string[] = [];
                                     if (input.connectionOnly) hints.push('connection only');
                                     if (input.propertyOnly) hints.push('property');
@@ -1555,7 +1567,7 @@ function PropertiesPanelContent() {
                                                         {input.label}
                                                     </div>
                                                     <div className="text-[10px] text-muted-foreground truncate">
-                                                        {input.type}{hintText}
+                                                        {formatTypeWithInference(input.type, inferredInputType)}{hintText}
                                                     </div>
                                                 </div>
                                                 <input
@@ -1610,6 +1622,7 @@ function PropertiesPanelContent() {
                                             nodeId={node.id}
                                             inputKey={key}
                                             inputType={input.type}
+                                            inputResolvedType={typeInferenceResolver.resolveInputType(node.id, key)}
                                             inputLabel={input.label}
                                             inputDefault={input.default}
                                             inputOptions={input.options}
@@ -1634,6 +1647,7 @@ function PropertiesPanelContent() {
                                         if (!input || input.hidden) return null;
                                         const isConnected = connectedInputs.has(key);
                                         const isActive = textureActiveInputsSet.has(key);
+                                        const inferredInputType = typeInferenceResolver.resolveInputType(node.id, key);
                                         const hints: string[] = [];
                                         if (input.connectionOnly) hints.push('connection only');
                                         if (input.propertyOnly) hints.push('property');
@@ -1648,7 +1662,7 @@ function PropertiesPanelContent() {
                                                             {input.label}
                                                         </div>
                                                         <div className="text-[10px] text-muted-foreground truncate">
-                                                            {input.type}{hintText}
+                                                            {formatTypeWithInference(input.type, inferredInputType)}{hintText}
                                                         </div>
                                                     </div>
                                                     <input
@@ -1689,6 +1703,7 @@ interface PropertyInputWrapperProps {
     nodeId: string;
     inputKey: string;
     inputType: string;
+    inputResolvedType?: TSLType;
     inputLabel: string;
     inputDefault: TSLValueType | undefined;
     inputOptions?: readonly { label: string; value: string | number }[];
@@ -1702,6 +1717,7 @@ function PropertyInputWrapper({
     nodeId,
     inputKey,
     inputType,
+    inputResolvedType,
     inputLabel,
     inputDefault,
     inputOptions,
@@ -1715,6 +1731,9 @@ function PropertyInputWrapper({
             <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                 {inputLabel}
             </label>
+            <span className="text-[10px] text-muted-foreground -mt-1">
+                {formatTypeWithInference(inputType, inputResolvedType ?? (inputType as TSLType))}
+            </span>
             <PropertyInput
                 type={inputType}
                 value={value}
