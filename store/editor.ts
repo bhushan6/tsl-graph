@@ -3968,6 +3968,39 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             };
         });
 
+        // Reorder: React Flow requires parent nodes to appear before their children in the array.
+        // Nodes that just became children of the group may currently precede the group in the array.
+        const groupIndex = updatedNodes.findIndex((n) => n.id === groupId);
+        if (groupIndex >= 0) {
+            // Separate nodes that are now children of this group but appear before it
+            const before: Node<TSLNodeData>[] = [];
+            const movedChildren: Node<TSLNodeData>[] = [];
+            for (let i = 0; i < groupIndex; i++) {
+                if (updatedNodes[i].parentId === groupId) {
+                    movedChildren.push(updatedNodes[i]);
+                } else {
+                    before.push(updatedNodes[i]);
+                }
+            }
+            if (movedChildren.length > 0) {
+                const after = updatedNodes.slice(groupIndex);
+                // Insert moved children right after the group node
+                const groupInAfter = after.findIndex((n) => n.id === groupId);
+                const reordered = [
+                    ...before,
+                    ...after.slice(0, groupInAfter + 1),
+                    ...movedChildren,
+                    ...after.slice(groupInAfter + 1),
+                ];
+                set({
+                    nodes: reordered,
+                    graphStructureVersion: get().graphStructureVersion + 1,
+                });
+                get().markDirty();
+                return;
+            }
+        }
+
         set({
             nodes: updatedNodes,
             graphStructureVersion: get().graphStructureVersion + 1,
