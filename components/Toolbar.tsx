@@ -49,7 +49,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
     const subgraphNameRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const { setCenter, getZoom } = useReactFlow();
+    const { setCenter, getZoom, screenToFlowPosition } = useReactFlow();
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
@@ -238,7 +238,10 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    onClick={createLoopGroup}
+                                    onClick={() => {
+                                        const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                                        createLoopGroup(center);
+                                    }}
                                     className="h-8 w-8 text-primary hover:text-primary"
                                     disabled={isMaterialSelected}
                                 >
@@ -414,7 +417,10 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={createLoopGroup}
+                                onClick={() => {
+                                    const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                                    createLoopGroup(center);
+                                }}
                                 className="h-8 w-8"
                                 disabled={isMaterialSelected}
                             >

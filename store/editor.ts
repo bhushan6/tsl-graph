@@ -795,7 +795,7 @@ interface EditorState {
     // Group actions
     groupNodes: () => void;
     ungroupNodes: () => void;
-    createLoopGroup: () => void;
+    createLoopGroup: (viewportCenter?: { x: number; y: number }) => void;
     setLoopMode: (loopId: string, mode: string) => void;
     removeNodesFromGroup: (nodeIds: string[]) => void;
     dropNodesIntoGroup: (nodeIds: string[], groupId: string, nodesSnapshot?: Node<TSLNodeData>[]) => void;
@@ -3516,28 +3516,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
     },
 
-    createLoopGroup: () => {
+    createLoopGroup: (viewportCenter) => {
         const { nodes, selectedNodeIds } = get();
         if (selectedNodeIds.length === 0) {
             get().takeSnapshot();
 
-            const nodesForBounds = nodes.map(n => ({
-                ...n,
-                position: getAbsolutePosition(n, nodes),
-            }));
-
-            const bounds = nodesForBounds.length > 0
-                ? getNodesBounds(nodesForBounds)
-                : { x: 0, y: 0, width: 0, height: 0 };
-
-            const BASE_PADDING = 40;
             const MIN_WIDTH = 600;
             const MIN_HEIGHT = 320;
             const minLoopHeight = getLoopRequiredHeight(DEFAULT_LOOP_MODE);
             const width = MIN_WIDTH;
             const height = Math.max(MIN_HEIGHT, minLoopHeight);
-            const x = nodesForBounds.length > 0 ? bounds.x + bounds.width + BASE_PADDING : 0;
-            const y = nodesForBounds.length > 0 ? bounds.y : 0;
+
+            let x: number;
+            let y: number;
+
+            if (viewportCenter) {
+                // Center the loop on the current viewport center
+                x = viewportCenter.x - width / 2;
+                y = viewportCenter.y - height / 2;
+            } else {
+                // Fallback: place to the right of existing nodes or at (0, 0)
+                const nodesForBounds = nodes.map(n => ({
+                    ...n,
+                    position: getAbsolutePosition(n, nodes),
+                }));
+                const bounds = nodesForBounds.length > 0
+                    ? getNodesBounds(nodesForBounds)
+                    : { x: 0, y: 0, width: 0, height: 0 };
+                const BASE_PADDING = 40;
+                x = nodesForBounds.length > 0 ? bounds.x + bounds.width + BASE_PADDING : 0;
+                y = nodesForBounds.length > 0 ? bounds.y : 0;
+            }
 
             const loopId = `loop-${Date.now()}`;
 
