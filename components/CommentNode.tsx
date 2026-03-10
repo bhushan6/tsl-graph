@@ -276,7 +276,7 @@ function CommentNodeComponent({ id, data, selected }: NodeProps<AppNode>) {
             <div
                 ref={containerRef}
                 className={cn(
-                    'relative flex h-full w-full flex-col overflow-hidden rounded-[18px] border transition-all duration-200',
+                    'relative flex h-full w-full flex-col overflow-hidden rounded-[18px] border transition-all duration-200 overflow-y-auto',
                     'shadow-[0_10px_26px_-16px_rgba(0,0,0,0.8)]',
                     isEditing
                         ? 'z-10 scale-[1.01] border-primary/60 bg-card text-foreground'
