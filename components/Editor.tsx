@@ -567,6 +567,23 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     onNodeDrag={onNodeDrag}
                     onNodeDragStop={onNodeDragStop}
                     onSelectionChange={onSelectionChange}
+                    onNodeContextMenu={(event, node) => {
+                        event.preventDefault();
+                        // Select the right-clicked node
+                        const { selectSingleNode } = useEditorStore.getState();
+                        selectSingleNode(node.id);
+                        // Open the node picker at the right-click position
+                        const { clientX, clientY } = event;
+                        const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
+                        openEdgeDropPicker({
+                            screenPosition: { x: clientX, y: clientY },
+                            flowPosition,
+                            sourceDataType: '',
+                            sourceNodeId: null,
+                            sourceHandleId: null,
+                            handleDirection: null,
+                        });
+                    }}
                     onPaneContextMenu={(event) => {
                         event.preventDefault();
                         const { clientX, clientY } = event;
