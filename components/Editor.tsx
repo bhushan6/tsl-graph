@@ -642,7 +642,6 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         {isNodePickerOpen ? (
                             <NodePicker
                                 onClose={onNodePickerClose}
-                                onOpenCodeNodeDialog={onOpenCodeNodeDialog}
                             />
                         ) : (
                             <Button
@@ -668,6 +667,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         {editorMode === 'subgraph' ? (
                             <Toolbar
                                 onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                                onCreateCodeNode={onOpenCodeNodeDialog}
                             />
                         ) : (
                             <div className="pointer-events-auto">
@@ -675,6 +675,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                                     <Toolbar
                                         onOpenCodePanel={() => setIsCodePanelOpen(true)}
                                         onOpenAiDock={canUseAI ? () => setBottomBarMode('ai') : undefined}
+                                        onCreateCodeNode={onOpenCodeNodeDialog}
                                     />
                                 </div>
                                 {canUseAI && (

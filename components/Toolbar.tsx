@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles, FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -16,9 +16,10 @@ import { useReactFlow } from '@xyflow/react';
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
     onOpenAiDock?: () => void;
+    onCreateCodeNode?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
+export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: ToolbarProps) {
     const {
         nodes,
         edges,
@@ -377,6 +378,24 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                 </TooltipTrigger>
                 <TooltipContent>Create Subgraph</TooltipContent>
             </Tooltip>
+
+            {onCreateCodeNode && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onCreateCodeNode}
+                                className="h-8 w-8"
+                            >
+                                <FileCode2 className="w-4 h-4" />
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Create Code Node</TooltipContent>
+                </Tooltip>
+            )}
 
             <div className="w-px h-4 bg-border" />
 
