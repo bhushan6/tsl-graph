@@ -3993,12 +3993,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const avgX = chainNodes.reduce((s, n) => s + n.position.x, 0) / chainNodes.length;
         const avgY = chainNodes.reduce((s, n) => s + n.position.y, 0) / chainNodes.length;
 
+        // Determine if chain nodes share a common parent (group/loop)
+        const firstParentId = chainNodes[0]?.parentId;
+        const commonParentId = firstParentId && chainNodes.every((n) => n.parentId === firstParentId)
+            ? firstParentId
+            : undefined;
+
         // Create the new MultiOp node
         const multiOpId = `math/multiOp-${Date.now()}`;
         const newNode: Node<TSLNodeData> = {
             id: multiOpId,
             type: 'math/multiOp',
             position: { x: avgX, y: avgY },
+            ...(commonParentId ? { parentId: commonParentId, extent: 'parent' as const } : {}),
             data: {
                 type: 'math/multiOp' as NodeType,
                 values: values as Record<string, TSLValueType>,
@@ -4035,8 +4042,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             });
         }
 
+        // Insert new node: if it has a parent, place after the parent for correct React Flow ordering
+        let finalNodes: Node<TSLNodeData>[];
+        if (commonParentId) {
+            const parentIndex = filteredNodes.findIndex((n) => n.id === commonParentId);
+            const insertIndex = parentIndex >= 0 ? parentIndex + 1 : filteredNodes.length;
+            finalNodes = [
+                ...filteredNodes.slice(0, insertIndex),
+                newNode,
+                ...filteredNodes.slice(insertIndex),
+            ];
+        } else {
+            finalNodes = [...filteredNodes, newNode];
+        }
+
         set({
-            nodes: [...filteredNodes, newNode],
+            nodes: finalNodes,
             edges: newEdges,
             selectedNodeIds: [multiOpId],
             selectedNodeId: multiOpId,
