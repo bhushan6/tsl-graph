@@ -10,8 +10,7 @@ export type EditorPostMessageType =
     | 'tsl:event:ready'
     | 'tsl:event:graph-changed'
     | 'tsl:event:uniforms-changed'
-    | 'tsl:request:load'
-    | 'tsl:request:save'
+    | 'tsl:response:load'
     | 'tsl:response:set-root-material'
     | 'tsl:response:get-graph'
     | 'tsl:response:get-code'
@@ -19,8 +18,7 @@ export type EditorPostMessageType =
     | 'tsl:response:set-uniform-values';
 
 export type HostPostMessageType =
-    | 'tsl:response:load'
-    | 'tsl:response:save'
+    | 'tsl:command:load'
     | 'tsl:command:set-root-material'
     | 'tsl:command:get-graph'
     | 'tsl:command:get-code'
@@ -54,6 +52,14 @@ export type RootMaterialType =
 
 export interface SetRootMaterialPayload {
     materialType: RootMaterialType;
+}
+
+export interface LoadCommandPayload {
+    graphData: unknown;
+}
+
+export interface LoadCommandResponsePayload {
+    ok: true;
 }
 
 export interface UniformSchemaEntry {

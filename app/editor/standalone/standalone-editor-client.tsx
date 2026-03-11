@@ -8,13 +8,13 @@ import { inlineTslUtilsImports } from '@/lib/editor-host/tsl-utils-inline';
 import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { useEditorStore, type MaterialNodeType } from '@/store/editor';
 import {
-    createPostMessageEditorAdapter,
     postEditorResponse,
-    type PostMessageEditorRef,
 } from '@/lib/editor-host/adapters/postmessage-adapter';
 import {
     EDITOR_POSTMESSAGE_SOURCE,
     isHostMessage,
+    type LoadCommandPayload,
+    type LoadCommandResponsePayload,
     postMessageToHost,
     type EditorGraphChangedPayload,
     type EditorReadyPayload,
@@ -25,7 +25,7 @@ import {
     type UniformSchemaEntry,
     type UniformsChangedPayload,
 } from '@/lib/editor-host/postmessage';
-import type { EditorGraphKind, EditorHostConfig } from '@/lib/editor-host/types';
+import type { EditorGraphKind, EditorHostConfig, EditorPersistenceAdapter } from '@/lib/editor-host/types';
 import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
 
 const parseEnabledGraphs = (rawValue: string | null): EditorGraphKind[] | undefined => {
@@ -115,6 +115,13 @@ const createUniformsSignature = (uniforms: UniformSchemaEntry[]): string => JSON
         value: entry.value,
     }))
 );
+
+type StandaloneRef = { docId: string };
+
+const createNoopPersistenceAdapter = (): EditorPersistenceAdapter<StandaloneRef> => ({
+    load: async () => null,
+    save: async () => undefined,
+});
 
 const MATERIAL_DECLARATION_LINE_PATTERN = /^const material = new ([A-Za-z0-9_]+)\(\);$/;
 const RUNTIME_UNIFORM_LINE_PATTERN = /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*__uniform\("([^"]+)",\s*(.*),\s*"[^"]+"\);$/;
@@ -211,10 +218,7 @@ export default function StandaloneEditorClient() {
         [requestedEnabledGraphs]
     );
 
-    const persistence = useMemo(
-        () => createPostMessageEditorAdapter({ targetOrigin }),
-        [targetOrigin]
-    );
+    const persistence = useMemo(() => createNoopPersistenceAdapter(), []);
 
     const buildCodePayload = useCallback((): GetCodeResponsePayload => {
         const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
@@ -227,19 +231,26 @@ export default function StandaloneEditorClient() {
         if (materialEnabled) {
             try {
                 const materialGraph = getRootGraph('material');
-                const fullMaterialCode = compileGraph(
-                    materialGraph.nodes,
-                    materialGraph.edges,
-                    subgraphs,
-                    codeNodes,
-                    { globals, uniformMode: 'runtime' }
-                );
-                const importsWithoutMaterialClass = stripMaterialClassImports(
-                    getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals)
-                );
-                const { helperCode, imports } = inlineTslUtilsImports(importsWithoutMaterialClass);
-                materialCode = compileMaterialApplierCode(fullMaterialCode, helperCode);
-                materialImports = imports;
+                const hasMaterialRootNode = materialGraph.nodes.some((node) => isMaterialNodeType(node.data.type));
+                if (!hasMaterialRootNode) {
+                    materialCode = null;
+                    materialError = null;
+                    materialImports = [];
+                } else {
+                    const fullMaterialCode = compileGraph(
+                        materialGraph.nodes,
+                        materialGraph.edges,
+                        subgraphs,
+                        codeNodes,
+                        { globals, uniformMode: 'runtime' }
+                    );
+                    const importsWithoutMaterialClass = stripMaterialClassImports(
+                        getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals)
+                    );
+                    const { helperCode, imports } = inlineTslUtilsImports(importsWithoutMaterialClass);
+                    materialCode = compileMaterialApplierCode(fullMaterialCode, helperCode);
+                    materialImports = imports;
+                }
             } catch (error) {
                 materialError = error instanceof Error ? error.message : 'Failed to compile material graph';
             }
@@ -341,6 +352,50 @@ export default function StandaloneEditorClient() {
                     type: 'tsl:response:get-graph',
                     requestId: data.requestId,
                     payload: { graphData },
+                }, targetOrigin);
+                return;
+            }
+
+            if (data.type === 'tsl:command:load') {
+                const payload = data.payload as LoadCommandPayload | undefined;
+                if (!payload || !Object.prototype.hasOwnProperty.call(payload, 'graphData')) {
+                    postEditorResponse({
+                        type: 'tsl:response:load',
+                        requestId: data.requestId,
+                        error: 'Invalid payload: expected { graphData }',
+                    }, targetOrigin);
+                    return;
+                }
+
+                const graphData = payload.graphData;
+                const store = useEditorStore.getState();
+                const loaded = graphData === null || graphData === undefined
+                    ? (() => {
+                        store.clearGraph();
+                        return true;
+                    })()
+                    : store.loadFromJSON(
+                        typeof graphData === 'string'
+                            ? graphData
+                            : JSON.stringify(graphData)
+                    );
+
+                if (!loaded) {
+                    postEditorResponse({
+                        type: 'tsl:response:load',
+                        requestId: data.requestId,
+                        error: 'Failed to load graph JSON',
+                    }, targetOrigin);
+                    return;
+                }
+
+                store.markSaved();
+
+                const responsePayload: LoadCommandResponsePayload = { ok: true };
+                postEditorResponse({
+                    type: 'tsl:response:load',
+                    requestId: data.requestId,
+                    payload: responsePayload,
                 }, targetOrigin);
                 return;
             }
@@ -469,7 +524,7 @@ export default function StandaloneEditorClient() {
         };
     }, [buildCodePayload, targetOrigin]);
 
-    const hostConfig = useMemo<EditorHostConfig<PostMessageEditorRef>>(
+    const hostConfig = useMemo<EditorHostConfig<StandaloneRef>>(
         () => ({
             ref: { docId },
             persistence,
@@ -485,5 +540,5 @@ export default function StandaloneEditorClient() {
         [docId, enabledGraphs, persistence]
     );
 
-    return <EditorHost config={hostConfig} projectName="TSL Graph" />;
+    return <EditorHost config={hostConfig} projectName="" />;
 }
