@@ -567,6 +567,23 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     onNodeDrag={onNodeDrag}
                     onNodeDragStop={onNodeDragStop}
                     onSelectionChange={onSelectionChange}
+                    onNodeContextMenu={(event, node) => {
+                        event.preventDefault();
+                        // Select the right-clicked node
+                        const { selectSingleNode } = useEditorStore.getState();
+                        selectSingleNode(node.id);
+                        // Open the node picker at the right-click position
+                        const { clientX, clientY } = event;
+                        const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
+                        openEdgeDropPicker({
+                            screenPosition: { x: clientX, y: clientY },
+                            flowPosition,
+                            sourceDataType: '',
+                            sourceNodeId: null,
+                            sourceHandleId: null,
+                            handleDirection: null,
+                        });
+                    }}
                     onPaneContextMenu={(event) => {
                         event.preventDefault();
                         const { clientX, clientY } = event;
@@ -625,7 +642,6 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         {isNodePickerOpen ? (
                             <NodePicker
                                 onClose={onNodePickerClose}
-                                onOpenCodeNodeDialog={onOpenCodeNodeDialog}
                             />
                         ) : (
                             <Button
@@ -651,6 +667,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                         {editorMode === 'subgraph' ? (
                             <Toolbar
                                 onOpenCodePanel={() => setIsCodePanelOpen(true)}
+                                onCreateCodeNode={onOpenCodeNodeDialog}
                             />
                         ) : (
                             <div className="pointer-events-auto">
@@ -658,6 +675,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                                     <Toolbar
                                         onOpenCodePanel={() => setIsCodePanelOpen(true)}
                                         onOpenAiDock={canUseAI ? () => setBottomBarMode('ai') : undefined}
+                                        onCreateCodeNode={onOpenCodeNodeDialog}
                                     />
                                 </div>
                                 {canUseAI && (

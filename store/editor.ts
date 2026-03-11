@@ -795,7 +795,7 @@ interface EditorState {
     // Group actions
     groupNodes: () => void;
     ungroupNodes: () => void;
-    createLoopGroup: () => void;
+    createLoopGroup: (viewportCenter?: { x: number; y: number }) => void;
     setLoopMode: (loopId: string, mode: string) => void;
     removeNodesFromGroup: (nodeIds: string[]) => void;
     dropNodesIntoGroup: (nodeIds: string[], groupId: string, nodesSnapshot?: Node<TSLNodeData>[]) => void;
@@ -3516,28 +3516,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
     },
 
-    createLoopGroup: () => {
+    createLoopGroup: (viewportCenter) => {
         const { nodes, selectedNodeIds } = get();
         if (selectedNodeIds.length === 0) {
             get().takeSnapshot();
 
-            const nodesForBounds = nodes.map(n => ({
-                ...n,
-                position: getAbsolutePosition(n, nodes),
-            }));
-
-            const bounds = nodesForBounds.length > 0
-                ? getNodesBounds(nodesForBounds)
-                : { x: 0, y: 0, width: 0, height: 0 };
-
-            const BASE_PADDING = 40;
             const MIN_WIDTH = 600;
             const MIN_HEIGHT = 320;
             const minLoopHeight = getLoopRequiredHeight(DEFAULT_LOOP_MODE);
             const width = MIN_WIDTH;
             const height = Math.max(MIN_HEIGHT, minLoopHeight);
-            const x = nodesForBounds.length > 0 ? bounds.x + bounds.width + BASE_PADDING : 0;
-            const y = nodesForBounds.length > 0 ? bounds.y : 0;
+
+            let x: number;
+            let y: number;
+
+            if (viewportCenter) {
+                // Center the loop on the current viewport center
+                x = viewportCenter.x - width / 2;
+                y = viewportCenter.y - height / 2;
+            } else {
+                // Fallback: place to the right of existing nodes or at (0, 0)
+                const nodesForBounds = nodes.map(n => ({
+                    ...n,
+                    position: getAbsolutePosition(n, nodes),
+                }));
+                const bounds = nodesForBounds.length > 0
+                    ? getNodesBounds(nodesForBounds)
+                    : { x: 0, y: 0, width: 0, height: 0 };
+                const BASE_PADDING = 40;
+                x = nodesForBounds.length > 0 ? bounds.x + bounds.width + BASE_PADDING : 0;
+                y = nodesForBounds.length > 0 ? bounds.y : 0;
+            }
 
             const loopId = `loop-${Date.now()}`;
 
@@ -3968,6 +3977,39 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             };
         });
 
+        // Reorder: React Flow requires parent nodes to appear before their children in the array.
+        // Nodes that just became children of the group may currently precede the group in the array.
+        const groupIndex = updatedNodes.findIndex((n) => n.id === groupId);
+        if (groupIndex >= 0) {
+            // Separate nodes that are now children of this group but appear before it
+            const before: Node<TSLNodeData>[] = [];
+            const movedChildren: Node<TSLNodeData>[] = [];
+            for (let i = 0; i < groupIndex; i++) {
+                if (updatedNodes[i].parentId === groupId) {
+                    movedChildren.push(updatedNodes[i]);
+                } else {
+                    before.push(updatedNodes[i]);
+                }
+            }
+            if (movedChildren.length > 0) {
+                const after = updatedNodes.slice(groupIndex);
+                // Insert moved children right after the group node
+                const groupInAfter = after.findIndex((n) => n.id === groupId);
+                const reordered = [
+                    ...before,
+                    ...after.slice(0, groupInAfter + 1),
+                    ...movedChildren,
+                    ...after.slice(groupInAfter + 1),
+                ];
+                set({
+                    nodes: reordered,
+                    graphStructureVersion: get().graphStructureVersion + 1,
+                });
+                get().markDirty();
+                return;
+            }
+        }
+
         set({
             nodes: updatedNodes,
             graphStructureVersion: get().graphStructureVersion + 1,
@@ -3993,12 +4035,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const avgX = chainNodes.reduce((s, n) => s + n.position.x, 0) / chainNodes.length;
         const avgY = chainNodes.reduce((s, n) => s + n.position.y, 0) / chainNodes.length;
 
+        // Determine if chain nodes share a common parent (group/loop)
+        const firstParentId = chainNodes[0]?.parentId;
+        const commonParentId = firstParentId && chainNodes.every((n) => n.parentId === firstParentId)
+            ? firstParentId
+            : undefined;
+
         // Create the new MultiOp node
         const multiOpId = `math/multiOp-${Date.now()}`;
         const newNode: Node<TSLNodeData> = {
             id: multiOpId,
             type: 'math/multiOp',
             position: { x: avgX, y: avgY },
+            ...(commonParentId ? { parentId: commonParentId, extent: 'parent' as const } : {}),
             data: {
                 type: 'math/multiOp' as NodeType,
                 values: values as Record<string, TSLValueType>,
@@ -4035,8 +4084,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             });
         }
 
+        // Insert new node: if it has a parent, place after the parent for correct React Flow ordering
+        let finalNodes: Node<TSLNodeData>[];
+        if (commonParentId) {
+            const parentIndex = filteredNodes.findIndex((n) => n.id === commonParentId);
+            const insertIndex = parentIndex >= 0 ? parentIndex + 1 : filteredNodes.length;
+            finalNodes = [
+                ...filteredNodes.slice(0, insertIndex),
+                newNode,
+                ...filteredNodes.slice(insertIndex),
+            ];
+        } else {
+            finalNodes = [...filteredNodes, newNode];
+        }
+
         set({
-            nodes: [...filteredNodes, newNode],
+            nodes: finalNodes,
             edges: newEdges,
             selectedNodeIds: [multiOpId],
             selectedNodeId: multiOpId,

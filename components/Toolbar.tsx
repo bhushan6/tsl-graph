@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles, FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -16,9 +16,10 @@ import { useReactFlow } from '@xyflow/react';
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
     onOpenAiDock?: () => void;
+    onCreateCodeNode?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
+export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: ToolbarProps) {
     const {
         nodes,
         edges,
@@ -49,7 +50,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
     const subgraphNameRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const { setCenter, getZoom } = useReactFlow();
+    const { setCenter, getZoom, screenToFlowPosition } = useReactFlow();
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
@@ -238,7 +239,10 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    onClick={createLoopGroup}
+                                    onClick={() => {
+                                        const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                                        createLoopGroup(center);
+                                    }}
                                     className="h-8 w-8 text-primary hover:text-primary"
                                     disabled={isMaterialSelected}
                                 >
@@ -375,6 +379,24 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                 <TooltipContent>Create Subgraph</TooltipContent>
             </Tooltip>
 
+            {onCreateCodeNode && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onCreateCodeNode}
+                                className="h-8 w-8"
+                            >
+                                <FileCode2 className="w-4 h-4" />
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Create Code Node</TooltipContent>
+                </Tooltip>
+            )}
+
             <div className="w-px h-4 bg-border" />
 
             <div className="flex items-center gap-0.5">
@@ -414,7 +436,10 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock }: ToolbarProps) {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={createLoopGroup}
+                                onClick={() => {
+                                    const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                                    createLoopGroup(center);
+                                }}
                                 className="h-8 w-8"
                                 disabled={isMaterialSelected}
                             >

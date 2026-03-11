@@ -11,7 +11,7 @@ import { CodeNodeDefinition, CodeNodeLanguage, NodeType, SubgraphDefinition, Sub
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { buildLocalGetQuickCreateEntries } from '@/lib/node-picker-utils';
 import { getLocalSetReferenceLabel, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
-import { X, ChevronDown, Search, Code, Plus, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
+import { X, ChevronDown, Search, Code, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     SidebarGroup,
@@ -73,10 +73,9 @@ function CategoryGroup({ title, children, count, defaultOpen = false, forceOpen 
 
 interface NodePickerProps {
     onClose?: () => void;
-    onOpenCodeNodeDialog?: () => void;
 }
 
-function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps) {
+function NodePickerComponent({ onClose }: NodePickerProps) {
     const addNode = useEditorStore((s) => s.addNode);
     const editorMode = useEditorStore((s) => s.editorMode);
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
@@ -401,8 +400,8 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
         [deleteCodeNodeTemplate, deletingTemplates]
     );
 
-    // Show custom section if we have the code node dialog button or templates
-    const showCustomSection = !!onOpenCodeNodeDialog;
+    // Show custom section (always visible to show templates)
+    const showCustomSection = true;
 
     // Filter nodes by category, handling anchor nodes and material nodes specially
     const filteredNodesByCategory = useMemo(() => {
@@ -619,22 +618,7 @@ function NodePickerComponent({ onClose, onOpenCodeNodeDialog }: NodePickerProps)
                         forceOpen={!!searchQuery}
                     >
                         <SidebarMenu>
-                            {/* Create Node from Code button */}
-                            {onOpenCodeNodeDialog && (
-                                <SidebarMenuItem>
-                                    <button
-                                        onClick={onOpenCodeNodeDialog}
-                                        className={cn(
-                                            menuButtonStyles,
-                                            'border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5 text-primary/70 hover:text-primary gap-2'
-                                        )}
-                                    >
-                                        <Plus className="w-3 h-3" />
-                                        <Code className="w-3 h-3" />
-                                        Create from Code...
-                                    </button>
-                                </SidebarMenuItem>
-                            )}
+
 
                             {/* Loading State */}
                             {(!userSubgraphTemplates || !userCodeNodeTemplates) && (
