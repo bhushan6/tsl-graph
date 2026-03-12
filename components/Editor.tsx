@@ -612,6 +612,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     nodesConnectable={!isReadOnly}
                     elementsSelectable={!isReadOnly}
                     panOnScroll={isReadOnly}
+                    deleteKeyCode={["Backspace", "Delete"]}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>
