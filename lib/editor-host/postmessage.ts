@@ -11,6 +11,7 @@ export type EditorPostMessageType =
     | 'tsl:event:graph-changed'
     | 'tsl:event:uniforms-changed'
     | 'tsl:response:load'
+    | 'tsl:response:clear-graph'
     | 'tsl:response:set-root-material'
     | 'tsl:response:get-graph'
     | 'tsl:response:get-code'
@@ -19,6 +20,7 @@ export type EditorPostMessageType =
 
 export type HostPostMessageType =
     | 'tsl:command:load'
+    | 'tsl:command:clear-graph'
     | 'tsl:command:set-root-material'
     | 'tsl:command:get-graph'
     | 'tsl:command:get-code'
@@ -59,6 +61,10 @@ export interface LoadCommandPayload {
 }
 
 export interface LoadCommandResponsePayload {
+    ok: true;
+}
+
+export interface ClearGraphResponsePayload {
     ok: true;
 }
 

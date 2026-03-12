@@ -15,6 +15,7 @@ import {
     isHostMessage,
     type LoadCommandPayload,
     type LoadCommandResponsePayload,
+    type ClearGraphResponsePayload,
     postMessageToHost,
     type EditorGraphChangedPayload,
     type EditorReadyPayload,
@@ -397,6 +398,23 @@ export default function StandaloneEditorClient() {
                     requestId: data.requestId,
                     payload: responsePayload,
                 }, targetOrigin);
+                return;
+            }
+
+            if (data.type === 'tsl:command:clear-graph') {
+                const store = useEditorStore.getState();
+                store.clearGraph();
+                store.markSaved();
+
+                const responsePayload: ClearGraphResponsePayload = { ok: true };
+                postEditorResponse(
+                    {
+                        type: 'tsl:response:clear-graph',
+                        requestId: data.requestId,
+                        payload: responsePayload,
+                    },
+                    targetOrigin
+                );
                 return;
             }
 
