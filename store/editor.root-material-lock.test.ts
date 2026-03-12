@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useEditorStore } from './editor';
+import { initializeNodes } from '@/lib/nodes';
 
 describe('Editor root material lock', () => {
     beforeEach(() => {
+        initializeNodes();
         useEditorStore.getState().resetEditor();
     });
 
@@ -79,4 +81,85 @@ describe('Editor root material lock', () => {
         expect(materialNodes).toHaveLength(1);
         expect(materialNodes[0].data.type).toBe('material/standard');
     });
+
+    it('preserves shared connections when switching material type', () => {
+        const store = useEditorStore.getState();
+        store.setRootMaterial('material/basic');
+
+        // Add a color source node and connect it to the material's colorNode input
+        store.addNode('const/color', { x: -200, y: 0 });
+        const nodes = useEditorStore.getState().nodes;
+        const colorSourceNode = nodes.find((n) => n.data.type === 'const/color');
+        const materialNode = nodes.find((n) => n.data.type === 'material/basic');
+        expect(colorSourceNode).toBeTruthy();
+        expect(materialNode).toBeTruthy();
+
+        useEditorStore.getState().onConnect({
+            source: colorSourceNode!.id,
+            sourceHandle: 'out',
+            target: materialNode!.id,
+            targetHandle: 'colorNode',
+        });
+        expect(useEditorStore.getState().edges).toHaveLength(1);
+
+        // Switch from basic to standard — both have colorNode
+        store.setRootMaterial('material/standard');
+        const state = useEditorStore.getState();
+        const newMat = state.nodes.find((n) => n.data.type === 'material/standard');
+        expect(newMat).toBeTruthy();
+
+        // The colorNode edge should be preserved
+        const colorEdge = state.edges.find((e) => e.targetHandle === 'colorNode');
+        expect(colorEdge).toBeTruthy();
+        expect(colorEdge!.target).toBe(newMat!.id);
+    });
+
+    it('drops incompatible connections when switching material type', () => {
+        const store = useEditorStore.getState();
+        store.setRootMaterial('material/standard');
+
+        // Add a float source and connect to roughnessNode
+        store.addNode('const/float', { x: -200, y: 0 });
+        const nodes = useEditorStore.getState().nodes;
+        const floatNode = nodes.find((n) => n.data.type === 'const/float');
+        const materialNode = nodes.find((n) => n.data.type === 'material/standard');
+        expect(floatNode).toBeTruthy();
+        expect(materialNode).toBeTruthy();
+
+        useEditorStore.getState().onConnect({
+            source: floatNode!.id,
+            sourceHandle: 'out',
+            target: materialNode!.id,
+            targetHandle: 'roughnessNode',
+        });
+        expect(useEditorStore.getState().edges).toHaveLength(1);
+
+        // Switch from standard to basic — basic does NOT have roughnessNode
+        store.setRootMaterial('material/basic');
+        const state = useEditorStore.getState();
+        expect(state.nodes.some((n) => n.data.type === 'material/basic')).toBe(true);
+
+        // The roughnessNode edge should be dropped
+        expect(state.edges.find((e) => e.targetHandle === 'roughnessNode')).toBeUndefined();
+    });
+
+    it('preserves shared property values when switching material type', () => {
+        const store = useEditorStore.getState();
+        store.setRootMaterial('material/basic');
+
+        // Manually set opacity value on the basic material node
+        const basicMat = useEditorStore.getState().nodes.find((n) => n.data.type === 'material/basic');
+        expect(basicMat).toBeTruthy();
+        store.updateNodeValue(basicMat!.id, 'opacityNode', 0.42);
+
+        const beforeVal = useEditorStore.getState().nodes.find((n) => n.id === basicMat!.id)?.data.values.opacityNode;
+        expect(beforeVal).toBe(0.42);
+
+        // Switch to standard — both have opacityNode
+        store.setRootMaterial('material/standard');
+        const stdMat = useEditorStore.getState().nodes.find((n) => n.data.type === 'material/standard');
+        expect(stdMat).toBeTruthy();
+        expect(stdMat!.data.values.opacityNode).toBe(0.42);
+    });
 });
+

@@ -214,7 +214,7 @@ const createDefaultPreviewSettings = (): PreviewSettings => ({
     geometryScript: '',
     codeMode: 'generated',
     customCode: '',
-    environment: 'studio',
+    environment: 'none',
     environmentIntensity: 1,
     showEnvironmentBackground: false,
     showBackdrop: false,
@@ -624,14 +624,39 @@ const enforceMaterialNodeOnGraph = ({
     const materialNodeId = forcedNodeId ?? fallbackMaterialNode?.id ?? 'root-material';
     const materialNodePosition = fallbackMaterialNode?.position ?? { x: 0, y: 0 };
 
+    // Look up the new material type's definition to know which inputs it has
+    const newDef = registry.get(materialType);
+    const newInputKeys = newDef?.inputs
+        ? new Set(
+            Object.entries(newDef.inputs)
+                .filter(([, port]) => !port.propertyOnly)
+                .map(([key]) => key)
+        )
+        : new Set<string>();
+
     const baseMaterialNode = materialNodes.find((node) => node.id === materialNodeId);
+    const baseData = baseMaterialNode ? cloneNode(baseMaterialNode).data : { values: {}, connected: {} };
+
+    // Carry over only values whose keys exist on the new material type
+    const newDefAllInputKeys = newDef?.inputs ? new Set(Object.keys(newDef.inputs)) : new Set<string>();
+    const preservedValues: Record<string, TSLValueType> = {};
+    if (baseData.values) {
+        const srcValues = baseData.values as Record<string, TSLValueType>;
+        for (const key of Object.keys(srcValues)) {
+            if (newDefAllInputKeys.has(key)) {
+                preservedValues[key] = srcValues[key];
+            }
+        }
+    }
+
     const normalizedMaterialNode: Node<TSLNodeData> = {
         ...(baseMaterialNode ? cloneNode(baseMaterialNode) : createMaterialNode(materialNodeId, materialType, materialNodePosition)),
         id: materialNodeId,
         type: materialType,
         data: {
-            ...(baseMaterialNode ? cloneNode(baseMaterialNode).data : { values: {}, connected: {} }),
+            ...baseData,
             type: materialType,
+            values: preservedValues,
         },
     };
 
@@ -640,9 +665,25 @@ const enforceMaterialNodeOnGraph = ({
         normalizedMaterialNode,
     ];
 
-    const normalizedEdges = edges.filter(
-        (edge) => !materialNodeIds.has(edge.source) && !materialNodeIds.has(edge.target)
-    );
+    // Preserve edges whose targetHandle matches an input on the new material type
+    const normalizedEdges = edges.filter((edge) => {
+        // Keep edges that don't involve any material node
+        if (!materialNodeIds.has(edge.source) && !materialNodeIds.has(edge.target)) return true;
+
+        // For edges targeting a material node, keep if the input exists on the new type
+        if (materialNodeIds.has(edge.target) && edge.targetHandle && newInputKeys.has(edge.targetHandle)) {
+            return true;
+        }
+
+        // Drop outbound edges from material nodes and edges to non-matching inputs
+        return false;
+    }).map((edge) => {
+        // Re-target preserved edges to the new material node ID
+        if (materialNodeIds.has(edge.target) && edge.target !== materialNodeId) {
+            return { ...edge, target: materialNodeId };
+        }
+        return edge;
+    });
 
     return {
         nodes: normalizedNodes,
