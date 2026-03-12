@@ -1,5 +1,5 @@
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port, GlobalContextEntry } from '@/lib/types';
+import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port, GlobalContextEntry, type NodeDef } from '@/lib/types';
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
@@ -85,6 +85,94 @@ const ASSIGN_NODE_METHODS: Record<string, string> = {
     'assign/shiftLeftAssign': 'shiftLeftAssign',
     'assign/shiftRightAssign': 'shiftRightAssign',
 };
+
+const PHYSICAL_MATERIAL_FEATURE_KEYS = new Set([
+    'clearcoatNode', 'clearcoatRoughnessNode',
+    'sheenNode', 'sheenRoughnessNode',
+    'iridescenceNode',
+    'transmissionNode', 'thicknessNode',
+]);
+
+function isFiniteNumberArray(value: unknown): value is number[] {
+    return Array.isArray(value) && value.every((entry) => {
+        return typeof entry === 'number' && Number.isFinite(entry);
+    });
+}
+
+function addGeneratedValueImports(
+    imports: Set<string>,
+    type: string,
+    value: unknown
+) {
+    if (type === 'color') {
+        imports.add('color');
+        return;
+    }
+
+    if (!isFiniteNumberArray(value)) {
+        return;
+    }
+
+    if (value.length === 2) imports.add('vec2');
+    else if (value.length === 3) imports.add('vec3');
+    else if (value.length === 4) imports.add('vec4');
+}
+
+function addFallbackInputImports(
+    imports: Set<string>,
+    node: Node<TSLNodeData>,
+    def: NodeDef
+) {
+    for (const [key, inputDef] of Object.entries(def.inputs ?? {})) {
+        if (node.data.connected?.[key]) {
+            continue;
+        }
+
+        if (node.data.type === 'texture/sampleNode' && key === 'uv') {
+            imports.add('screenUV');
+            continue;
+        }
+
+        const value = node.data.values?.[key] ?? inputDef.default;
+        addGeneratedValueImports(imports, inputDef.type, value);
+    }
+}
+
+function addMaterialFallbackImports(
+    imports: Set<string>,
+    materialNode: Node<TSLNodeData>,
+    materialDef: NodeDef
+) {
+    const activeInputs = getMaterialActiveInputsSet(materialNode.data, materialDef);
+
+    for (const [key, inputDef] of Object.entries(materialDef.inputs ?? {})) {
+        if (materialNode.data.connected?.[key] || !activeInputs.has(key) || inputDef.connectionOnly) {
+            continue;
+        }
+
+        if (PHYSICAL_MATERIAL_FEATURE_KEYS.has(key)) {
+            const userVal = materialNode.data.values?.[key];
+            if (userVal === undefined || userVal === inputDef.default) {
+                continue;
+            }
+        }
+
+        if (inputDef.isMaterialProp) {
+            continue;
+        }
+
+        const value = materialNode.data.values?.[key] ?? inputDef.default;
+        addGeneratedValueImports(imports, inputDef.type, value);
+
+        if (inputDef.type === 'float' || inputDef.type === 'any') {
+            imports.add('float');
+        } else if (inputDef.type === 'int' || inputDef.type === 'uint') {
+            imports.add('int');
+        } else if (inputDef.type === 'bool') {
+            imports.add('bool');
+        }
+    }
+}
 
 /**
  * Get TSL default expression for a given type.
@@ -2270,17 +2358,6 @@ export function compileGraph(
             lines.push('// Material');
             lines.push(`const material = new ${materialDef.tsl}();`);
 
-            // MeshPhysicalNodeMaterial feature-gating keys:
-            // These properties control whether Three.js enables expensive PBR features
-            // (clearcoat, sheen, iridescence, transmission). Setting them to non-null
-            // (even float(0)) activates the feature. Only set when actually connected.
-            const PHYSICAL_FEATURE_KEYS = new Set([
-                'clearcoatNode', 'clearcoatRoughnessNode',
-                'sheenNode', 'sheenRoughnessNode',
-                'iridescenceNode',
-                'transmissionNode', 'thicknessNode',
-            ]);
-
             const connectedHandles = edges
                 .filter((e) => e.target === materialNode.id)
                 .map((e) => e.targetHandle);
@@ -2307,7 +2384,7 @@ export function compileGraph(
                 // 2b. Skip physical-material feature-gating inputs when not connected.
                 // Setting these to any non-null value (even float(0)) tricks Three.js into
                 // enabling expensive features like transmission rendering, causing a black material.
-                if (PHYSICAL_FEATURE_KEYS.has(key)) {
+                if (PHYSICAL_MATERIAL_FEATURE_KEYS.has(key)) {
                     const userVal = materialNode.data.values?.[key];
                     if (userVal === undefined || userVal === inputDef.default) {
                         continue;
@@ -2395,6 +2472,7 @@ export function getRequiredImports(
         const def = registry.get(materialNode.data.type);
         if (def) {
             imports.add(def.tsl);
+            addMaterialFallbackImports(imports, materialNode, def);
         }
     }
 
@@ -2462,15 +2540,16 @@ export function getRequiredImports(
                 imports.add('vec2');
             } else {
                 const def = registry.get(node.data.type);
-                if (def && !def.tsl.startsWith('__')) imports.add(def.tsl);
+                if (def && !def.tsl.startsWith('__')) {
+                    imports.add(def.tsl);
+                    addFallbackInputImports(imports, node, def);
+                }
             }
 
             // Collect vec imports from values
             if (node.data.values) {
                 for (const value of Object.values(node.data.values)) {
-                    if (Array.isArray(value) && value.every((entry) => {
-                        return typeof entry === 'number' && Number.isFinite(entry);
-                    })) {
+                    if (isFiniteNumberArray(value)) {
                         if (value.length === 2) imports.add('vec2');
                         else if (value.length === 3) imports.add('vec3');
                         else if (value.length === 4) imports.add('vec4');
@@ -2535,14 +2614,13 @@ export function getRequiredImports(
         const def = registry.get(node.data.type);
         if (def && !def.tsl.startsWith('__') && node.data.type !== 'geo/camera') {
             imports.add(def.tsl);
+            addFallbackInputImports(imports, node, def);
         }
 
         // Check node values for arrays (vectors) to add vec imports
         if (node.data.values) {
             for (const value of Object.values(node.data.values)) {
-                if (Array.isArray(value) && value.every((entry) => {
-                    return typeof entry === 'number' && Number.isFinite(entry);
-                })) {
+                if (isFiniteNumberArray(value)) {
                     if (value.length === 2) imports.add('vec2');
                     else if (value.length === 3) imports.add('vec3');
                     else if (value.length === 4) imports.add('vec4');

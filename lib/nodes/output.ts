@@ -49,6 +49,7 @@ export const meshStandardMaterial = {
     },
     outputs: {},
     tsl: 'MeshStandardNodeMaterial',
+    importFrom: 'three/webgpu',
 } as const;
 
 export const nodeMaterial = {
@@ -62,6 +63,7 @@ export const nodeMaterial = {
     },
     outputs: {},
     tsl: 'NodeMaterial',
+    importFrom: 'three/webgpu',
 } as const;
 
 export const meshBasicMaterial = {
@@ -105,6 +107,7 @@ export const meshBasicMaterial = {
     },
     outputs: {},
     tsl: 'MeshBasicNodeMaterial',
+    importFrom: 'three/webgpu',
 } as const;
 
 export const meshPhysicalMaterial = {
@@ -161,6 +164,7 @@ export const meshPhysicalMaterial = {
     },
     outputs: {},
     tsl: 'MeshPhysicalNodeMaterial',
+    importFrom: 'three/webgpu',
 } as const;
 
 export const meshPhongMaterial = {
@@ -208,6 +212,7 @@ export const meshPhongMaterial = {
     },
     outputs: {},
     tsl: 'MeshPhongNodeMaterial',
+    importFrom: 'three/webgpu',
 } as const;
 
 export const spriteNodeMaterial = {
@@ -247,6 +252,7 @@ export const spriteNodeMaterial = {
     },
     outputs: {},
     tsl: 'SpriteNodeMaterial',
+    importFrom: 'three/webgpu',
 } as const;
 
 // All material node types for easy checking

@@ -91,6 +91,7 @@ const mockDefs: NodeDef[] = [
         label: 'Standard Material',
         category: 'Material',
         tsl: 'MeshStandardNodeMaterial',
+        importFrom: 'three/webgpu',
         inputs: {
             colorNode: { type: 'color', default: '#ffffff', label: 'Color' },
             normalNode: { type: 'vec3', default: [0, 0, 0], label: 'Normal' },
@@ -102,6 +103,7 @@ const mockDefs: NodeDef[] = [
         label: 'Node Material',
         category: 'Material',
         tsl: 'NodeMaterial',
+        importFrom: 'three/webgpu',
         inputs: {
             fragmentNode: { type: 'vec4', default: [0, 0, 0, 1], label: 'Fragment', connectionOnly: true },
             vertexNode: { type: 'vec3', default: [0, 0, 0], label: 'Vertex', connectionOnly: true }
@@ -669,7 +671,7 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, []);
 
-            expect(code).toContain('material.colorNode =');
+            expect(code).toContain('material.colorNode = color("#ffffff");');
             expect(code).not.toContain('material.roughnessNode');
             expect(code).not.toContain('material.side');
         });
@@ -1601,6 +1603,12 @@ describe('getRequiredImports', () => {
         expect(imports).toContain('MeshStandardNodeMaterial');
     });
 
+    it('should include TSL helper imports for active material fallback inputs', () => {
+        const nodes = [createNode('mat', 'material/standard', { activeInputs: ['colorNode'] })];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toEqual(expect.arrayContaining(['MeshStandardNodeMaterial', 'color']));
+    });
+
     it('should include vec2 when node has vec2 value', () => {
         const nodes = [createNode('add1', 'math/add', { values: { a: [1, 2] } })];
         const imports = getRequiredImports(nodes);
@@ -1733,5 +1741,16 @@ describe('getRequiredImports', () => {
         expect(byModule.get('three/addons/tsl/display/hashBlur.js')).toEqual(['hashBlur']);
         expect(byModule.get('three/tsl')).not.toContain('bloom');
         expect(byModule.get('three/tsl')).not.toContain('hashBlur');
+    });
+
+    it('should group material classes under three/webgpu', () => {
+        const nodes = [createNode('mat', 'material/standard', { activeInputs: ['colorNode'] })];
+
+        const groups = getRequiredImportsByModule(nodes);
+        const byModule = new Map(groups.map((group) => [group.from, group.imports]));
+
+        expect(byModule.get('three/webgpu')).toEqual(['MeshStandardNodeMaterial']);
+        expect(byModule.get('three/tsl')).toContain('color');
+        expect(byModule.get('three/tsl')).not.toContain('MeshStandardNodeMaterial');
     });
 });
