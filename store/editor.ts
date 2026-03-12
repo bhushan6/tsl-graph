@@ -2400,20 +2400,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     // Clear the graph
-    // Clear the graph
     clearGraph: () => {
         get().takeSnapshot();
         clearUniforms();
         const forcedRootMaterial = get().forcedRootMaterial;
         const postGraph = normalizePostGraph(undefined, undefined);
-        const materialGraph = forcedRootMaterial
-            ? enforceMaterialNodeOnGraph({
-                nodes: [],
-                edges: [],
-                materialType: forcedRootMaterial.type,
-                forcedNodeId: forcedRootMaterial.nodeId,
-            })
-            : { nodes: [] as Node<TSLNodeData>[], edges: [] as Edge[], nodeId: null as string | null };
+        const materialGraph = { nodes: [] as Node<TSLNodeData>[], edges: [] as Edge[] };
         set({
             nodes: cloneNodes(materialGraph.nodes),
             edges: cloneEdges(materialGraph.edges),
@@ -2429,12 +2421,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             clipboard: null,
             commentDraftSnapshotTakenFor: {},
             graphStructureVersion: get().graphStructureVersion + 1,
-            forcedRootMaterial: forcedRootMaterial
-                ? {
-                    nodeId: materialGraph.nodeId ?? forcedRootMaterial.nodeId,
-                    type: forcedRootMaterial.type,
-                }
-                : null,
+            forcedRootMaterial,
         });
         get().markDirty();
     },

@@ -41,7 +41,7 @@ describe('Editor root material lock', () => {
         expect(materialNodes[0].data.type).toBe('material/standard');
     });
 
-    it('preserves locked material on clearGraph', () => {
+    it('clears locked material nodes on clearGraph while keeping the lock state', () => {
         const store = useEditorStore.getState();
         store.setRootMaterial('material/physical');
         store.addNode('math/add', { x: 40, y: 40 });
@@ -51,8 +51,9 @@ describe('Editor root material lock', () => {
 
         const state = useEditorStore.getState();
         const materialNodes = state.nodes.filter((node) => node.data.type.startsWith('material/'));
-        expect(materialNodes).toHaveLength(1);
-        expect(materialNodes[0].data.type).toBe('material/physical');
+        expect(materialNodes).toHaveLength(0);
+        expect(state.nodes).toHaveLength(0);
+        expect(state.forcedRootMaterial?.type).toBe('material/physical');
     });
 
     it('enforces locked material type on loadFromJSON', () => {
@@ -162,4 +163,3 @@ describe('Editor root material lock', () => {
         expect(stdMat!.data.values.opacityNode).toBe(0.42);
     });
 });
-
