@@ -100,8 +100,8 @@ export function buildTSLMaterial(
 
         return material;
     } catch (err) {
-        console.error('TSL Evaluation Failed:', err);
-        console.log('Generated Code:', functionBody);
+        // console.error('TSL Evaluation Failed:', err);
+        // console.log('Generated Code:', functionBody);
         throw err;
     }
 }
