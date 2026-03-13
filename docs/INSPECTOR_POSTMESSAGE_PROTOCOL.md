@@ -112,7 +112,7 @@ type Envelope<T = unknown> = {
 - `material.code` is returned as an applier function: `tslGraph(material)`.
 - Material declaration (`const material = new ...`) is omitted.
 - `material.code` uses runtime uniform IDs and returns a uniform map.
-- Custom helpers from `@/lib/tsl-utils` used by the graph are inlined into `material.code`, so hosts do not need that module import.
+- Custom helpers from `@/lib/tsl-utils` and easing helpers from `tsl-easings` are inlined into generated code, so hosts do not need those module imports.
 - Response includes imports grouped by module for material and postprocessing code.
 
 5. `tsl:command:get-uniform-schema`

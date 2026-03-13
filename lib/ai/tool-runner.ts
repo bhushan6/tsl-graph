@@ -14,7 +14,8 @@ import type {
 import type { NodeType } from '@/lib/types';
 import { autoLayoutNodes } from './auto-layout';
 import { getAvailableNodes, getGraphSnapshot, getNodeDefinition, validateGraph } from './graph';
-import { compileGraph, getRequiredImports, getRequiredImportsByModule } from '@/lib/compiler';
+import { compileGraph, getRequiredImportsByModule } from '@/lib/compiler';
+import { inlineCustomTslImports } from '@/lib/editor-host/tsl-utils-inline';
 import { logTrace } from '@/lib/ai/trace';
 
 const DEFAULT_POSITION = { x: 0, y: 0 };
@@ -84,14 +85,18 @@ export async function runToolCall(call: ToolCall): Promise<ToolResult> {
       case 'compileGraph': {
         const input = call.input as CompileGraphInput;
         const state = useEditorStore.getState();
-        const imports = getRequiredImports(state.nodes, state.subgraphs, state.codeNodes, state.globals);
-        const importGroups = getRequiredImportsByModule(state.nodes, state.subgraphs, state.codeNodes, state.globals);
+        const rawImportGroups = getRequiredImportsByModule(state.nodes, state.subgraphs, state.codeNodes, state.globals);
+        const { imports: importGroups, helperCode } = inlineCustomTslImports(rawImportGroups);
+        const imports = Array.from(new Set(importGroups.flatMap((group) => group.imports))).sort((a, b) => a.localeCompare(b));
         const codeBody = compileGraph(state.nodes, state.edges, state.subgraphs, state.codeNodes, { globals: state.globals });
+        const codeWithHelpers = helperCode
+          ? `${helperCode}\n\n${codeBody}`
+          : codeBody;
         const includeImports = input.includeImports !== false;
         const header = includeImports && importGroups.length > 0
           ? `${importGroups.map((group) => `import { ${group.imports.join(', ')} } from '${group.from}';`).join('\n')}\n\n`
           : '';
-        const combined = `${header}${codeBody}`;
+        const combined = `${header}${codeWithHelpers}`;
         const maxChars = Number.isFinite(input.maxChars) ? Math.max(0, input.maxChars as number) : DEFAULT_MAX_CHARS;
         const truncated = combined.length > maxChars;
         const code = truncated ? combined.slice(0, maxChars) : combined;

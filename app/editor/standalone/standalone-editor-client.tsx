@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { EditorHost } from '@/components/editor-host/EditorHost';
 import { compileGraph, compilePostGraph, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
-import { inlineTslUtilsImports } from '@/lib/editor-host/tsl-utils-inline';
+import { inlineCustomTslImports } from '@/lib/editor-host/tsl-utils-inline';
 import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { useEditorStore, type MaterialNodeType } from '@/store/editor';
 import {
@@ -248,7 +248,7 @@ export default function StandaloneEditorClient() {
                     const importsWithoutMaterialClass = stripMaterialClassImports(
                         getRequiredImportsByModule(materialGraph.nodes, subgraphs, codeNodes, globals)
                     );
-                    const { helperCode, imports } = inlineTslUtilsImports(importsWithoutMaterialClass);
+                    const { helperCode, imports } = inlineCustomTslImports(importsWithoutMaterialClass);
                     materialCode = compileMaterialApplierCode(fullMaterialCode, helperCode);
                     materialImports = imports;
                 }
@@ -265,9 +265,14 @@ export default function StandaloneEditorClient() {
             try {
                 const postGraph = getRootGraph('post');
                 const compiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
-                postCode = compiled.code;
+                const inlined = inlineCustomTslImports(
+                    getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals)
+                );
+                postCode = inlined.helperCode
+                    ? `${inlined.helperCode}\n\n${compiled.code}`
+                    : compiled.code;
                 postFunctionName = compiled.functionName;
-                postImports = getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals);
+                postImports = inlined.imports;
             } catch (error) {
                 postError = error instanceof Error ? error.message : 'Failed to compile post graph';
             }
