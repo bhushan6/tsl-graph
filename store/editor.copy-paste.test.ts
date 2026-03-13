@@ -116,6 +116,7 @@ describe('Editor copy/paste', () => {
         const codeDef = {
             id: 'code/bar-1',
             name: 'Bar',
+            scope: 'project' as const,
             code: '',
             inputs: [],
             output: { id: 'out', label: 'Result', type: 'any' as const },
@@ -151,6 +152,9 @@ describe('Editor copy/paste', () => {
 
         expect(newSubgraphId).toBeUndefined();
         expect(newCodeId).toBeDefined();
+        expect(state.codeNodes[newCodeId!].scope).toBe('project');
+        expect(state.codeNodes[newCodeId!].templateId).toBeUndefined();
+        expect(state.codeNodes[newCodeId!].templateVersion).toBeUndefined();
 
         const pastedCustom = state.nodes.find((node) => node.data.type === subgraphDef.id && node.id !== customNode.id);
         const pastedCode = state.nodes.find((node) => node.data.type === newCodeId);

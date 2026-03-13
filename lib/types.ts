@@ -81,12 +81,15 @@ export interface SubgraphDefinition {
 
 // Code-based custom node definition - created from TSL Fn code
 export type CodeNodeLanguage = 'tsl' | 'wgsl';
+export type CodeNodeScope = 'project' | 'library';
 
 export interface CodeNodeDefinition {
     // Unique ID for this code node (e.g., 'code/my-effect')
     id: string;
     // Display name (e.g., 'My Effect')
     name: string;
+    // Scope: project-only or available across user's projects
+    scope: CodeNodeScope;
     // Template reference (if saved from/as a template)
     templateId?: string;
     templateVersion?: number;

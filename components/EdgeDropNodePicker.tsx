@@ -18,6 +18,7 @@ import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetN
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
+import { resolveCodeNodeScope } from '@/lib/code-node-scope';
 import {
     Command,
     CommandEmpty,
@@ -144,6 +145,7 @@ export function EdgeDropNodePicker({
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
 
     const clipboard = useEditorStore((s) => s.clipboard);
@@ -172,7 +174,7 @@ export function EdgeDropNodePicker({
     }, [editorMode, activeRootGraph, handleDirection]);
 
     // Build code nodes from templates (fetched from server, cached by Convex)
-    const codeNodes = useMemo((): EdgeDropPickerNode[] => {
+    const templateCodeNodes = useMemo((): EdgeDropPickerNode[] => {
         return userCodeNodeTemplates
             .map(template => {
                 const data = template.data as {
@@ -197,6 +199,11 @@ export function EdgeDropNodePicker({
                 };
             });
     }, [userCodeNodeTemplates]);
+
+    const userCodeNodeTemplateIds = useMemo(
+        () => new Set(userCodeNodeTemplates.map((template) => template._id)),
+        [userCodeNodeTemplates]
+    );
 
     // Build subgraph nodes from templates (fetched from server, cached by Convex)
     const subgraphTemplateNodes = useMemo((): EdgeDropPickerNode[] => {
@@ -278,6 +285,52 @@ export function EdgeDropNodePicker({
             }));
     }, [subgraphs, userSubgraphTemplateIds]);
 
+    const projectCodeNodes = useMemo((): EdgeDropPickerNode[] => {
+        return Object.values(codeNodes)
+            .filter((codeNode) => resolveCodeNodeScope(codeNode) === 'project')
+            .map((codeNode) => ({
+                type: codeNode.id as NodeType,
+                label: codeNode.name,
+                category: 'Custom' as const,
+                isCodeNode: true,
+                inputs: codeNode.inputs.reduce((acc, input) => {
+                    acc[input.id] = { label: input.label, type: input.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                outputs: {
+                    [codeNode.output.id]: {
+                        label: codeNode.output.label,
+                        type: codeNode.output.type as TSLType,
+                    },
+                },
+            }));
+    }, [codeNodes]);
+
+    const embeddedLibraryCodeNodes = useMemo((): EdgeDropPickerNode[] => {
+        return Object.values(codeNodes)
+            .filter((codeNode) => {
+                if (resolveCodeNodeScope(codeNode) !== 'library') return false;
+                if (!codeNode.templateId) return true;
+                return !userCodeNodeTemplateIds.has(codeNode.templateId);
+            })
+            .map((codeNode) => ({
+                type: codeNode.id as NodeType,
+                label: codeNode.name,
+                category: 'Custom' as const,
+                isCodeNode: true,
+                inputs: codeNode.inputs.reduce((acc, input) => {
+                    acc[input.id] = { label: input.label, type: input.type as TSLType };
+                    return acc;
+                }, {} as Record<string, { label: string; type: TSLType }>),
+                outputs: {
+                    [codeNode.output.id]: {
+                        label: codeNode.output.label,
+                        type: codeNode.output.type as TSLType,
+                    },
+                },
+            }));
+    }, [codeNodes, userCodeNodeTemplateIds]);
+
     const globalRefNodes = useMemo((): EdgeDropPickerNode[] => {
         return buildGlobalPickerEntries(globals).map((entry) => ({
             type: 'global/ref',
@@ -330,11 +383,23 @@ export function EdgeDropNodePicker({
             ...globalRefNodes,
             ...(filteredRegistryNodes as EdgeDropPickerNode[]),
             ...projectSubgraphNodes,
+            ...projectCodeNodes,
             ...embeddedLibrarySubgraphNodes,
+            ...embeddedLibraryCodeNodes,
             ...subgraphTemplateNodes,
-            ...codeNodes,
+            ...templateCodeNodes,
         ];
-    }, [localGetQuickNodes, globalRefNodes, filteredRegistryNodes, projectSubgraphNodes, embeddedLibrarySubgraphNodes, subgraphTemplateNodes, codeNodes]);
+    }, [
+        localGetQuickNodes,
+        globalRefNodes,
+        filteredRegistryNodes,
+        projectSubgraphNodes,
+        projectCodeNodes,
+        embeddedLibrarySubgraphNodes,
+        embeddedLibraryCodeNodes,
+        subgraphTemplateNodes,
+        templateCodeNodes,
+    ]);
 
     const groupedNodes = useMemo(() => {
         return getGroupedCompatibleNodes<EdgeDropPickerNode>(allNodes);

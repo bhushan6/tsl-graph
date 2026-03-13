@@ -10,6 +10,7 @@ import { cn, getErrorMessage } from '@/lib/utils';
 import { CodeNodeDefinition, CodeNodeLanguage, NodeType, SubgraphDefinition, SubgraphPort, TSLNodeData } from '@/lib/types';
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { buildLocalGetQuickCreateEntries } from '@/lib/node-picker-utils';
+import { resolveCodeNodeScope } from '@/lib/code-node-scope';
 import { getLocalSetReferenceLabel, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
 import { X, ChevronDown, Search, Code, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -82,6 +83,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
     const subgraphs = useEditorStore((s) => s.subgraphs);
+    const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
     const { screenToFlowPosition } = useReactFlow();
     const nodesByCategory = registry.byCategory();
@@ -148,6 +150,11 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
         );
     }, [userCodeNodeTemplates, searchQuery]);
 
+    const userCodeNodeTemplateIds = useMemo(
+        () => new Set(userCodeNodeTemplates.map((template) => template._id)),
+        [userCodeNodeTemplates]
+    );
+
     // Filter public subgraph templates by search
     const filteredPublicSubgraphTemplates = useMemo(() => {
         const query = searchQuery.toLowerCase();
@@ -175,6 +182,16 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
         return projectSubgraphs.filter((sg) => sg.name.toLowerCase().includes(query));
     }, [projectSubgraphs, searchQuery]);
 
+    const projectCodeNodes = useMemo(() => {
+        return Object.values(codeNodes).filter((codeNode) => resolveCodeNodeScope(codeNode) === 'project');
+    }, [codeNodes]);
+
+    const filteredProjectCodeNodes = useMemo(() => {
+        if (!searchQuery) return projectCodeNodes;
+        const query = searchQuery.toLowerCase();
+        return projectCodeNodes.filter((codeNode) => codeNode.name.toLowerCase().includes(query));
+    }, [projectCodeNodes, searchQuery]);
+
     const embeddedLibrarySubgraphs = useMemo(() => {
         return Object.values(subgraphs).filter((sg) => {
             if (getSubgraphScope(sg) !== 'library') return false;
@@ -189,10 +206,26 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
         return embeddedLibrarySubgraphs.filter((sg) => sg.name.toLowerCase().includes(query));
     }, [embeddedLibrarySubgraphs, searchQuery]);
 
+    const embeddedLibraryCodeNodes = useMemo(() => {
+        return Object.values(codeNodes).filter((codeNode) => {
+            if (resolveCodeNodeScope(codeNode) !== 'library') return false;
+            if (!codeNode.templateId) return true;
+            return !userCodeNodeTemplateIds.has(codeNode.templateId);
+        });
+    }, [codeNodes, userCodeNodeTemplateIds]);
+
+    const filteredEmbeddedLibraryCodeNodes = useMemo(() => {
+        if (!searchQuery) return embeddedLibraryCodeNodes;
+        const query = searchQuery.toLowerCase();
+        return embeddedLibraryCodeNodes.filter((codeNode) => codeNode.name.toLowerCase().includes(query));
+    }, [embeddedLibraryCodeNodes, searchQuery]);
+
     const hasUserTemplates = filteredUserSubgraphTemplates.length > 0 || filteredUserCodeNodeTemplates.length > 0;
     const hasPublicTemplates = filteredPublicSubgraphTemplates.length > 0 || filteredPublicCodeNodeTemplates.length > 0;
     const hasProjectSubgraphs = filteredProjectSubgraphs.length > 0;
+    const hasProjectCodeNodes = filteredProjectCodeNodes.length > 0;
     const hasEmbeddedLibrarySubgraphs = filteredEmbeddedLibrarySubgraphs.length > 0;
+    const hasEmbeddedLibraryCodeNodes = filteredEmbeddedLibraryCodeNodes.length > 0;
 
     const handleAddNode = useCallback(
         (type: NodeType, data?: Partial<TSLNodeData>) => {
@@ -296,6 +329,26 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
         [screenToFlowPosition, addNode]
     );
 
+    const handleAddProjectCodeNode = useCallback(
+        (codeNodeId: string, ports: SubgraphPort[]) => {
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            const position = screenToFlowPosition({
+                x: centerX,
+                y: centerY,
+            });
+
+            position.x += (Math.random() - 0.5) * 100;
+            position.y += (Math.random() - 0.5) * 100;
+
+            addNode(codeNodeId as NodeType, position, {
+                dynamicPorts: ports,
+            });
+        },
+        [screenToFlowPosition, addNode]
+    );
+
     const handleAddCodeNodeTemplate = useCallback(
         (template: (typeof userCodeNodeTemplates)[number]) => {
             const centerX = window.innerWidth / 2;
@@ -313,6 +366,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
             const templateData = (template.data ?? {}) as {
                 id?: string;
                 name?: string;
+                scope?: 'project' | 'library';
                 language?: CodeNodeLanguage;
                 code?: string;
                 inputs?: SubgraphPort[];
@@ -329,6 +383,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                 name: typeof templateData.name === 'string' ? templateData.name : template.name,
                 templateId: template._id,
                 templateVersion: template.version,
+                scope: templateData.scope === 'project' ? 'project' : 'library',
                 language: templateData.language ?? 'tsl',
                 code: templateData.code || '',
                 inputs: templateData.inputs || [],
@@ -604,12 +659,14 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                 ))}
 
                 {/* Custom Nodes Section - User's templates + Community templates */}
-                {(showCustomSection || hasProjectSubgraphs || hasEmbeddedLibrarySubgraphs || hasUserTemplates || hasPublicTemplates) && (
+                {(showCustomSection || hasProjectSubgraphs || hasProjectCodeNodes || hasEmbeddedLibrarySubgraphs || hasEmbeddedLibraryCodeNodes || hasUserTemplates || hasPublicTemplates) && (
                     <CategoryGroup
                         title="Custom Nodes"
                         count={
                             filteredProjectSubgraphs.length +
+                            filteredProjectCodeNodes.length +
                             filteredEmbeddedLibrarySubgraphs.length +
+                            filteredEmbeddedLibraryCodeNodes.length +
                             filteredUserSubgraphTemplates.length +
                             filteredUserCodeNodeTemplates.length +
                             filteredPublicSubgraphTemplates.length +
@@ -631,7 +688,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                             )}
 
                             {/* Project Subgraphs */}
-                            {filteredProjectSubgraphs.length > 0 && (
+                            {(filteredProjectSubgraphs.length > 0 || filteredProjectCodeNodes.length > 0) && (
                                 <div className="my-1.5 px-2">
                                     <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider block">Project</span>
                                 </div>
@@ -654,9 +711,27 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                                 </SidebarMenuItem>
                             ))}
 
-                            {(hasEmbeddedLibrarySubgraphs || hasUserTemplates) && (
+                            {filteredProjectCodeNodes.map((codeNode) => (
+                                <SidebarMenuItem key={codeNode.id}>
+                                    <button
+                                        onClick={() => handleAddProjectCodeNode(
+                                            codeNode.id,
+                                            [...codeNode.inputs, codeNode.output]
+                                        )}
+                                        className={cn(
+                                            menuButtonStyles,
+                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
+                                        )}
+                                    >
+                                        <Code className="w-3 h-3" />
+                                        <span className="truncate flex-1 text-left">{codeNode.name}</span>
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
+
+                            {(hasEmbeddedLibrarySubgraphs || hasEmbeddedLibraryCodeNodes || hasUserTemplates) && (
                                 <div className="my-1.5 px-2">
-                                    {filteredProjectSubgraphs.length > 0 && <div className="h-px bg-sidebar-border/50" />}
+                                    {(filteredProjectSubgraphs.length > 0 || filteredProjectCodeNodes.length > 0) && <div className="h-px bg-sidebar-border/50" />}
                                     <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mt-1 block">Library</span>
                                 </div>
                             )}
@@ -675,6 +750,24 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                                     >
                                         <Layers className="w-3 h-3" />
                                         <span className="truncate flex-1 text-left">{subgraph.name}</span>
+                                    </button>
+                                </SidebarMenuItem>
+                            ))}
+
+                            {filteredEmbeddedLibraryCodeNodes.map((codeNode) => (
+                                <SidebarMenuItem key={`${codeNode.id}:embedded`}>
+                                    <button
+                                        onClick={() => handleAddProjectCodeNode(
+                                            codeNode.id,
+                                            [...codeNode.inputs, codeNode.output]
+                                        )}
+                                        className={cn(
+                                            menuButtonStyles,
+                                            'hover:bg-primary/10 text-primary/80 hover:text-primary gap-2'
+                                        )}
+                                    >
+                                        <Code className="w-3 h-3" />
+                                        <span className="truncate flex-1 text-left">{codeNode.name}</span>
                                     </button>
                                 </SidebarMenuItem>
                             ))}

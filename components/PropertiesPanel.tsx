@@ -1176,7 +1176,7 @@ function LocalGetPanel({ node }: { node: AppNode }) {
 
                 {isDangling && (
                     <p className="text-xs text-red-500">
-                        Dangling reference: "{selectedSourceId}" does not exist.
+                        Dangling reference: &quot;{selectedSourceId}&quot; does not exist.
                     </p>
                 )}
                 {isOutOfScope && (
@@ -1412,6 +1412,7 @@ function PropertiesPanelContent() {
                         initialName={codeNode.name}
                         initialCode={codeNode.code}
                         initialLanguage={codeNode.language ?? 'tsl'}
+                        initialScope={codeNode.scope}
                     />
                 )}
             </>

@@ -8,6 +8,7 @@ import { AlertTriangle, RefreshCw, X, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
 import { useTemplateLibrary } from '@/lib/editor-host/template-library';
+import { resolveCodeNodeScope } from '@/lib/code-node-scope';
 
 interface StaleTemplate {
     id: string;
@@ -92,7 +93,7 @@ export function StaleTemplatesNotification() {
     const codeNodeTemplateIds = useMemo(() => (
         [...new Set(
             Object.values(codeNodes)
-                .filter(cn => cn.templateId && usedCodeNodeIds.has(cn.id))
+                .filter(cn => resolveCodeNodeScope(cn) === 'library' && cn.templateId && usedCodeNodeIds.has(cn.id))
                 .map(cn => cn.templateId as string)
         )]
     ), [codeNodes, usedCodeNodeIds]);
@@ -192,6 +193,8 @@ export function StaleTemplatesNotification() {
             for (const cn of Object.values(codeNodes)) {
                 // Skip if not used in graph
                 if (!usedCodeNodeIds.has(cn.id)) continue;
+                // Skip project-scoped code nodes
+                if (resolveCodeNodeScope(cn) === 'project') continue;
                 // Skip if no template reference
                 if (!cn.templateId || !cn.templateVersion) continue;
                 // Skip if we've already processed this templateId (deduplication)
@@ -252,9 +255,11 @@ export function StaleTemplatesNotification() {
                 const latestTemplate = await getCodeNodeTemplate(template.templateId);
 
                 if (latestTemplate?.data) {
+                    const latestData = latestTemplate.data as { scope?: 'project' | 'library'; templateId?: string };
                     updateCodeNode(template.id, {
                         ...latestTemplate.data,
                         id: template.id,
+                        scope: resolveCodeNodeScope(latestData),
                         templateId: template.templateId,
                         templateVersion: latestTemplate.version,
                     });
@@ -324,6 +329,7 @@ export function StaleTemplatesNotification() {
                     data: {
                         id: embeddedCodeNode.id,
                         name: embeddedCodeNode.name,
+                        scope: embeddedCodeNode.scope,
                         code: embeddedCodeNode.code,
                         inputs: embeddedCodeNode.inputs,
                         output: embeddedCodeNode.output,
@@ -334,6 +340,7 @@ export function StaleTemplatesNotification() {
 
                 // Update embedded definition with new template reference
                 updateCodeNode(template.id, {
+                    scope: 'library',
                     templateId: result.templateId,
                     templateVersion: result.version,
                 });
@@ -364,10 +371,6 @@ export function StaleTemplatesNotification() {
         setDismissedCloneable(prev => new Set(prev).add(templateId));
     }, []);
 
-    if (!templateLibraryEnabled) {
-        return null;
-    }
-
     // Filter out dismissed templates
     const visibleStale = staleTemplates.filter(t => !dismissed.has(t.id));
     const visibleCloneable = cloneableTemplates.filter(t => !dismissedCloneable.has(t.id));
@@ -389,6 +392,10 @@ export function StaleTemplatesNotification() {
         const promises = visibleCloneable.map(t => handleClone(t));
         await Promise.all(promises);
     }, [visibleCloneable, handleClone]);
+
+    if (!templateLibraryEnabled) {
+        return null;
+    }
 
     const isUpdatingAny = updating.size > 0;
     const isCloningAny = cloning.size > 0;

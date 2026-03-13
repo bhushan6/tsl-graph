@@ -505,6 +505,7 @@ describe('compileGraph', () => {
                 'code/wgsl-test': {
                     id: 'code/wgsl-test',
                     name: 'WGSL Test',
+                    scope: 'project',
                     language: 'wgsl' as const,
                     code: `fn colorFn(baseColor: vec4f, uv: vec2f) -> vec4f { return baseColor; }`,
                     inputs: [
@@ -1693,6 +1694,7 @@ describe('getRequiredImports', () => {
             'code/wgsl-test': {
                 id: 'code/wgsl-test',
                 name: 'WGSL Test',
+                scope: 'project',
                 language: 'wgsl' as const,
                 code: `fn colorFn(baseColor: vec4f) -> vec4f { return baseColor; }`,
                 inputs: [{ id: 'in_0', label: 'baseColor', type: 'vec4' }],

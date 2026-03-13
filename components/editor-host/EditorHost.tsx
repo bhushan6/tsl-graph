@@ -132,6 +132,7 @@ export function EditorHost<TRef>({
                     data: {
                         id: codeNode.id,
                         name: codeNode.name,
+                        scope: codeNode.scope,
                         language: codeNode.language ?? 'tsl',
                         code: codeNode.code,
                         inputs: codeNode.inputs,
@@ -149,6 +150,7 @@ export function EditorHost<TRef>({
                     data: {
                         id: codeNode.id,
                         name: codeNode.name,
+                        scope: codeNode.scope,
                         language: codeNode.language ?? 'tsl',
                         code: codeNode.code,
                         inputs: codeNode.inputs,

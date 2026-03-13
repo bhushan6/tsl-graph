@@ -38,6 +38,9 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             const definition = registry.get(nodeType);
             const isCodeNode = nodeType.startsWith('code/');
             const isSubgraphNode = nodeType.startsWith('subgraph/') && !nodeType.startsWith('subgraph/input') && !nodeType.startsWith('subgraph/output');
+            const projectCodeNode = isCodeNode
+                ? useEditorStore.getState().codeNodes[nodeType]
+                : undefined;
             const projectSubgraph = nodeType.startsWith('custom/')
                 ? useEditorStore.getState().subgraphs[nodeType]
                 : undefined;
@@ -50,6 +53,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 code: string;
                 inputs: SubgraphPort[];
                 output: SubgraphPort;
+                scope?: 'project' | 'library';
                 language?: CodeNodeLanguage;
             } | null = null;
             let codeTemplateId: string | undefined;
@@ -63,6 +67,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         id: string;
                         name: string;
                         code: string;
+                        scope?: 'project' | 'library';
                         language?: CodeNodeLanguage;
                         inputs: Array<{ id: string; label: string; type: string }>;
                         output: { id: string; label: string; type: string };
@@ -71,6 +76,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         id: data.id,
                         name: data.name || template.name,
                         code: data.code,
+                        scope: data.scope,
                         language: data.language ?? 'tsl',
                         inputs: data.inputs.map(inp => ({ id: inp.id, label: inp.label, type: inp.type as SubgraphPort['type'] })),
                         output: { id: data.output.id, label: data.output.label, type: data.output.type as SubgraphPort['type'] },
@@ -122,7 +128,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             }
 
             // Must have either a registry definition or be a valid template
-            if (!definition && !codeTemplateData && !subgraphTemplateData && !projectSubgraph) return;
+            if (!definition && !codeTemplateData && !projectCodeNode && !subgraphTemplateData && !projectSubgraph) return;
 
             // Build default values from definition
             // Note: definition.inputs is a Record<string, Port>
@@ -208,6 +214,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                     name: codeTemplateData.name,
                     templateId: codeTemplateId,
                     templateVersion: codeTemplateVersion,
+                    scope: codeTemplateData.scope === 'project' ? 'project' : 'library',
                     language: codeTemplateData.language ?? 'tsl',
                     code: codeTemplateData.code,
                     inputs: codeTemplateData.inputs,
@@ -228,6 +235,19 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         values: {},
                         connected: {},
                         dynamicPorts: [...codeTemplateData.inputs, codeTemplateData.output],
+                    } as TSLNodeData,
+                };
+            } else if (projectCodeNode) {
+                newNode = {
+                    id: newNodeId,
+                    type: nodeType,
+                    position: flowPosition,
+                    selected: true,
+                    data: {
+                        type: nodeType,
+                        values: {},
+                        connected: {},
+                        dynamicPorts: [...projectCodeNode.inputs, projectCodeNode.output],
                     } as TSLNodeData,
                 };
             } else if (isSubgraphNode && subgraphTemplateData) {

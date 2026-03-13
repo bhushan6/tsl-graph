@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useEditorStore } from '@/store/editor';
 import { parseCodeNodeCode } from '@/lib/code-parser';
-import { CodeNodeLanguage, SubgraphPort, TSLType } from '@/lib/types';
+import { CodeNodeLanguage, CodeNodeScope, SubgraphPort, TSLType } from '@/lib/types';
 import { toast } from 'sonner';
 
 const PORT_TYPES: { value: TSLType; label: string }[] = [
@@ -42,6 +42,7 @@ interface CodeNodeDialogProps {
     initialName?: string;
     initialCode?: string;
     initialLanguage?: CodeNodeLanguage;
+    initialScope?: CodeNodeScope;
 }
 
 const PLACEHOLDER_TSL_CODE = `Fn(([a, b]) => {
@@ -64,20 +65,28 @@ export function CodeNodeDialog({
     nodeId,
     initialName = '',
     initialCode = '',
-    initialLanguage = 'tsl'
+    initialLanguage = 'tsl',
+    initialScope = 'project'
 }: CodeNodeDialogProps) {
     const [name, setName] = useState(initialName);
     const [code, setCode] = useState(initialCode);
     const [isSaving, setIsSaving] = useState(false);
     const [inputTypes, setInputTypes] = useState<Record<string, TSLType>>({});
     const [language, setLanguage] = useState<CodeNodeLanguage>(initialLanguage);
-    const { createCodeNode, updateCodeNode, subgraphs, getCodeNode } = useEditorStore();
+    const [scope, setScope] = useState<CodeNodeScope>(initialScope);
+    const { createCodeNode, updateCodeNode, setCodeNodeScope, subgraphs, getCodeNode } = useEditorStore();
 
     const { resolvedTheme } = useTheme();
     const extensions = useMemo(() => [javascript(), tslAutocompletion], []);
 
     // When editing, load existing input types from the code node
     const existingCodeNode = mode === 'edit' && nodeId ? getCodeNode(nodeId) : null;
+
+    React.useEffect(() => {
+        if (mode === 'edit' && existingCodeNode) {
+            setScope(existingCodeNode.scope);
+        }
+    }, [mode, existingCodeNode]);
 
     // Parse code to extract arguments and validate
     const parseResult = useMemo(() => {
@@ -109,7 +118,6 @@ export function CodeNodeDialog({
         if (isDifferent) {
             setInputTypes(newTypes);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [parseResult.arguments, parseResult.argTypes, existingCodeNode, inputTypes]);
 
     // Check for name conflicts
@@ -165,16 +173,22 @@ export function CodeNodeDialog({
             };
 
             if (mode === 'create') {
-                const id = await createCodeNode(name.trim(), code.trim(), inputs, output, language);
+                const id = await createCodeNode(name.trim(), code.trim(), inputs, output, language, scope);
                 if (id) {
                     toast.success(`Created code node "${name}"`);
                     setName('');
                     setCode('');
+                    setScope(initialScope);
                     onOpenChange(false);
                 }
                 // Error toast is already shown by createCodeNode
             } else {
                 if (nodeId) {
+                    const currentScope = existingCodeNode?.scope ?? 'project';
+                    if (currentScope !== scope && scope === 'project') {
+                        await setCodeNodeScope(nodeId, 'project');
+                    }
+
                     updateCodeNode(nodeId, {
                         name: name.trim(),
                         code: code.trim(),
@@ -182,6 +196,13 @@ export function CodeNodeDialog({
                         output,
                         language
                     });
+
+                    if (currentScope !== scope && scope === 'library') {
+                        const switched = await setCodeNodeScope(nodeId, 'library');
+                        if (!switched) {
+                            toast.warning('Library sync is unavailable. Kept code node as project-scoped.');
+                        }
+                    }
                     toast.success(`Updated code node "${name}"`);
                     onOpenChange(false);
                 }
@@ -189,15 +210,16 @@ export function CodeNodeDialog({
         } finally {
             setIsSaving(false);
         }
-    }, [canCreate, isSaving, name, code, parseResult.arguments, parseResult.returnType, inputTypes, createCodeNode, updateCodeNode, onOpenChange, mode, nodeId, language]);
+    }, [canCreate, isSaving, name, code, parseResult.arguments, parseResult.argTypes, parseResult.returnType, inputTypes, createCodeNode, updateCodeNode, setCodeNodeScope, onOpenChange, mode, nodeId, language, scope, existingCodeNode?.scope, initialScope]);
 
     const handleClose = useCallback(() => {
         // Reset to initial values on close without saving
         setName(initialName);
         setCode(initialCode);
         setLanguage(initialLanguage);
+        setScope(initialScope);
         onOpenChange(false);
-    }, [onOpenChange, initialName, initialCode, initialLanguage]);
+    }, [onOpenChange, initialName, initialCode, initialLanguage, initialScope]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -242,6 +264,22 @@ export function CodeNodeDialog({
                             <option value="tsl">TSL</option>
                             <option value="wgsl">WGSL</option>
                         </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="node-scope">Scope</Label>
+                        <select
+                            id="node-scope"
+                            value={scope}
+                            onChange={(e) => setScope(e.target.value as CodeNodeScope)}
+                            className="w-full h-8 px-2 text-sm bg-muted border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                            <option value="project">Project</option>
+                            <option value="library">Library</option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                            Project stays local to this graph. Library syncs to your reusable templates.
+                        </p>
                     </div>
 
                     {/* Code editor */}

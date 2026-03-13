@@ -24,6 +24,7 @@ import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
 import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
+import { resolveCodeNodeScope } from '@/lib/code-node-scope';
 import {
     getLocalName,
     isLocalSetNode,
@@ -535,6 +536,32 @@ const resolveSubgraphScope = (
     return subgraph?.templateId ? 'library' : 'project';
 };
 
+const normalizeCodeNodeDefinition = (
+    codeNode: CodeNodeDefinition
+): CodeNodeDefinition => ({
+    ...codeNode,
+    scope: resolveCodeNodeScope(codeNode),
+    language: codeNode.language ?? 'tsl',
+    createdAt: codeNode.createdAt || Date.now(),
+    updatedAt: codeNode.updatedAt || Date.now(),
+});
+
+const normalizeCodeNodesRecord = (
+    codeNodes: Record<string, CodeNodeDefinition> | undefined
+): Record<string, CodeNodeDefinition> => {
+    if (!codeNodes) return {};
+
+    return Object.fromEntries(
+        Object.entries(codeNodes).map(([id, definition]) => {
+            const normalized = normalizeCodeNodeDefinition({
+                ...definition,
+                id,
+            });
+            return [id, normalized];
+        })
+    );
+};
+
 
 interface SubgraphStackItem {
     nodes: Node<TSLNodeData>[];
@@ -864,9 +891,11 @@ interface EditorState {
         code: string,
         inputs: SubgraphPort[],
         output: SubgraphPort,
-        language?: CodeNodeDefinition['language']
+        language?: CodeNodeDefinition['language'],
+        scope?: CodeNodeDefinition['scope']
     ) => Promise<string | null>;
     updateCodeNode: (id: string, updates: Partial<CodeNodeDefinition>) => void;
+    setCodeNodeScope: (id: string, scope: CodeNodeDefinition['scope']) => Promise<boolean>;
     addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => void;
     deleteCodeNode: (id: string) => void;
     getCodeNode: (id: string) => CodeNodeDefinition | undefined;
@@ -2063,6 +2092,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 newCodeNodes[newTypeId] = {
                     ...clonedDef,
                     id: newTypeId,
+                    scope: 'project',
                     templateId: undefined,
                     templateVersion: undefined,
                     createdAt: Date.now(),
@@ -2353,7 +2383,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     commentDraftSnapshotTakenFor: {},
                     globals: data.globals ?? data.graph?.globals ?? [],
                     subgraphs: data.subgraphs ?? data.graph?.subgraphs ?? {},
-                    codeNodes: data.codeNodes ?? data.graph?.codeNodes ?? {},
+                    codeNodes: normalizeCodeNodesRecord(data.codeNodes ?? data.graph?.codeNodes),
                     graphStructureVersion: get().graphStructureVersion + 1,
                     // Restore preview settings
                     previewSettings: mergedPreviewSettings,
@@ -3051,7 +3081,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     deleteSubgraph: (subgraphId: string) => {
-        const { [subgraphId]: _, ...rest } = get().subgraphs;
+        const rest = { ...get().subgraphs };
+        delete rest[subgraphId];
         set({ subgraphs: rest });
         get().markDirty();
     },
@@ -3124,60 +3155,82 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         code: string,
         inputs: SubgraphPort[],
         output: SubgraphPort,
-        language: CodeNodeDefinition['language'] = 'tsl'
+        language: CodeNodeDefinition['language'] = 'tsl',
+        scope: CodeNodeDefinition['scope'] = 'project'
     ) => {
         get().takeSnapshot();
 
         // Generate unique ID
         const id = `code/${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`;
 
-        const codeNode: CodeNodeDefinition = {
+        const codeNode: CodeNodeDefinition = normalizeCodeNodeDefinition({
             id,
             name,
+            scope,
             code,
             inputs,
             output,
             language,
             createdAt: Date.now(),
             updatedAt: Date.now(),
-        };
+        });
 
         set({
             codeNodes: { ...get().codeNodes, [id]: codeNode },
         });
         get().markDirty();
 
-        // Auto-save to DB as private template
-        const { onCodeNodeTemplateCreate } = get();
-        if (onCodeNodeTemplateCreate) {
+        const fallbackToProjectScope = (warningMessage: string) => {
+            set((state) => {
+                const currentCodeNode = state.codeNodes[id];
+                if (!currentCodeNode) return {};
+                return {
+                    codeNodes: {
+                        ...state.codeNodes,
+                        [id]: {
+                            ...currentCodeNode,
+                            scope: 'project',
+                            templateId: undefined,
+                            templateVersion: undefined,
+                            updatedAt: Date.now(),
+                        },
+                    },
+                };
+            });
+            toast.warning(warningMessage);
+        };
+
+        if (scope === 'library') {
+            const { onCodeNodeTemplateCreate } = get();
+            if (!onCodeNodeTemplateCreate) {
+                fallbackToProjectScope('Library sync is unavailable for this host. Created as project-scoped code node.');
+                return id;
+            }
+
             try {
                 const result = await onCodeNodeTemplateCreate(codeNode);
-                // Update local definition with template reference
-                const currentCodeNodes = useEditorStore.getState().codeNodes;
-                if (currentCodeNodes[id]) {
-                    useEditorStore.setState({
+                set((state) => {
+                    const currentCodeNode = state.codeNodes[id];
+                    if (!currentCodeNode) return {};
+                    return {
                         codeNodes: {
-                            ...currentCodeNodes,
+                            ...state.codeNodes,
                             [id]: {
-                                ...currentCodeNodes[id],
+                                ...currentCodeNode,
+                                scope: 'library',
                                 templateId: result.templateId,
                                 templateVersion: result.version,
+                                updatedAt: Date.now(),
                             },
                         },
-                    });
-                }
-                return id;
+                    };
+                });
             } catch (error) {
-                // Rollback: remove the code node from local state
-                const currentCodeNodes = useEditorStore.getState().codeNodes;
-                const { [id]: _, ...rest } = currentCodeNodes;
-                useEditorStore.setState({ codeNodes: rest });
-
                 console.error('Failed to save code node template to DB:', error);
                 const message = getErrorMessage(error);
                 toast.error(message);
                 get().trackEvent('error_occurred', { context: 'create_code_node_template', error: message });
-                return null;
+                fallbackToProjectScope('Created as project-scoped code node because library sync failed.');
             }
         }
 
@@ -3189,7 +3242,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const codeNode = get().codeNodes[id];
         if (!codeNode) return;
 
-        const updatedCodeNode = { ...codeNode, ...updates, updatedAt: Date.now() };
+        const updatedCodeNode = normalizeCodeNodeDefinition({
+            ...codeNode,
+            ...updates,
+            updatedAt: Date.now(),
+        });
 
         // Propagate changes to all instances of this code node
         const { nodes, edges } = get();
@@ -3252,9 +3309,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // AND we are not just syncing the version from the DB (indicated by presence of templateVersion in updates)
         const isSyncing = typeof updates.templateVersion === 'number';
         const { onCodeNodeTemplateUpdate } = get();
+        const codeNodeScope = resolveCodeNodeScope(updatedCodeNode);
 
-        if (onCodeNodeTemplateUpdate && codeNode.templateId && !isSyncing) {
-            onCodeNodeTemplateUpdate(codeNode.templateId, updatedCodeNode).then(result => {
+        if (onCodeNodeTemplateUpdate && updatedCodeNode.templateId && codeNodeScope === 'library' && !isSyncing) {
+            onCodeNodeTemplateUpdate(updatedCodeNode.templateId, updatedCodeNode).then(result => {
                 // Update local version
                 const latestCodeNodes = useEditorStore.getState().codeNodes;
                 if (latestCodeNodes[id]) {
@@ -3277,22 +3335,114 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
     },
 
+    setCodeNodeScope: async (id: string, targetScope: CodeNodeDefinition['scope']) => {
+        const currentCodeNode = get().codeNodes[id];
+        if (!currentCodeNode) return false;
+
+        const currentScope = resolveCodeNodeScope(currentCodeNode);
+        if (currentScope === targetScope) return true;
+
+        if (targetScope === 'project') {
+            get().takeSnapshot();
+            set((state) => {
+                const latestCodeNode = state.codeNodes[id];
+                if (!latestCodeNode) return {};
+                return {
+                    codeNodes: {
+                        ...state.codeNodes,
+                        [id]: {
+                            ...latestCodeNode,
+                            scope: 'project',
+                            templateId: undefined,
+                            templateVersion: undefined,
+                            updatedAt: Date.now(),
+                        },
+                    },
+                };
+            });
+            get().markDirty();
+            return true;
+        }
+
+        const { onCodeNodeTemplateCreate, onCodeNodeTemplateUpdate } = get();
+        const warnUnavailable = () => {
+            toast.warning('Library sync is unavailable for this host. Kept as project-scoped code node.');
+        };
+
+        const latestCodeNode = useEditorStore.getState().codeNodes[id];
+        if (!latestCodeNode) return false;
+        const normalizedCodeNode = normalizeCodeNodeDefinition(latestCodeNode);
+
+        let nextTemplateId = normalizedCodeNode.templateId;
+        let nextTemplateVersion = normalizedCodeNode.templateVersion;
+        const codeNodeForLibrary = {
+            ...normalizedCodeNode,
+            scope: 'library' as const,
+            updatedAt: Date.now(),
+        };
+
+        try {
+            if (nextTemplateId) {
+                if (!onCodeNodeTemplateUpdate) {
+                    warnUnavailable();
+                    return false;
+                }
+                const result = await onCodeNodeTemplateUpdate(nextTemplateId, codeNodeForLibrary);
+                nextTemplateVersion = result.version;
+            } else {
+                if (!onCodeNodeTemplateCreate) {
+                    warnUnavailable();
+                    return false;
+                }
+                const result = await onCodeNodeTemplateCreate(codeNodeForLibrary);
+                nextTemplateId = result.templateId;
+                nextTemplateVersion = result.version;
+            }
+        } catch (error) {
+            console.error('Failed to set code node scope to library:', error);
+            const message = getErrorMessage(error);
+            toast.error(message);
+            get().trackEvent('error_occurred', { context: 'sync_code_node_scope', error: message });
+            return false;
+        }
+
+        get().takeSnapshot();
+        set((state) => {
+            const latest = state.codeNodes[id];
+            if (!latest) return {};
+            return {
+                codeNodes: {
+                    ...state.codeNodes,
+                    [id]: {
+                        ...latest,
+                        scope: 'library',
+                        templateId: nextTemplateId,
+                        templateVersion: nextTemplateVersion,
+                        updatedAt: Date.now(),
+                    },
+                },
+            };
+        });
+        get().markDirty();
+        return true;
+    },
+
     deleteCodeNode: (id: string) => {
         get().takeSnapshot();
-        const { [id]: _, ...rest } = get().codeNodes;
+        const rest = { ...get().codeNodes };
+        delete rest[id];
         set({ codeNodes: rest });
         get().markDirty();
     },
 
     addCodeNodeDefinition: (codeNode: CodeNodeDefinition) => {
         get().takeSnapshot();
+        const normalizedCodeNode = normalizeCodeNodeDefinition(codeNode);
         set({
             codeNodes: {
                 ...get().codeNodes,
-                [codeNode.id]: {
-                    ...codeNode,
-                    language: codeNode.language ?? 'tsl',
-                    createdAt: codeNode.createdAt || Date.now(),
+                [normalizedCodeNode.id]: {
+                    ...normalizedCodeNode,
                     updatedAt: Date.now(),
                 },
             },
