@@ -124,7 +124,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 materialError: null,
             };
         } catch (e) {
-            console.error('Material build error:', e);
+            // console.error('Material build error:', e);
             return {
                 material: new THREE.MeshStandardMaterial({ color: 0x888888 }),
                 materialError: e instanceof Error ? e.message : 'Failed to build material',
