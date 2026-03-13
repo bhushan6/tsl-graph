@@ -8,7 +8,7 @@ import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from "@/lib/nodes";
 import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
-import { CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
+import { CodeNodeDefinition, CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 import { getAbsolutePosition } from "@/lib/utils";
 import { replaceEdgeOnTargetHandle } from "@/lib/graph-utils";
 import { useTemplateLibrary } from "@/lib/editor-host/template-library";
@@ -209,7 +209,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 actualNodeType = instanceId as NodeType;
 
                 // Add the code node definition to the store
-                const codeDefinition = {
+                const codeDefinition: CodeNodeDefinition = {
                     id: instanceId,
                     name: codeTemplateData.name,
                     templateId: codeTemplateId,
