@@ -50,7 +50,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
     const subgraphNameRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const { setCenter, getZoom, screenToFlowPosition } = useReactFlow();
+    const { setCenter, getZoom, screenToFlowPosition, fitView } = useReactFlow();
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
@@ -111,9 +111,17 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
             if (subgraphNode) {
                 const zoom = getZoom();
                 setCenter(subgraphNode.position.x, subgraphNode.position.y, { duration: 0, zoom });
+
             }
         } finally {
             setIsProcessing(false);
+            requestAnimationFrame(() => {
+                fitView({
+                    padding: 0.2,
+                    duration: 250,
+                });
+            })
+
         }
     }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing, setCenter, getZoom]);
 
