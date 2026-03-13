@@ -395,6 +395,7 @@ export default function StandaloneEditorClient() {
                     return;
                 }
 
+                store.clearHistory();
                 store.markSaved();
 
                 const responsePayload: LoadCommandResponsePayload = { ok: true };
@@ -409,6 +410,7 @@ export default function StandaloneEditorClient() {
             if (data.type === 'tsl:command:clear-graph') {
                 const store = useEditorStore.getState();
                 store.clearGraph();
+                store.clearHistory();
                 store.markSaved();
 
                 const responsePayload: ClearGraphResponsePayload = { ok: true };
