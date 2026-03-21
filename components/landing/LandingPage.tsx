@@ -95,7 +95,7 @@ export default function LandingPage() {
                                 </li>
                                 <li className="flex gap-3">
                                     <span className="text-[#9A9898] dark:text-[#A1A1AA] shrink-0">[*]</span>
-                                    <div><strong className="text-[#201D1D] dark:text-[#EAEAEA] font-bold">Debug & Inspect</strong> <span className="text-[#9A9898] dark:text-[#A1A1AA]">Hover over or pin nodes to see real-time value previews during live editing.</span></div>
+                                    <div><strong className="text-[#201D1D] dark:text-[#EAEAEA] font-bold">Debug & Inspect</strong> <span className="text-[#9A9898] dark:text-[#A1A1AA]">Debug individual nodes to see their values in real-time.</span></div>
                                 </li>
                                 <li className="flex gap-3">
                                     <span className="text-[#9A9898] dark:text-[#A1A1AA] shrink-0">[*]</span>
