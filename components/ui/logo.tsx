@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 interface LogoProps {
     className?: string;
-    size?: "sm" | "md" | "lg" | "xl";
+    size?: "sm" | "md" | "lg" | "xl" | "xxxxl";
 }
 
 export function Logo({ className, size = "md" }: LogoProps) {
@@ -27,6 +27,11 @@ export function Logo({ className, size = "md" }: LogoProps) {
             tsl: "text-4xl",
             graph: "text-sm tracking-[0.3em]",
         },
+        xxxxl: {
+            container: "",
+            tsl: "text-8xl",
+            graph: "text-4xl tracking-[0.4em]",
+        }
     };
 
     const { tsl, graph } = sizeClasses[size];
@@ -36,7 +41,9 @@ export function Logo({ className, size = "md" }: LogoProps) {
             <span className={cn("font-black text-foreground tracking-tighter", tsl)}>
                 TSL
             </span>
-            <span className={cn("font-bold text-muted-foreground", graph)}>
+            <span style={{
+                textBox: "trim-both text"
+            }} className={cn("font-bold text-muted-foreground", graph)}>
                 GRAPH
             </span>
         </div>

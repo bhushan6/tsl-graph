@@ -9,7 +9,7 @@ import DemoEditor from './demo-editor';
 export default function LandingPage() {
 
     return (
-        <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#0A0A0A] text-[#201D1D] dark:text-[#EAEAEA] font-mono selection:bg-[#201D1D] dark:selection:bg-[#EAEAEA] selection:text-[#FDFCFD] dark:selection:text-[#0A0A0A]">
+        <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#0A0A0A] text-[#201D1D] dark:text-[#EAEAEA]  selection:bg-[#201D1D] dark:selection:bg-[#EAEAEA] selection:text-[#FDFCFD] dark:selection:text-[#0A0A0A]">
             <header className="w-full px-6 py-4 flex justify-between items-center border-b border-[#201D1D]/5 dark:border-[#EAEAEA]/10">
                 <div className="flex items-center gap-2">
                     <Logo size="lg" className="text-[#201D1D] dark:text-[#EAEAEA]" />
@@ -26,18 +26,24 @@ export default function LandingPage() {
 
             <main className="flex-1 flex flex-col items-center pt-24 px-6 gap-12 max-w-6xl mx-auto w-full">
                 <div className="flex flex-col items-center text-center space-y-8 max-w-4xl">
-                    <div className="inline-flex items-center gap-3 text-sm text-[#9A9898] dark:text-[#A1A1AA]">
+                    {/* <div className="inline-flex items-center gap-3 text-sm text-[#9A9898] dark:text-[#A1A1AA]">
                         <span className="bg-[#201D1D] dark:bg-[#EAEAEA] text-[#FDFCFD] dark:text-[#0A0A0A] rounded-[4px] px-2 py-0.5 text-xs font-bold uppercase tracking-wider">New</span>
                         <span>Editor playground available. No login required.</span>
-                    </div>
+                    </div> */}
 
-                    <h1 className="text-[32px] sm:text-[42px] md:text-[56px] font-bold leading-[1.2] tracking-tight text-[#201D1D] dark:text-[#EAEAEA]">
-                        Create Shaders <br className="hidden sm:block" /> with node based interface
-                    </h1>
+                    {/* <h1 className="text-[32px] sm:text-[42px] md:text-[56px] font-bold leading-[1.2] tracking-tight text-[#201D1D] dark:text-[#EAEAEA]"
+                        style={{
+                            textWrap: "balance"
+                        }}
+                    >
+                        Design Shaders Visually with node-based interface
+                    </h1> */}
+                    <Logo size='xxxxl' />
 
-                    <p className="text-base sm:text-lg text-[#9A9898] dark:text-[#A1A1AA] leading-relaxed max-w-xl mx-auto">
-                        Build powerful Three.js shaders visually with a node-based interface.
-                        Export standard TSL code instantly.
+                    <p style={{
+                        textWrap: "balance"
+                    }} className="text-base sm:text-lg text-[#9A9898] dark:text-[#A1A1AA] leading-relaxed max-w-xl mx-auto">
+                        Node-based editor for Three.js shaders
                     </p>
                 </div>
 
@@ -125,7 +131,7 @@ export default function LandingPage() {
                         <AccordionItem value="item-2">
                             <AccordionTrigger className="text-lg font-bold hover:no-underline hover:text-[#9A9898] dark:hover:text-[#A1A1AA] transition-colors">Is it free to use?</AccordionTrigger>
                             <AccordionContent className="text-[#9A9898] dark:text-[#A1A1AA] text-base leading-relaxed">
-                                Yes, the TSL Graph editor is open source and entirely free to use.
+                                Yes, the TSL Graph editor is entirely free to use.
                             </AccordionContent>
                         </AccordionItem>
                         <AccordionItem value="item-3">
