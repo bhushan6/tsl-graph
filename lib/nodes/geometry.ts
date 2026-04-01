@@ -93,6 +93,20 @@ export const geometryNodes = [
         tsl: 'tangentLocal',
         pure: true,
     },
+    {
+        type: 'geo/bitangentLocal',
+        label: 'Bitangent Local',
+        category: 'Geometry',
+        outputs: {
+            x: { label: 'X', type: 'float' as const },
+            y: { label: 'Y', type: 'float' as const },
+            z: { label: 'Z', type: 'float' as const },
+            w: { label: 'W', type: 'float' as const },
+            out: { label: 'XYZW', type: 'vec4' as const },
+        },
+        tsl: 'bitangentLocal',
+        pure: true,
+    },
     // UV
     {
         type: 'geo/uv',
