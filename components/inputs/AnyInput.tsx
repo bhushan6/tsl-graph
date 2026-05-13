@@ -8,6 +8,7 @@ import { SidebarInput } from '@/components/ui/sidebar';
 import { Label } from '@/components/ui/label';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import { TSLValueType } from '@/lib/types';
+import { inferValueInputType, type AnyInputType } from '@/lib/value-type-utils';
 import { DebouncedFloatInput } from './DebouncedFloatInput';
 
 interface AnyInputProps {
@@ -16,19 +17,9 @@ interface AnyInputProps {
     immediate?: boolean;
 }
 
-type InputType = 'float' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'bool';
+type InputType = AnyInputType;
 
-export function inferType(value: TSLValueType): InputType {
-    if (typeof value === 'boolean') return 'bool';
-    if (typeof value === 'string' && value.startsWith('#')) return 'color';
-    if (Array.isArray(value)) {
-        if (value.length === 2) return 'vec2';
-        if (value.length === 3) return 'vec3';
-        if (value.length === 4) return 'vec4';
-        return 'vec3'; // Fallback
-    }
-    return 'float';
-}
+export const inferType = inferValueInputType;
 
 /**
  * Parse a hex color string to RGB array [0-1 normalized]

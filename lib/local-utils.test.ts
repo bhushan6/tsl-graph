@@ -417,6 +417,18 @@ describe('resolveNodeOutputTypeById', () => {
         expect(resolveNodeOutputTypeById('get1', 'out', nodesById, edges, globals)).toBe('float');
     });
 
+    it('resolves inferred math output through a Set→Get chain', () => {
+        const add = createNode('add1', 'math/add', { values: { a: [1, 2, 3], b: 1 } });
+        const set = createNode('set1', 'local/set');
+        const get = createNode('get1', 'local/get', { values: { localSourceId: 'set1' } });
+        const nodesById = new Map([['add1', add], ['set1', set], ['get1', get]]);
+        const edges: Edge[] = [
+            { id: 'e1', source: 'add1', sourceHandle: 'out', target: 'set1', targetHandle: 'value' },
+        ];
+
+        expect(resolveNodeOutputTypeById('get1', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+
     it('returns "any" for missing node', () => {
         expect(resolveNodeOutputTypeById('missing', 'out', new Map(), [], globals)).toBe('any');
     });

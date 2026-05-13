@@ -14,7 +14,8 @@ import {
 import { NodeType, Port, TSLType } from '@/lib/types';
 import { getMultiOpParams } from '@/lib/multi-op';
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
-import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
+import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetNode } from '@/lib/local-utils';
+import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';

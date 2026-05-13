@@ -10,6 +10,7 @@ import { useTheme } from 'next-themes';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { getMaterialActiveInputsSet } from '@/lib/material-inputs';
 import { TEXTURE_PROP_INPUTS } from '@/lib/texture-props';
+import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import {
     Tooltip,
     TooltipContent,
@@ -52,17 +53,23 @@ const categoryColors: Record<string, string> = {
 };
 
 function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
-    const def = registry.get(data.type);
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const addMultiOp = useEditorStore((s) => s.addMultiOp);
     const updateMultiOp = useEditorStore((s) => s.updateMultiOp);
     const removeMultiOp = useEditorStore((s) => s.removeMultiOp);
     const edges = useEditorStore((s) => s.edges);
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
+    const liveNodeData = useEditorStore(
+        useCallback((state) => state.nodes.find((node) => node.id === id)?.data, [id])
+    );
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
+    const nodeData = liveNodeData ?? data;
+    const nodeType = nodeData.type;
+    const def = registry.get(nodeType);
 
     const connectedInputs = useMemo(() => {
         return new Set(
@@ -76,7 +83,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         );
     }, [edges, id])
 
-    const storedNameValue = data.values?.localName;
+    const storedNameValue = nodeData.values?.localName;
     const storedName = typeof storedNameValue === 'string' ? storedNameValue : '';
     const [isEditingName, setIsEditingName] = useState(false);
     const [localName, setLocalName] = useState(storedName || 'local');
@@ -105,28 +112,28 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     );
 
     // Check if this is a subgraph instance (custom node) or code node instance
-    const isSubgraphInstance = data.type.startsWith('custom/');
-    const isCodeNodeInstance = data.type.startsWith('code/');
+    const isSubgraphInstance = nodeType.startsWith('custom/');
+    const isCodeNodeInstance = nodeType.startsWith('code/');
     const isCustomInstance = isSubgraphInstance || isCodeNodeInstance;
-    const isMultiOpNode = data.type === 'math/multiOp';
-    const isUniformNode = data.type === 'const/uniform';
-    const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(data.type);
-    const operations = Array.isArray(data.operations) ? (data.operations as MultiOp[]) : [];
+    const isMultiOpNode = nodeType === 'math/multiOp';
+    const isUniformNode = nodeType === 'const/uniform';
+    const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(nodeType);
+    const operations = Array.isArray(nodeData.operations) ? (nodeData.operations as MultiOp[]) : [];
 
     // For subgraph and code node instances, we don't need a registry definition
     // We'll use the dynamicPorts from node data
     if (!def && !isCustomInstance) {
         return (
             <div className="min-w-[200px] bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 p-3 rounded-xl">
-                Unknown node: {data.type}
+                Unknown node: {nodeType}
             </div>
         );
     }
 
     // Check if this is a subgraph anchor node with dynamic ports
-    const isSubgraphInput = data.type === 'subgraph/input';
-    const isSubgraphOutput = data.type === 'subgraph/output';
-    const isGlobalRef = data.type === 'global/ref';
+    const isSubgraphInput = nodeType === 'subgraph/input';
+    const isSubgraphOutput = nodeType === 'subgraph/output';
+    const isGlobalRef = nodeType === 'global/ref';
     const isAnchorNode = isSubgraphInput || isSubgraphOutput;
 
     // Get ports - for anchor nodes and subgraph instances, use dynamic ports from data
@@ -135,10 +142,10 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
     let nodeLabel = def?.label || 'Custom Node';
 
     if (isSubgraphInstance) {
-        const subgraphDef = subgraphs[data.type];
+        const subgraphDef = subgraphs[nodeType];
         const ports = subgraphDef
             ? [...(subgraphDef.inputs || []), ...(subgraphDef.outputs || [])]
-            : (data.dynamicPorts || []);
+            : (nodeData.dynamicPorts || []);
         // Subgraph instance: ports contain both inputs and outputs
         // Inputs have ids starting with 'in_', outputs with 'out_'
         for (const port of ports) {
@@ -149,12 +156,12 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
             }
         }
         // Extract name from type (custom/name-timestamp)
-        const namePart = data.type.replace('custom/', '').split('-')[0];
+        const namePart = nodeType.replace('custom/', '').split('-')[0];
         // Try to get dynamic name from store, fallback to parsed name from type
-        nodeLabel = subgraphs[data.type]?.name || namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
-    } else if (isCodeNodeInstance && data.dynamicPorts) {
+        nodeLabel = subgraphs[nodeType]?.name || namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
+    } else if (isCodeNodeInstance && nodeData.dynamicPorts) {
         // Code node instance: dynamicPorts contains inputs (in_*) and output (out)
-        for (const port of data.dynamicPorts) {
+        for (const port of nodeData.dynamicPorts) {
             if (port.id.startsWith('in_')) {
                 // Code node inputs are editable (no connectionOnly) to allow fallback values
                 inputs[port.id] = { label: port.label, type: port.type as TSLType };
@@ -163,16 +170,16 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
             }
         }
         // Get name from codeNodes store
-        const codeNode = codeNodes[data.type];
+        const codeNode = codeNodes[nodeType];
         if (codeNode) {
             nodeLabel = codeNode.name;
         } else {
             // Fallback: parse from type
-            const namePart = data.type.replace('code/', '').split('-')[0];
+            const namePart = nodeType.replace('code/', '').split('-')[0];
             nodeLabel = namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, ' ');
         }
     } else if (isGlobalRef) {
-        const selectedGlobalId = data.values?.globalId;
+        const selectedGlobalId = nodeData.values?.globalId;
         const globalEntry = globals.find((g) => g.id === selectedGlobalId);
         const outputLabel = globalEntry?.name || 'Global';
         const outputType = (globalEntry?.type as TSLType) || 'any';
@@ -180,10 +187,10 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
             out: { label: outputLabel, type: outputType },
         };
         nodeLabel = 'Global';
-    } else if (isAnchorNode && data.dynamicPorts) {
+    } else if (isAnchorNode && nodeData.dynamicPorts) {
         // Subgraph Input: dynamic ports become outputs (to connect to internal nodes)
         // Subgraph Output: dynamic ports become inputs (to receive from internal nodes)
-        for (const port of data.dynamicPorts) {
+        for (const port of nodeData.dynamicPorts) {
             if (isSubgraphInput) {
                 outputs[port.id] = { label: port.label, type: port.type as TSLType };
             } else {
@@ -195,9 +202,29 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
         outputs = def.outputs ?? {};
         nodeLabel = def.label;
         if (isUniformNode) {
-            const kind = getUniformKindFromNode({ data } as AppNode);
+            const kind = getUniformKindFromNode({ data: nodeData } as AppNode);
             inputs = {};
             outputs = getUniformOutputs(kind);
+        }
+    }
+
+    const inferredOutputTypes = new Map<string, TSLType>();
+    if ((nodeType === 'math/multiOp' || nodeType.startsWith('math/')) && graphStructureVersion >= 0) {
+        const state = useEditorStore.getState();
+        const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
+        for (const [handleId, output] of Object.entries(outputs)) {
+            if (output.type !== 'any') continue;
+            inferredOutputTypes.set(
+                handleId,
+                resolveNodeOutputTypeById(
+                    id,
+                    handleId,
+                    nodesById,
+                    state.edges,
+                    state.globals,
+                    state.subgraphs
+                )
+            );
         }
     }
 
@@ -305,7 +332,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                                                 <div className="flex-1 min-w-0">
                                                                     <ValuePreview
                                                                         type={param.type}
-                                                                        value={data.values?.[handleId] ?? param.default}
+                                                                        value={nodeData.values?.[handleId] ?? param.default}
                                                                     />
                                                                 </div>
                                                             )}
@@ -388,7 +415,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                             id="out"
                             type="source"
                             position={Position.Right}
-                            dataType={'any'}
+                            dataType={inferredOutputTypes.get('out') ?? 'any'}
                             label="Out"
                             isConnected={connectedOutputs.has('out')}
                             isDark={isDark}
@@ -401,17 +428,17 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
 
     const inputKeys = Object.keys(inputs);
     const outputKeys = Object.keys(outputs);
-    const isLinearGradientNode = data.type === 'utils/linearGradient';
+    const isLinearGradientNode = nodeType === 'utils/linearGradient';
     const linearGradientPreview = isLinearGradientNode
         ? generateGradientString(
             'linear',
             90,
-            normalizeGradientStops(data.values?.stops),
-            Number(data.values?.mode ?? 0)
+            normalizeGradientStops(nodeData.values?.stops),
+            Number(nodeData.values?.mode ?? 0)
         )
         : null;
 
-    const isTextureSample = def?.type === 'texture/sample';
+    const isTextureSample = nodeType === 'texture/sample';
     const textureToggleKeys = isTextureSample ? new Set<string>(TEXTURE_PROP_INPUTS) : null;
 
     // Filter out hidden inputs from node UI
@@ -498,7 +525,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                             <ValuePreview
                                                 inputKey={row.input[0]}
                                                 type={row.input[1].type}
-                                                value={data.values?.[row.input[0]] ?? row.input[1].default}
+                                                value={nodeData.values?.[row.input[0]] ?? row.input[1].default}
                                             />
                                         </div>
                                     )}
@@ -513,7 +540,7 @@ function TSLNodeComponent({ id, data, selected }: TSLNodeProps) {
                                     id={row.output[0]}
                                     type="source"
                                     position={Position.Right}
-                                    dataType={row.output[1].type as TSLType}
+                                    dataType={inferredOutputTypes.get(row.output[0]) ?? row.output[1].type as TSLType}
                                     label={row.output[1].label}
                                     isConnected={connectedOutputs.has(row.output[0])}
                                     isDark={isDark}

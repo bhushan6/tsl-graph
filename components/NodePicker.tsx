@@ -11,7 +11,8 @@ import { CodeNodeDefinition, CodeNodeLanguage, NodeType, SubgraphDefinition, Sub
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { buildLocalGetQuickCreateEntries } from '@/lib/node-picker-utils';
 import { resolveCodeNodeScope } from '@/lib/code-node-scope';
-import { getLocalSetReferenceLabel, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
+import { getLocalSetReferenceLabel, isLocalSetNode } from '@/lib/local-utils';
+import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import { X, ChevronDown, Search, Code, Layers, Cloud, Loader2, MoreVertical, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {

@@ -19,7 +19,8 @@ import { useEditorStore } from '@/store/editor';
 import type { AppNode, TSLType } from '@/lib/types';
 import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
-import { getLocalSourceId, isLocalGetNode, isLocalScopeAccessible, isLocalSetNode, resolveNodeOutputTypeById } from '@/lib/local-utils';
+import { getLocalSourceId, isLocalGetNode, isLocalScopeAccessible, isLocalSetNode } from '@/lib/local-utils';
+import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import { TSLNode } from './TSLNode';
 import { CommentNode } from './CommentNode';
 import { LocalPortalNode } from './LocalPortalNode';
@@ -97,15 +98,10 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
     const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
     const canUseAI = navbarProps?.capabilities?.canUseAI ?? DEFAULT_EDITOR_HOST_CAPABILITIES.canUseAI;
+    const effectiveBottomBarMode = canUseAI ? bottomBarMode : 'toolbar';
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
-
-    useEffect(() => {
-        if (!canUseAI && bottomBarMode === 'ai') {
-            setBottomBarMode('toolbar');
-        }
-    }, [bottomBarMode, canUseAI]);
 
     // Keyboard shortcuts for Undo/Redo + Copy/Paste
     useEffect(() => {
@@ -672,7 +668,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                             />
                         ) : (
                             <div className="pointer-events-auto">
-                                <div className={bottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
+                                <div className={effectiveBottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
                                     <Toolbar
                                         onOpenCodePanel={() => setIsCodePanelOpen(true)}
                                         onOpenAiDock={canUseAI ? () => setBottomBarMode('ai') : undefined}
@@ -680,8 +676,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                                     />
                                 </div>
                                 {canUseAI && (
-                                    <div className={bottomBarMode === 'ai' ? 'block' : 'hidden'}>
-                                        <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} isOpen={bottomBarMode === 'ai'} />
+                                    <div className={effectiveBottomBarMode === 'ai' ? 'block' : 'hidden'}>
+                                        <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} isOpen={effectiveBottomBarMode === 'ai'} />
                                     </div>
                                 )}
                             </div>

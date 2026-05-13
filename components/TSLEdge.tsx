@@ -2,11 +2,11 @@
 import { useMemo } from "react";
 import { BaseEdge, EdgeProps, getBezierPath } from "@xyflow/react";
 import { TYPE_COLORS, DEFAULT_HANDLE_COLOR } from "./TSLHandle";
-import type { AppNode, TSLType } from "@/lib/types";
+import type { TSLType } from "@/lib/types";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
 import { getMultiOpInputs, type MultiOp } from "@/lib/multi-op";
-import { resolveNodeOutputTypeById } from "@/lib/local-utils";
+import { resolveNodeOutputTypeById } from "@/lib/type-inference";
 
 const TSLEdge = ({
     id,
@@ -35,6 +35,7 @@ const TSLEdge = ({
     const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
 
     const graphSnapshot = useMemo(() => {
+        void graphStructureVersion;
         const { nodes, edges, globals, subgraphs } = useEditorStore.getState();
         const nodesById = new Map(nodes.map((node) => [node.id, node]));
         return { nodesById, edges, globals, subgraphs };

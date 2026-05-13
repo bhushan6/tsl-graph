@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { GlobalContextEntry, SubgraphDefinition, TSLNodeData, TSLType } from '@/lib/types';
-import { registry } from './registry';
+import type { TSLNodeData } from '@/lib/types';
+
+export { resolveNodeOutputTypeById } from './type-inference';
 
 export const LOCAL_SET_NODE_TYPE = 'local/set' as const;
 export const LOCAL_GET_NODE_TYPE = 'local/get' as const;
@@ -181,118 +182,6 @@ export function getValidLocalSetNodesForGetNode(
         results.push(candidate);
     }
     return results;
-}
-
-function resolvePortTypeFromRegistry(node: Node<TSLNodeData>, handleId: string | null | undefined): TSLType {
-    if (node.data.type === 'math/multiOp') return 'any';
-
-    if (node.data.type === 'global/ref') {
-        return 'any';
-    }
-
-    if (node.data.type.startsWith('custom/')) {
-        const subgraphPort = node.data.dynamicPorts?.find((port) => port.id === (handleId ?? 'out'));
-        return (subgraphPort?.type as TSLType) ?? 'any';
-    }
-
-    if (node.data.type.startsWith('code/')) {
-        const codePort = node.data.dynamicPorts?.find((port) => port.id === (handleId ?? 'out'));
-        return (codePort?.type as TSLType) ?? 'any';
-    }
-
-    if (node.data.dynamicPorts && node.data.dynamicPorts.length > 0) {
-        const dynamicPort = node.data.dynamicPorts.find((port) => port.id === (handleId ?? 'out'));
-        if (dynamicPort?.type) return dynamicPort.type;
-    }
-
-    const def = registry.get(node.data.type);
-    if (!def?.outputs) return 'any';
-    const resolvedHandle = handleId ?? 'out';
-    const output = def.outputs[resolvedHandle] ?? def.outputs['out'];
-    return (output?.type as TSLType) ?? 'any';
-}
-
-function resolveLocalSetSourceType(
-    node: Node<TSLNodeData>,
-    nodesById: Map<string, Node<TSLNodeData>>,
-    edges: Edge[],
-    globals: GlobalContextEntry[],
-    subgraphs?: Record<string, SubgraphDefinition>,
-    visitedLocalSets: Set<string> = new Set()
-): TSLType {
-    if (visitedLocalSets.has(node.id)) return 'any';
-    visitedLocalSets.add(node.id);
-
-    const valueEdge = edges.find((edge) => edge.target === node.id && edge.targetHandle === LOCAL_SET_INPUT_HANDLE);
-    if (!valueEdge) return 'any';
-
-    return resolveNodeOutputTypeById(
-        valueEdge.source,
-        valueEdge.sourceHandle,
-        nodesById,
-        edges,
-        globals,
-        subgraphs,
-        visitedLocalSets
-    );
-}
-
-function resolveGlobalRefType(node: Node<TSLNodeData>, globals: GlobalContextEntry[]): TSLType {
-    const globalId = node.data.values?.globalId;
-    if (typeof globalId !== 'string') return 'any';
-    const entry = globals.find((item) => item.id === globalId);
-    return (entry?.type as TSLType) ?? 'any';
-}
-
-function resolveSubgraphOutputType(
-    node: Node<TSLNodeData>,
-    handleId: string | null | undefined,
-    subgraphs?: Record<string, SubgraphDefinition>
-): TSLType {
-    if (!subgraphs) return 'any';
-    const subgraph = subgraphs[node.data.type];
-    if (!subgraph) return 'any';
-    const resolvedHandle = handleId ?? 'out';
-    const output = subgraph.outputs.find((port) => port.id === resolvedHandle)
-        ?? subgraph.outputs.find((port) => port.id === 'out_0')
-        ?? subgraph.outputs[0];
-    return (output?.type as TSLType) ?? 'any';
-}
-
-export function resolveNodeOutputTypeById(
-    nodeId: string,
-    handleId: string | null | undefined,
-    nodesById: Map<string, Node<TSLNodeData>>,
-    edges: Edge[],
-    globals: GlobalContextEntry[],
-    subgraphs?: Record<string, SubgraphDefinition>,
-    visitedLocalSets: Set<string> = new Set()
-): TSLType {
-    const node = nodesById.get(nodeId);
-    if (!node) return 'any';
-
-    if (isLocalGetType(node.data.type)) {
-        const setId = getLocalSourceId(node);
-        if (!setId) return 'any';
-        const setNode = nodesById.get(setId);
-        if (!setNode || !isLocalSetNode(setNode)) return 'any';
-        if (!isLocalScopeAccessible(setNode, node, nodesById)) return 'any';
-        return resolveLocalSetSourceType(setNode, nodesById, edges, globals, subgraphs, visitedLocalSets);
-    }
-
-    if (isLocalSetType(node.data.type)) {
-        return resolveLocalSetSourceType(node, nodesById, edges, globals, subgraphs, visitedLocalSets);
-    }
-
-    if (node.data.type === 'global/ref') {
-        return resolveGlobalRefType(node, globals);
-    }
-
-    if (node.data.type.startsWith('custom/')) {
-        return resolveSubgraphOutputType(node, handleId, subgraphs);
-    }
-
-    return resolvePortTypeFromRegistry(node, handleId);
 }
 
 export function collectLocalSetNames(nodes: Node<TSLNodeData>[]): Map<string, string[]> {
