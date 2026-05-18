@@ -26,7 +26,7 @@ import {
     SidebarGroupContent,
     SidebarInput,
 } from '@/components/ui/sidebar';
-import { NumericScrubber } from './ui/number-scrubber';
+import { NumericScrubber, type NumericScrubberChangeMeta } from './ui/number-scrubber';
 import { DebouncedFloatInput } from './inputs/DebouncedFloatInput';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -1962,47 +1962,20 @@ function NumberInput({
     step?: number;
     immediate?: boolean;
 }) {
-    const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
-    useEffect(() => {
-        setLocalValue(String(value));
-    }, [value]);
-
-    const handleChange = useCallback((e: number) => {
-        const inputValue = String(e);
-        // Allow empty, minus sign, or valid number patterns (including negative)
-        if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
-            setLocalValue(inputValue);
-            return;
-        }
-        // Check if it's a valid number pattern
-        if (/^-?\d*\.?\d*$/.test(inputValue)) {
-            setLocalValue(inputValue);
-            const parsed = parseFloat(inputValue);
-            if (!isNaN(parsed)) {
-                if (immediate) {
-                    onChange(parsed);
-                } else {
-                    debouncedOnChange(parsed);
-                }
-            }
+    const handleChange = useCallback((nextValue: number, meta?: NumericScrubberChangeMeta) => {
+        if (immediate || meta?.mode === 'blur' || meta?.mode === 'enter') {
+            onChange(nextValue);
+        } else {
+            debouncedOnChange(nextValue);
         }
     }, [debouncedOnChange, immediate, onChange]);
 
-    const handleBlur = useCallback(() => {
-        // On blur, normalize the value
-        const parsed = parseFloat(localValue);
-        const normalized = isNaN(parsed) ? 0 : parsed;
-        setLocalValue(String(normalized));
-        onChange(normalized);
-    }, [localValue, onChange]);
-
     return (
         <NumericScrubber
-            value={Number(localValue)}
+            value={value}
             onChange={handleChange}
-            onBlur={handleBlur}
             step={step}
             min={-Infinity}
             max={Infinity}

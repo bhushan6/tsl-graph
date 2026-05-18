@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import { NumericScrubber } from '../ui/number-scrubber';
+import { NumericScrubber, type NumericScrubberChangeMeta } from '../ui/number-scrubber';
 import type { TSLValueType } from '@/lib/types';
 
 export function DebouncedFloatInput({
@@ -18,52 +18,23 @@ export function DebouncedFloatInput({
     step?: number;
     className?: string;
 }) {
-    const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
-    useEffect(() => {
-        setLocalValue(String(value));
-    }, [value]);
-
-    const handleChange = useCallback((v: number) => {
-        const inputValue = String(v);
-        // Allow empty, minus sign, or valid number patterns (including negative)
-        if (inputValue === '' || inputValue === '-' || inputValue === '.' || inputValue === '-.') {
-            setLocalValue(inputValue);
-            return;
-        }
-        // Check if it's a valid number pattern
-        if (/^-?\d*\.?\d*$/.test(inputValue)) {
-            setLocalValue(inputValue);
-            const parsed = parseFloat(inputValue);
-            if (!isNaN(parsed)) {
-                if (immediate) {
-                    onChange(parsed);
-                } else {
-                    debouncedOnChange(parsed);
-                }
-            }
+    const handleChange = useCallback((nextValue: number, meta?: NumericScrubberChangeMeta) => {
+        if (immediate || meta?.mode === 'blur' || meta?.mode === 'enter') {
+            onChange(nextValue);
+        } else {
+            debouncedOnChange(nextValue);
         }
     }, [debouncedOnChange, immediate, onChange]);
 
-    const handleBlur = useCallback(() => {
-        // On blur, normalize the value
-        const parsed = parseFloat(localValue);
-        const normalized = isNaN(parsed) ? 0 : parsed;
-        setLocalValue(String(normalized));
-        onChange(normalized);
-    }, [localValue, onChange]);
-
     return (
         <NumericScrubber
-            value={Number(localValue)}
-            onChange={(v) => {
-                handleChange(v);
-            }}
+            value={value}
+            onChange={handleChange}
             step={step}
             min={-Infinity}
             max={Infinity}
-            onBlur={handleBlur}
             className={className ?? 'h-7 text-xs font-mono w-full'}
         />
     );

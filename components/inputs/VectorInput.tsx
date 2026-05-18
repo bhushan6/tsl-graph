@@ -1,8 +1,8 @@
 'use client';
 
-import { memo, useEffect, useState, useCallback, useRef } from 'react';
+import { memo, useEffect, useCallback, useRef } from 'react';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
-import { NumericScrubber } from '../ui/number-scrubber';
+import { NumericScrubber, type NumericScrubberChangeMeta } from '../ui/number-scrubber';
 
 interface VectorInputProps {
     value: number | readonly number[]; // Expecting number[] or number
@@ -77,36 +77,25 @@ function NumberInput({
     className?: string;
     immediate?: boolean;
 }) {
-    const [localValue, setLocalValue] = useState<string>(String(value));
     const debouncedOnChange = useDebouncedCallback(onChange, 100);
 
-    useEffect(() => {
-        setLocalValue(String(value));
-    }, [value]);
+    const handleChange = useCallback((nextValue: number, meta?: NumericScrubberChangeMeta) => {
+        if (immediate || meta?.mode === 'blur' || meta?.mode === 'enter') {
+            onChange(nextValue);
+        } else {
+            debouncedOnChange(nextValue);
+        }
+    }, [debouncedOnChange, immediate, onChange]);
 
     return (
         <>
             <NumericScrubber
-                value={Number(localValue)}
-                onChange={(v) => {
-                    const inputValue = v;
-                    if (immediate) {
-                        onChange(inputValue);
-                    } else {
-                        debouncedOnChange(inputValue);
-                    }
-                }}
-                onBlur={() => {
-                    // On blur, normalize the value
-                    const f = parseFloat(localValue);
-                    const normalized = isNaN(f) ? 0 : f;
-                    setLocalValue(String(normalized));
-                    onChange(normalized);
-                }}
+                value={value}
+                onChange={handleChange}
                 step={0.1}
                 min={-Infinity}
                 max={Infinity}
-                className="h-7 text-xs font-mono w-full"
+                className={className ? `h-7 text-xs font-mono w-full ${className}` : 'h-7 text-xs font-mono w-full'}
             />
         </>
     );

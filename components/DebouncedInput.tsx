@@ -1,5 +1,5 @@
 import { Input } from '@/components/ui/input';
-import { NumericScrubber } from '@/components/ui/number-scrubber';
+import { NumericScrubber, type NumericScrubberChangeMeta } from '@/components/ui/number-scrubber';
 import React, { useEffect, useState, useRef } from 'react';
 
 interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
@@ -39,11 +39,17 @@ export function DebouncedInput({
         const parsedMax = typeof max === 'string' ? Number(max) : max;
         const parsedStep = typeof step === 'string' ? Number(step) : step;
 
-        const handleScrubChange = (next: number) => {
+        const handleScrubChange = (next: number, meta?: NumericScrubberChangeMeta) => {
             setValue(next);
 
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+
+            if (meta?.mode === 'blur' || meta?.mode === 'enter') {
+                onChange(next);
+                return;
             }
 
             timeoutRef.current = setTimeout(() => {
