@@ -12,6 +12,7 @@ import { CodeNodeDefinition, CodeNodeLanguage, NodeType, AppNode, TSLNodeData, T
 import { getAbsolutePosition } from "@/lib/utils";
 import { replaceEdgeOnTargetHandle } from "@/lib/graph-utils";
 import { useTemplateLibrary } from "@/lib/editor-host/template-library";
+import type { QuickCreateConstantIntent } from "@/lib/quick-create-constants";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -30,7 +31,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
     const { userCodeNodeTemplates, userSubgraphTemplates } = useTemplateLibrary();
 
     const handleNodeSelect = useCallback(
-        (selection: EdgeDropSelection) => {
+        (selection: EdgeDropSelection, initialValues?: Record<string, TSLValueType>) => {
             const nodeType = selection.nodeType;
             const selectedHandleId = selection.handleId;
             const selectedGlobalId = selection.globalId;
@@ -305,7 +306,10 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 // Regular node from registry
                 const nodeData: TSLNodeData = {
                     type: nodeType,
-                    values: defaultValues,
+                    values: {
+                        ...defaultValues,
+                        ...(initialValues ?? {}),
+                    },
                     connected: {},
                 } as TSLNodeData;
 
@@ -545,6 +549,19 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
         [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates, activeRootGraph]
     );
 
+    const handleQuickCreate = useCallback(
+        (intent: QuickCreateConstantIntent) => {
+            handleNodeSelect(
+                {
+                    nodeType: intent.nodeType,
+                    handleId: handleDirection === 'input' ? intent.outputHandleId : null,
+                },
+                intent.values
+            );
+        },
+        [handleDirection, handleNodeSelect]
+    );
+
     if (!isOpen) return null;
 
     return (
@@ -555,6 +572,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             sourceNodeId={sourceNodeId}
             handleDirection={handleDirection}
             onNodeSelect={handleNodeSelect}
+            onQuickCreate={handleQuickCreate}
             onClose={close}
         />
     );

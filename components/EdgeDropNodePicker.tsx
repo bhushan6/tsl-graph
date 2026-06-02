@@ -6,6 +6,7 @@ import {
     getAllNodesButExclud,
     getGroupedCompatibleNodes,
     getHandleDisplayLabel,
+    isTypeMatch,
     getTypeMatchRank,
     getVisibleInputHandles,
     getVisibleOutputHandles,
@@ -16,6 +17,7 @@ import { getMultiOpParams } from '@/lib/multi-op';
 import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetNode } from '@/lib/local-utils';
 import { resolveNodeOutputTypeById } from '@/lib/type-inference';
+import { getQuickCreateConstantSuggestions, type QuickCreateConstantIntent } from '@/lib/quick-create-constants';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
@@ -58,6 +60,7 @@ interface EdgeDropNodePickerProps {
     sourceNodeId: string | null;
     handleDirection: 'input' | 'output' | null;
     onNodeSelect: (selection: EdgeDropSelection) => void;
+    onQuickCreate: (intent: QuickCreateConstantIntent) => void;
     onClose: () => void;
 }
 
@@ -115,9 +118,11 @@ export function EdgeDropNodePicker({
     sourceNodeId,
     handleDirection,
     onNodeSelect,
+    onQuickCreate,
     onClose,
 }: EdgeDropNodePickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const [search, setSearch] = useState('');
 
     const editorMode = useEditorStore((s) => s.editorMode);
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
@@ -450,6 +455,13 @@ export function EdgeDropNodePicker({
         return grouped;
     }, [allNodes, handleDirection, sourceDataType]);
 
+    const quickCreateIntents = useMemo(() => {
+        const intents = getQuickCreateConstantSuggestions(search);
+        if (!handleDirection) return intents;
+        if (handleDirection !== 'input') return [];
+        return intents.filter((intent) => isTypeMatch(intent.outputType, sourceDataType));
+    }, [handleDirection, search, sourceDataType]);
+
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -514,9 +526,28 @@ export function EdgeDropNodePicker({
                     return 0;
                 }}
             >
-                <CommandInput placeholder="Search nodes..." autoFocus />
+                <CommandInput
+                    placeholder="Search nodes..."
+                    autoFocus
+                    value={search}
+                    onValueChange={setSearch}
+                />
                 <CommandList className="max-h-[300px]">
                     <CommandEmpty>{handleDirection ? 'No nodes or handles found.' : 'No nodes found.'}</CommandEmpty>
+                    {quickCreateIntents.length > 0 && (
+                        <CommandGroup heading="Quick Create">
+                            {quickCreateIntents.map((intent) => (
+                                <CommandItem
+                                    key={`${intent.nodeType}:${intent.label}`}
+                                    value={`${intent.label} ${search}`}
+                                    onSelect={() => onQuickCreate(intent)}
+                                    className="gap-2"
+                                >
+                                    <span>{intent.label}</span>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    )}
                     {showPaste && (
                         <CommandGroup heading="Actions">
                             <CommandItem
