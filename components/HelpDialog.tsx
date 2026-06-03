@@ -148,7 +148,6 @@ export function HelpDialog() {
                                             <span className="block mt-2 font-medium text-foreground/80">
                                                 • Pan/Select Modes<br />
                                                 • Create Subgraph (Group)<br />
-                                                • Debug Mode (Bug Icon)<br />
                                                 • View Generated Code
                                             </span>
                                         </p>
@@ -218,11 +217,11 @@ export function HelpDialog() {
                                             <div className="w-5 h-5 text-orange-500 flex items-center justify-center">🐞</div>
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-lg">Debug Mode</h3>
+                                            <h3 className="font-semibold text-lg">Node Debug Preview</h3>
                                             <p className="text-muted-foreground mt-1">
-                                                Click the <strong>Bug Icon</strong> in the toolbar to toggle Debug Mode.
+                                                Click the <strong>Bug Icon</strong> in a node header to show or hide that node&apos;s live debug preview.
                                                 <br />
-                                                When active, selecting any node shows a live <strong>3D Preview</strong> of its output in the Properties Panel.
+                                                The preview appears directly on the node and shows a flat fullscreen-quad view of its output.
                                             </p>
                                         </div>
                                     </div>
