@@ -464,6 +464,67 @@ function getStringValue(
     return String(value ?? '');
 }
 
+function emitTextureSampleNode(
+    node: Node<TSLNodeData>,
+    def: NodeDef,
+    inputs: Record<string, Port>,
+    edges: Edge[],
+    compiledNodes: Map<string, CompiledNode>,
+    targetLines: string[],
+    texVarBaseName: string,
+    argsMap?: Record<string, string>,
+    indent = ''
+): string {
+    const url = getStringValue(node, 'url', inputs['url']);
+    const texVarName = `${texVarBaseName}_tex`;
+    targetLines.push(`${indent}const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
+
+    const texturePropKeys = new Set<string>(TEXTURE_PROP_INPUTS);
+    const activeInputs = getMaterialActiveInputsSet(node.data, def);
+    const isPropActive = (key: string) => !texturePropKeys.has(key) || activeInputs.has(key);
+
+    if (isPropActive('colorSpace')) {
+        const colorSpace = node.data.values?.['colorSpace'] ?? inputs['colorSpace']?.default ?? 'SRGBColorSpace';
+        targetLines.push(`${indent}${texVarName}.colorSpace = THREE.${colorSpace};`);
+    }
+
+    if (isPropActive('wrapS')) {
+        const wrapS = node.data.values?.['wrapS'] ?? inputs['wrapS']?.default ?? 'RepeatWrapping';
+        targetLines.push(`${indent}${texVarName}.wrapS = THREE.${wrapS};`);
+    }
+
+    if (isPropActive('wrapT')) {
+        const wrapT = node.data.values?.['wrapT'] ?? inputs['wrapT']?.default ?? 'RepeatWrapping';
+        targetLines.push(`${indent}${texVarName}.wrapT = THREE.${wrapT};`);
+    }
+
+    if (isPropActive('minFilter')) {
+        const minFilter = node.data.values?.['minFilter'] ?? inputs['minFilter']?.default ?? 'LinearMipmapLinearFilter';
+        targetLines.push(`${indent}${texVarName}.minFilter = THREE.${minFilter};`);
+    }
+
+    if (isPropActive('magFilter')) {
+        const magFilter = node.data.values?.['magFilter'] ?? inputs['magFilter']?.default ?? 'LinearFilter';
+        targetLines.push(`${indent}${texVarName}.magFilter = THREE.${magFilter};`);
+    }
+
+    if (isPropActive('flipY')) {
+        const flipY = node.data.values?.['flipY'] ?? inputs['flipY']?.default ?? true;
+        targetLines.push(`${indent}${texVarName}.flipY = ${flipY ? 'true' : 'false'};`);
+    }
+
+    const uvInput = inputs['uv'];
+    const uvEdge = edges.find(e => e.target === node.id && e.targetHandle === 'uv');
+
+    let uvCode = '';
+    if (uvEdge) {
+        const uvVar = getInputValue(node, 'uv', edges, compiledNodes, uvInput, argsMap);
+        uvCode = `, ${uvVar}`;
+    }
+
+    return `texture(${texVarName}${uvCode})`;
+}
+
 /**
  * Get the connected variable name for a material input.
  * Handles swizzling.
@@ -922,6 +983,18 @@ function compileSubgraphDefinition(
             const nearArg = nearConnected ? nearRaw : `float(${nearRaw})`;
             const farArg = farConnected ? farRaw : `float(${farRaw})`;
             code = `${def.tsl}(${viewZArg}, ${nearArg}, ${farArg})`;
+        } else if (def.type === 'texture/sample') {
+            code = emitTextureSampleNode(
+                node,
+                def,
+                inputs,
+                internalEdges,
+                compiledNodes,
+                targetLines,
+                displayName,
+                argsMap,
+                indent
+            );
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
@@ -2130,48 +2203,15 @@ export function compileGraph(
                 code = `texture(${texArg}, screenUV)`;
             }
         } else if (def.type === 'texture/sample') {
-            const url = getStringValue(node, 'url', inputs['url']);
-
-            const texVarName = `${baseName}_tex`;
-            targetLines.push(`const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
-            const texturePropKeys = new Set<string>(TEXTURE_PROP_INPUTS);
-            const activeInputs = getMaterialActiveInputsSet(node.data, def);
-            const isPropActive = (key: string) => !texturePropKeys.has(key) || activeInputs.has(key);
-
-            if (isPropActive('colorSpace')) {
-                const colorSpace = node.data.values?.['colorSpace'] ?? inputs['colorSpace']?.default ?? 'SRGBColorSpace';
-                targetLines.push(`${texVarName}.colorSpace = THREE.${colorSpace};`);
-            }
-
-            if (isPropActive('wrapS')) {
-                const wrapS = node.data.values?.['wrapS'] ?? inputs['wrapS']?.default ?? 'RepeatWrapping';
-                targetLines.push(`${texVarName}.wrapS = THREE.${wrapS};`);
-            }
-
-            if (isPropActive('wrapT')) {
-                const wrapT = node.data.values?.['wrapT'] ?? inputs['wrapT']?.default ?? 'RepeatWrapping';
-                targetLines.push(`${texVarName}.wrapT = THREE.${wrapT};`);
-            }
-
-            if (isPropActive('minFilter')) {
-                const minFilter = node.data.values?.['minFilter'] ?? inputs['minFilter']?.default ?? 'LinearMipmapLinearFilter';
-                targetLines.push(`${texVarName}.minFilter = THREE.${minFilter};`);
-            }
-
-            if (isPropActive('magFilter')) {
-                const magFilter = node.data.values?.['magFilter'] ?? inputs['magFilter']?.default ?? 'LinearFilter';
-                targetLines.push(`${texVarName}.magFilter = THREE.${magFilter};`);
-            }
-
-            const uvInput = inputs['uv'];
-            const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');
-
-            let uvCode = '';
-            if (uvEdge) {
-                const uvVar = getInputValue(node, 'uv', edgesForInputs, compiledNodes, uvInput);
-                uvCode = `, ${uvVar}`;
-            }
-            code = `texture(${texVarName}${uvCode})`;
+            code = emitTextureSampleNode(
+                node,
+                def,
+                inputs,
+                edgesForInputs,
+                compiledNodes,
+                targetLines,
+                displayName
+            );
         } else if (def.type === 'texture/viewportShared') {
             const uvEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'uv');
 

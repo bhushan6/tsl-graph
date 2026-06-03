@@ -4,4 +4,5 @@ export const TEXTURE_PROP_INPUTS = [
     'wrapT',
     'minFilter',
     'magFilter',
+    'flipY',
 ] as const;

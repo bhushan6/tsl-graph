@@ -234,6 +234,14 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'vec3', label: 'XYZ' } }
     },
     {
+        type: 'geo/screenUV',
+        label: 'Screen UV',
+        category: 'Geometry',
+        tsl: 'screenUV',
+        pure: true,
+        outputs: { out: { type: 'vec2', label: 'UV' } }
+    },
+    {
         type: 'texture/sampleNode',
         label: 'Sample Texture Node',
         category: 'Texture',
@@ -241,6 +249,23 @@ const mockDefs: NodeDef[] = [
         inputs: {
             texture: { type: 'any', label: 'Texture', connectionOnly: true },
             uv: { type: 'vec2', label: 'UV', connectionOnly: true },
+        },
+        outputs: { out: { type: 'vec4', label: 'Out' } }
+    },
+    {
+        type: 'texture/sample',
+        label: 'Texture',
+        category: 'Texture',
+        tsl: 'texture',
+        inputs: {
+            url: { type: 'string', default: '/uv.png', label: 'URL', propertyOnly: true },
+            uv: { type: 'vec2', label: 'UV', connectionOnly: true },
+            colorSpace: { type: 'string', default: 'SRGBColorSpace', label: 'Color Space', propertyOnly: true },
+            wrapS: { type: 'string', default: 'RepeatWrapping', label: 'Wrap S', propertyOnly: true },
+            wrapT: { type: 'string', default: 'RepeatWrapping', label: 'Wrap T', propertyOnly: true },
+            minFilter: { type: 'string', default: 'LinearMipmapLinearFilter', label: 'Min Filter', propertyOnly: true },
+            magFilter: { type: 'string', default: 'LinearFilter', label: 'Mag Filter', propertyOnly: true },
+            flipY: { type: 'bool', default: true, label: 'Flip Y', propertyOnly: true },
         },
         outputs: { out: { type: 'vec4', label: 'Out' } }
     },
@@ -1054,6 +1079,45 @@ describe('compilePostGraph', () => {
 
         const result = compilePostGraph(nodes, edges);
         expect(result.code).toContain('texture(arg_in_sceneTexture, screenUV)');
+    });
+
+    it('compiles URL texture nodes in post graph without property-only arguments', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('screenUv', 'geo/screenUV'),
+            createNode('sample', 'texture/sample', { values: { url: '/uv.png' } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'screenUv', sourceHandle: 'out', target: 'sample', targetHandle: 'uv' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('const _subgraph_node1_tex = new THREE.TextureLoader().load("/uv.png");');
+        expect(result.code).toContain('const _subgraph_node1 = texture(_subgraph_node1_tex, _subgraph_node0);');
+        expect(result.code).not.toContain('NaN');
+        expect(result.code).not.toContain('texture("/uv.png"');
+        expect(result.code).not.toContain('texture(_subgraph_node1_tex, _subgraph_node0,');
+    });
+
+    it('emits active flipY texture option in post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sample', {
+                activeInputs: ['flipY'],
+                values: { url: '/uv.png', flipY: false },
+            }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('_subgraph_node0_tex.flipY = false;');
+        expect(result.code).toContain('const _subgraph_node0 = texture(_subgraph_node0_tex);');
+        expect(result.code).not.toContain('texture(_subgraph_node0_tex, false');
     });
 
     it('maps depth input handle for post graph', () => {

@@ -78,6 +78,12 @@ export const textureNodes = [
                 ],
                 propertyOnly: true,
             },
+            flipY: {
+                label: 'Flip Y',
+                type: 'bool',
+                default: true,
+                propertyOnly: true,
+            },
         },
         outputs: { out: { label: 'Out', type: 'vec4' } },
         tsl: 'texture',
