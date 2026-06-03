@@ -25,6 +25,8 @@ export function NodeDebugPreviewOverlay() {
     const isMountedRef = useRef(false);
 
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+    const editorMode = useEditorStore((state) => state.editorMode);
+    const editingSubgraphId = useEditorStore((state) => state.editingSubgraphId);
     const setDebugPreviewError = useEditorStore((state) => state.setDebugPreviewError);
 
     const geometry = useMemo(() => new THREE.PlaneGeometry(2, 2, 1, 1), []);
@@ -40,6 +42,11 @@ export function NodeDebugPreviewOverlay() {
         materialCacheRef.current.forEach((entry) => entry.material.dispose());
         materialCacheRef.current.clear();
     }, [graphStructureVersion]);
+
+    useEffect(() => {
+        materialCacheRef.current.forEach((entry) => entry.material.dispose());
+        materialCacheRef.current.clear();
+    }, [editorMode, editingSubgraphId]);
 
     useEffect(() => {
         if (!containerRef.current || isMountedRef.current) return;

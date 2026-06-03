@@ -245,7 +245,7 @@ export function HelpDialog() {
                                     <div className="bg-muted/30 p-6 rounded-xl border">
                                         <h3 className="font-semibold mb-3">1. Creating a Subgraph</h3>
                                         <ol className="list-decimal list-inside space-y-3 text-muted-foreground">
-                                            <li>Select nodes you want to bundle (Box Select or <kbd className="bg-background px-1.5 py-0.5 rounded border text-xs">Shift + Drag</kbd>).</li>
+                                            <li>Select nodes you want to bundle (<kbd className="bg-background px-1.5 py-0.5 rounded border text-xs">Shift + Click</kbd> or <kbd className="bg-background px-1.5 py-0.5 rounded border text-xs">Shift + Drag</kbd>).</li>
                                             <li>Click the <strong>Create Subgraph</strong> (Layers icon) in the bottom toolbar.</li>
                                             <li>
                                                 Name your new node. It is now saved as a <strong>Custom Node</strong>.
@@ -434,6 +434,7 @@ export function HelpDialog() {
                                             { key: "Ctrl + V", label: "Paste" },
                                             { key: "Ctrl/Cmd + F", label: "Find Notes" },
                                             { key: "Delete", label: "Delete Selection" },
+                                            { key: "Shift + Click", label: "Add to Selection" },
                                             { key: "Shift + Drag", label: "Box Selection" },
                                             { key: "Middle Mouse", label: "Pan Canvas" },
                                             { key: "Wheel", label: "Zoom" },

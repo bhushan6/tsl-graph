@@ -2771,6 +2771,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: [inputNode, outputNode, ...subgraph.nodes],
             edges: [...subgraph.edges],
             selectedNodeId: null,
+            activeDebugPreviewNodeIds: [],
+            debugPreviewErrors: {},
             history: { past: [], future: [] }, // Reset history for new context
         });
 
@@ -2786,6 +2788,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 editorMode: 'main',
                 editingSubgraphId: null,
                 editingSubgraphScopeDraft: null,
+                activeDebugPreviewNodeIds: [],
+                debugPreviewErrors: {},
             });
             return null;
         }
@@ -2936,6 +2940,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
                         editingSubgraphScopeDraft: stackItem.editingScopeDraft,
+                        activeDebugPreviewNodeIds: [],
+                        debugPreviewErrors: {},
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
@@ -3005,6 +3011,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
                         editingSubgraphScopeDraft: stackItem.editingScopeDraft,
+                        activeDebugPreviewNodeIds: [],
+                        debugPreviewErrors: {},
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
@@ -3045,6 +3053,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     editorMode: previousMode,
                     editingSubgraphId: previousSubgraphId,
                     editingSubgraphScopeDraft: stackItem.editingScopeDraft,
+                    activeDebugPreviewNodeIds: [],
+                    debugPreviewErrors: {},
                     history: stackItem.history, // Restore parent history
                 });
             }, 0);
@@ -3064,6 +3074,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             editingSubgraphScopeDraft: stackItem.editingScopeDraft,
             selectedNodeId: null,
             selectedNodeIds: [],
+            activeDebugPreviewNodeIds: [],
+            debugPreviewErrors: {},
             history: stackItem.history, // Restore parent history
         });
         return null;

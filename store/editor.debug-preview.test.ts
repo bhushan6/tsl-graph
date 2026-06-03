@@ -1,5 +1,22 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { SubgraphDefinition } from '@/lib/types';
 import { useEditorStore } from './editor';
+
+const SUBGRAPH_ID = 'custom/debug-preview-test';
+
+function createSubgraph(): SubgraphDefinition {
+    return {
+        id: SUBGRAPH_ID,
+        name: 'Debug Preview Test',
+        scope: 'project',
+        inputs: [{ id: 'in_0', label: 'Input 1', type: 'any' }],
+        outputs: [{ id: 'out_0', label: 'Output 1', type: 'any' }],
+        nodes: [],
+        edges: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+    };
+}
 
 describe('Editor debug preview UI state', () => {
     beforeEach(() => {
@@ -31,6 +48,24 @@ describe('Editor debug preview UI state', () => {
 
         useEditorStore.getState().setDebugPreviewError('node-2', 'Still failed');
         useEditorStore.getState().clearDebugPreviewErrors();
+        expect(useEditorStore.getState().debugPreviewErrors).toEqual({});
+    });
+
+    it('clears active preview UI state when entering a subgraph editor context', () => {
+        useEditorStore.setState((state) => ({
+            ...state,
+            subgraphs: {
+                ...state.subgraphs,
+                [SUBGRAPH_ID]: createSubgraph(),
+            },
+        }));
+
+        useEditorStore.getState().toggleDebugPreviewActive('node-1');
+        useEditorStore.getState().setDebugPreviewError('node-1', 'Failed');
+
+        expect(useEditorStore.getState().enterSubgraphEditor(SUBGRAPH_ID)).toBe(true);
+
+        expect(useEditorStore.getState().activeDebugPreviewNodeIds).toEqual([]);
         expect(useEditorStore.getState().debugPreviewErrors).toEqual({});
     });
 });

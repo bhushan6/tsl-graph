@@ -602,7 +602,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     className="bg-background"
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
-                    selectionKeyCode={"Shift"}
+                    selectionKeyCode="Shift"
+                    multiSelectionKeyCode={["Shift", "Meta", "Control"]}
                     maxZoom={4}
                     minZoom={0.05}
                     nodesDraggable={!isReadOnly}

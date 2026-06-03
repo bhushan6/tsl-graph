@@ -71,7 +71,7 @@ Nodes are the building blocks of your shader. Data flows from **Left** (Inputs) 
 Subgraphs allow you to bundle complex logic into a single, reusable node. They act just like functions in code.
 
 ### **1. Creating a Subgraph**
-1.  Select multiple nodes (Hold `Shift` + Drag Box).
+1.  Select multiple nodes (`Shift` + Click nodes, or hold `Shift` + Drag Box).
 2.  Click the **Create Subgraph** icon (Layers icon) in the Bottom Toolbar.
 3.  Name your new node. It is now saved as a **Custom Node**.
     -   **Automatic Ports**: The editor automatically creates inputs/outputs based on existing connections.
@@ -165,6 +165,7 @@ For visual organization without creating full Subgraphs.
 | **Ctrl + Z** / **Cmd + Z** | Undo |
 | **Ctrl + Y** / **Cmd + Y** | Redo |
 | **Delete** / **Backspace** | Delete Selected |
+| **Shift + Click** | Add to Selection |
 | **Shift + Drag** | Box Selection |
 | **Middle Mouse** | Pan Canvas |
 | **Mouse Wheel** | Zoom |
