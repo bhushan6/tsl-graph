@@ -29,6 +29,12 @@ export interface CompileOptions {
     uniformMode?: 'inline' | 'runtime';
     globals?: GlobalContextEntry[];
     runtimeCameraFromScope?: boolean;
+    previewTarget?: {
+        nodeId: string;
+        outputHandle?: string | null;
+        varName?: string;
+    };
+    previewSubgraphInputs?: boolean;
 }
 
 function wrapWgslTemplateLiteral(code: string): string {
@@ -260,6 +266,14 @@ function getSwizzleSuffix(sourceHandle: string | null | undefined, isSingleOutpu
 
     // Otherwise assume property access
     return `.${sourceHandle}`;
+}
+
+function getCompiledNodeOutputExpression(
+    compiledNode: CompiledNode | undefined,
+    outputHandle: string | null | undefined
+): string | null {
+    if (!compiledNode) return null;
+    return `${compiledNode.varName}${getSwizzleSuffix(outputHandle, compiledNode.singleOutput)}`;
 }
 
 function getAssignTargetExpression(
@@ -1692,6 +1706,30 @@ export function compileGraph(
     const usedNames = new Set<string>(globalReservedNames);
     let nodeIndex = 0;
 
+    if (options.previewSubgraphInputs) {
+        const subgraphInputNodes = nodes.filter((node) => node.data.type === 'subgraph/input');
+        for (const node of subgraphInputNodes) {
+            const baseName = `_subgraph_input_${nodeIndex}`;
+            let displayName = baseName;
+            let suffix = 1;
+            while (usedNames.has(displayName)) {
+                displayName = `${baseName}_${suffix++}`;
+            }
+            usedNames.add(displayName);
+            nodeIndex++;
+
+            const ports = node.data.dynamicPorts ?? [];
+            const entries = ports.map((port) => `${port.id}: ${getTSLDefaultForType(port.type)}`);
+            lines.push(`const ${displayName} = { ${entries.join(', ')} };`);
+            compiledNodes.set(node.id, {
+                id: node.id,
+                varName: displayName,
+                code: '/* preview subgraph inputs */',
+                singleOutput: false,
+            });
+        }
+    }
+
     const compileSingleNode = (node: Node<TSLNodeData>, targetLines: string[], edgesForInputs: Edge[], inFn: boolean = false) => {
         if (node.data.type === COMMENT_NODE_TYPE) {
             return;
@@ -2347,6 +2385,17 @@ export function compileGraph(
         }
 
         compileSingleNode(node, lines, compileEdges);
+    }
+
+    if (options.previewTarget) {
+        const targetExpr = getCompiledNodeOutputExpression(
+            compiledNodes.get(options.previewTarget.nodeId),
+            options.previewTarget.outputHandle
+        );
+        if (!targetExpr) {
+            throw new Error(`Preview target node "${options.previewTarget.nodeId}" did not compile.`);
+        }
+        lines.push(`const ${options.previewTarget.varName ?? '__preview_target__'} = ${targetExpr};`);
     }
 
     // Generate material code

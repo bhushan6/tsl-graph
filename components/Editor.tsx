@@ -34,6 +34,7 @@ import { initializeNodes } from '@/lib/nodes';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { UILayer } from './UILayer';
 import { Preview } from './Preview';
+import { NodeDebugPreviewOverlay } from './NodeDebugPreviewOverlay';
 import { Toolbar } from './Toolbar';
 import { AiChatDock } from './AiChatDock';
 import { PropertiesPanel } from './PropertiesPanel';
@@ -601,7 +602,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     className="bg-background"
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
-                    selectionKeyCode={"Shift"}
+                    selectionKeyCode="Shift"
+                    multiSelectionKeyCode={["Shift", "Meta", "Control"]}
                     maxZoom={4}
                     minZoom={0.05}
                     nodesDraggable={!isReadOnly}
@@ -612,6 +614,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>
+                <NodeDebugPreviewOverlay />
                 {!isReadOnly && <CanvasEdgeDropPicker />}
             </div >
 

@@ -759,9 +759,12 @@ interface EditorState {
     canvasMode: 'pan' | 'select';
     setCanvasMode: (mode: 'pan' | 'select') => void;
 
-    // Debug Mode - controls node preview visibility
-    debugMode: boolean;
-    setDebugMode: (mode: boolean) => void;
+    // Per-node debug preview UI state
+    activeDebugPreviewNodeIds: string[];
+    debugPreviewErrors: Record<string, string>;
+    toggleDebugPreviewActive: (nodeId: string) => void;
+    setDebugPreviewError: (nodeId: string, error: string | null) => void;
+    clearDebugPreviewErrors: () => void;
 
     // Preview settings
     previewSettings: PreviewSettings;
@@ -1155,9 +1158,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ editingSubgraphScopeDraft: scope });
     },
 
-    // Debug Mode - off by default
-    debugMode: false,
-    setDebugMode: (mode) => set({ debugMode: mode }),
+    // Per-node debug preview state - off by default on every node
+    activeDebugPreviewNodeIds: [],
+    debugPreviewErrors: {},
+    toggleDebugPreviewActive: (nodeId) => set((state) => {
+        const isActive = state.activeDebugPreviewNodeIds.includes(nodeId);
+        return {
+            activeDebugPreviewNodeIds: isActive
+                ? state.activeDebugPreviewNodeIds.filter((id) => id !== nodeId)
+                : [...state.activeDebugPreviewNodeIds, nodeId],
+        };
+    }),
+    setDebugPreviewError: (nodeId, error) => set((state) => {
+        const nextErrors = { ...state.debugPreviewErrors };
+        if (error) {
+            nextErrors[nodeId] = error;
+        } else {
+            delete nextErrors[nodeId];
+        }
+        return { debugPreviewErrors: nextErrors };
+    }),
+    clearDebugPreviewErrors: () => set({ debugPreviewErrors: {} }),
 
     // History initialization
     history: createEmptyHistoryState(),
@@ -2750,6 +2771,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: [inputNode, outputNode, ...subgraph.nodes],
             edges: [...subgraph.edges],
             selectedNodeId: null,
+            activeDebugPreviewNodeIds: [],
+            debugPreviewErrors: {},
             history: { past: [], future: [] }, // Reset history for new context
         });
 
@@ -2765,6 +2788,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 editorMode: 'main',
                 editingSubgraphId: null,
                 editingSubgraphScopeDraft: null,
+                activeDebugPreviewNodeIds: [],
+                debugPreviewErrors: {},
             });
             return null;
         }
@@ -2915,6 +2940,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
                         editingSubgraphScopeDraft: stackItem.editingScopeDraft,
+                        activeDebugPreviewNodeIds: [],
+                        debugPreviewErrors: {},
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
@@ -2984,6 +3011,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         editorMode: previousMode,
                         editingSubgraphId: previousSubgraphId,
                         editingSubgraphScopeDraft: stackItem.editingScopeDraft,
+                        activeDebugPreviewNodeIds: [],
+                        debugPreviewErrors: {},
                         history: stackItem.history, // Restore parent history
                     });
                 }, 0);
@@ -3024,6 +3053,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     editorMode: previousMode,
                     editingSubgraphId: previousSubgraphId,
                     editingSubgraphScopeDraft: stackItem.editingScopeDraft,
+                    activeDebugPreviewNodeIds: [],
+                    debugPreviewErrors: {},
                     history: stackItem.history, // Restore parent history
                 });
             }, 0);
@@ -3043,6 +3074,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             editingSubgraphScopeDraft: stackItem.editingScopeDraft,
             selectedNodeId: null,
             selectedNodeIds: [],
+            activeDebugPreviewNodeIds: [],
+            debugPreviewErrors: {},
             history: stackItem.history, // Restore parent history
         });
         return null;
@@ -4317,6 +4350,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             isDirty: false,
             history: createEmptyHistoryState(),
             canvasMode: 'pan',
+            activeDebugPreviewNodeIds: [],
+            debugPreviewErrors: {},
             codeNodes: {},
             previewSettings: createDefaultPreviewSettings(),
             previewSnapshotProvider: null,

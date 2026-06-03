@@ -148,7 +148,6 @@ export function HelpDialog() {
                                             <span className="block mt-2 font-medium text-foreground/80">
                                                 • Pan/Select Modes<br />
                                                 • Create Subgraph (Group)<br />
-                                                • Debug Mode (Bug Icon)<br />
                                                 • View Generated Code
                                             </span>
                                         </p>
@@ -218,11 +217,11 @@ export function HelpDialog() {
                                             <div className="w-5 h-5 text-orange-500 flex items-center justify-center">🐞</div>
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-lg">Debug Mode</h3>
+                                            <h3 className="font-semibold text-lg">Node Debug Preview</h3>
                                             <p className="text-muted-foreground mt-1">
-                                                Click the <strong>Bug Icon</strong> in the toolbar to toggle Debug Mode.
+                                                Click the <strong>Bug Icon</strong> in a node header to show or hide that node&apos;s live debug preview.
                                                 <br />
-                                                When active, selecting any node shows a live <strong>3D Preview</strong> of its output in the Properties Panel.
+                                                The preview appears directly on the node and shows a flat fullscreen-quad view of its output.
                                             </p>
                                         </div>
                                     </div>
@@ -246,7 +245,7 @@ export function HelpDialog() {
                                     <div className="bg-muted/30 p-6 rounded-xl border">
                                         <h3 className="font-semibold mb-3">1. Creating a Subgraph</h3>
                                         <ol className="list-decimal list-inside space-y-3 text-muted-foreground">
-                                            <li>Select nodes you want to bundle (Box Select or <kbd className="bg-background px-1.5 py-0.5 rounded border text-xs">Shift + Drag</kbd>).</li>
+                                            <li>Select nodes you want to bundle (<kbd className="bg-background px-1.5 py-0.5 rounded border text-xs">Shift + Click</kbd> or <kbd className="bg-background px-1.5 py-0.5 rounded border text-xs">Shift + Drag</kbd>).</li>
                                             <li>Click the <strong>Create Subgraph</strong> (Layers icon) in the bottom toolbar.</li>
                                             <li>
                                                 Name your new node. It is now saved as a <strong>Custom Node</strong>.
@@ -435,6 +434,7 @@ export function HelpDialog() {
                                             { key: "Ctrl + V", label: "Paste" },
                                             { key: "Ctrl/Cmd + F", label: "Find Notes" },
                                             { key: "Delete", label: "Delete Selection" },
+                                            { key: "Shift + Click", label: "Add to Selection" },
                                             { key: "Shift + Drag", label: "Box Selection" },
                                             { key: "Middle Mouse", label: "Pan Canvas" },
                                             { key: "Wheel", label: "Zoom" },

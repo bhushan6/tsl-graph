@@ -17,7 +17,6 @@ import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind } from '@/lib/types';
 import { getMultiOpInputs, getMultiOpLabel, type MultiOp } from '@/lib/multi-op';
 import { Layers, Plus, Trash2, Upload, Code, Crosshair } from 'lucide-react';
-import { NodePreview } from './NodePreview';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { AssetInput } from './inputs/AssetInput';
 import { UNIFORM_KINDS, getUniformKindFromNode, getUniformDefaultValue, type UniformKind } from '@/lib/uniform-utils';
@@ -469,12 +468,10 @@ function LinearGradientPanel({
 
 function UniformNodePanel({
     node,
-    debugMode,
     updateNodeValue,
     setUniformType,
 }: {
     node: AppNode;
-    debugMode: boolean;
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
     setUniformType: (nodeId: string, newKind: UniformKind) => void;
 }) {
@@ -491,8 +488,6 @@ function UniformNodePanel({
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-                {debugMode && <NodePreview />}
-
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
@@ -538,7 +533,6 @@ function MultiOpNodePanel({
     connectedInputs: Set<string | null | undefined>;
 }) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
-    const debugMode = useEditorStore((s) => s.debugMode);
     const operations = Array.isArray(node.data.operations) ? (node.data.operations as MultiOp[]) : [];
     const inputs = getMultiOpInputs(operations);
     const editableInputs = inputs.filter((input) => !connectedInputs.has(input.handleId));
@@ -559,7 +553,6 @@ function MultiOpNodePanel({
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                {debugMode && <NodePreview />}
                 {operations.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         No operations yet. Add operations on the node.
@@ -1353,7 +1346,6 @@ function PropertiesPanelContent() {
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const getCodeNode = useEditorStore((s) => s.getCodeNode);
     const codeNodes = useEditorStore((s) => s.codeNodes);
-    const debugMode = useEditorStore((s) => s.debugMode);
     const edges = useGraphEdgesSnapshot();
 
     const [editingCodeNodeId, setEditingCodeNodeId] = useState<string | null>(null);
@@ -1423,7 +1415,6 @@ function PropertiesPanelContent() {
         return (
             <UniformNodePanel
                 node={node}
-                debugMode={debugMode}
                 updateNodeValue={updateNodeValue}
                 setUniformType={setUniformType}
             />
@@ -1521,9 +1512,6 @@ function PropertiesPanelContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-                {/* Node Preview - only shown in debug mode */}
-                {debugMode && <NodePreview />}
-
                 {isMaterialNode ? (
                     <>
                         {visibleInputKeys.length > 0 && (

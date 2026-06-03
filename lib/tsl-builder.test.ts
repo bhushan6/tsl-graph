@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import * as THREE from 'three/webgpu';
-import { buildNodePreviewMaterial } from './tsl-builder';
-import type { TSLNodeData } from '@/lib/types';
+import { buildNodePreviewMaterial, getPreviewOutputHandle } from './tsl-builder';
+import type { SubgraphDefinition, TSLNodeData } from '@/lib/types';
 import { initializeNodes } from './nodes';
 
 function createNode(
@@ -48,5 +48,119 @@ describe('buildNodePreviewMaterial', () => {
 
         expect(material).toBeInstanceOf(THREE.NodeMaterial);
         expect((material as THREE.NodeMaterial).fragmentNode).toBeTruthy();
+    });
+
+    it('builds preview for custom subgraph instances', () => {
+        const subgraph: SubgraphDefinition = {
+            id: 'custom/add-one',
+            name: 'Add One',
+            inputs: [{ id: 'in_0', label: 'Value', type: 'float' }],
+            outputs: [{ id: 'out_0', label: 'Out', type: 'float' }],
+            nodes: [
+                createNode('one', 'const/float', { value: 1 }),
+                createNode('add', 'math/add'),
+            ],
+            edges: [
+                {
+                    id: 'sg-edge-1',
+                    source: 'subgraph-input',
+                    sourceHandle: 'in_0',
+                    target: 'add',
+                    targetHandle: 'a',
+                },
+                {
+                    id: 'sg-edge-2',
+                    source: 'one',
+                    sourceHandle: 'out',
+                    target: 'add',
+                    targetHandle: 'b',
+                },
+                {
+                    id: 'sg-edge-3',
+                    source: 'add',
+                    sourceHandle: 'out',
+                    target: 'subgraph-output',
+                    targetHandle: 'out_0',
+                },
+            ],
+            createdAt: 0,
+            updatedAt: 0,
+        };
+
+        const nodes: Node<TSLNodeData>[] = [
+            createNode('value', 'const/float', { value: 0.5 }),
+            {
+                ...createNode('custom-1', 'custom/add-one'),
+                data: {
+                    ...createNode('custom-1', 'custom/add-one').data,
+                    dynamicPorts: [...subgraph.inputs, ...subgraph.outputs],
+                },
+            },
+        ];
+
+        const edges: Edge[] = [
+            {
+                id: 'edge-1',
+                source: 'value',
+                sourceHandle: 'out',
+                target: 'custom-1',
+                targetHandle: 'in_0',
+            },
+        ];
+
+        const material = buildNodePreviewMaterial(
+            'custom-1',
+            nodes,
+            edges,
+            { [subgraph.id]: subgraph }
+        );
+
+        expect(material).toBeInstanceOf(THREE.NodeMaterial);
+        expect((material as THREE.NodeMaterial).fragmentNode).toBeTruthy();
+    });
+
+    it('builds preview for nodes inside the subgraph editor using default anchor inputs', () => {
+        const nodes: Node<TSLNodeData>[] = [
+            {
+                ...createNode('subgraph-input', 'subgraph/input'),
+                type: 'subgraph/input',
+                data: {
+                    type: 'subgraph/input',
+                    values: {},
+                    connected: {},
+                    dynamicPorts: [{ id: 'in_0', label: 'Value', type: 'float' }],
+                } as TSLNodeData,
+            },
+            createNode('one', 'const/float', { value: 1 }),
+            createNode('add', 'math/add'),
+        ];
+
+        const edges: Edge[] = [
+            {
+                id: 'edge-1',
+                source: 'subgraph-input',
+                sourceHandle: 'in_0',
+                target: 'add',
+                targetHandle: 'a',
+            },
+            {
+                id: 'edge-2',
+                source: 'one',
+                sourceHandle: 'out',
+                target: 'add',
+                targetHandle: 'b',
+            },
+        ];
+
+        const material = buildNodePreviewMaterial('add', nodes, edges);
+
+        expect(material).toBeInstanceOf(THREE.NodeMaterial);
+        expect((material as THREE.NodeMaterial).fragmentNode).toBeTruthy();
+    });
+
+    it('uses the combined vector output for constant vector debug previews', () => {
+        const node = createNode('vec3-1', 'const/vec3', { x: 1, y: 0, z: 0 });
+
+        expect(getPreviewOutputHandle(node)).toBe('out');
     });
 });

@@ -28,7 +28,6 @@ Your toolbox. It lists all available nodes (Math, Color, UV, etc.).
 Quick access to common actions:
 -   **Pan/Select Modes**: Switch between moving the canvas and selecting nodes.
 -   **Create Subgraph**: Group selected nodes.
--   **Debug Mode**: Toggle live node previews (Bug Icon).
 -   **View Code**: Open the panel to see the generated TSL code.
 
 ---
@@ -55,9 +54,9 @@ Nodes are the building blocks of your shader. Data flows from **Left** (Inputs) 
     -   <span style="color:gray">●</span> **Gray**: Any Type
 
 ### **Debugging**
--   **Debug Mode** (Bug Icon in Toolbar):
-    -   When enabled, selecting any single node allows you to inspect its output.
-    -   A **miniature 3D Preview** appears in the Properties Panel, showing exactly what that specific node is outputting.
+-   **Node Debug Preview** (Bug Icon in each node header):
+    -   Click a node's bug icon to inspect that node's output directly on the canvas.
+    -   Click the same icon again to hide that node's preview.
     -   Useful for checking intermediate values like noise patterns or math operations.
 
 ### **Editing Properties**
@@ -72,7 +71,7 @@ Nodes are the building blocks of your shader. Data flows from **Left** (Inputs) 
 Subgraphs allow you to bundle complex logic into a single, reusable node. They act just like functions in code.
 
 ### **1. Creating a Subgraph**
-1.  Select multiple nodes (Hold `Shift` + Drag Box).
+1.  Select multiple nodes (`Shift` + Click nodes, or hold `Shift` + Drag Box).
 2.  Click the **Create Subgraph** icon (Layers icon) in the Bottom Toolbar.
 3.  Name your new node. It is now saved as a **Custom Node**.
     -   **Automatic Ports**: The editor automatically creates inputs/outputs based on existing connections.
@@ -166,6 +165,7 @@ For visual organization without creating full Subgraphs.
 | **Ctrl + Z** / **Cmd + Z** | Undo |
 | **Ctrl + Y** / **Cmd + Y** | Redo |
 | **Delete** / **Backspace** | Delete Selected |
+| **Shift + Click** | Add to Selection |
 | **Shift + Drag** | Box Selection |
 | **Middle Mouse** | Pan Canvas |
 | **Mouse Wheel** | Zoom |

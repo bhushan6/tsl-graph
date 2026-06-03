@@ -23,6 +23,7 @@ import { transition } from 'three/addons/tsl/display/TransitionNode.js';
 import { ensureUniform, setUniformFactory } from './uniform-store';
 import { withLocalDependencyEdges } from './local-utils';
 import * as tslEasings from './tsl-easings';
+import { registry } from './registry';
 
 function createTSLRuntimeScope() {
     return {
@@ -177,6 +178,20 @@ function getAncestorNodeIds(targetNodeId: string, edges: Edge[]): Set<string> {
     return ancestors;
 }
 
+export function getPreviewOutputHandle(node: Node<TSLNodeData>): string | null {
+    const dynamicOutput = (node.data.dynamicPorts ?? []).find((port) => (
+        port.id === 'out' || port.id.startsWith('out_')
+    ));
+    if (dynamicOutput) return dynamicOutput.id;
+
+    const def = registry.get(node.data.type);
+    const outputHandles = Object.keys(def?.outputs ?? {});
+    return outputHandles.find((handle) => handle === 'out')
+        ?? outputHandles.find((handle) => handle === 'out_0')
+        ?? outputHandles[0]
+        ?? null;
+}
+
 /**
  * Build a preview material for a specific node.
  * This compiles only the portion of the graph feeding into the target node
@@ -190,6 +205,11 @@ export function buildNodePreviewMaterial(
     codeNodes?: Record<string, CodeNodeDefinition>,
     globals?: GlobalContextEntry[]
 ): THREE.Material {
+    const targetNode = nodes.find((node) => node.id === targetNodeId);
+    if (!targetNode) {
+        throw new Error(`Preview target node "${targetNodeId}" was not found.`);
+    }
+
     const dependencyEdges = withLocalDependencyEdges(nodes, edges);
 
     // 1. Find all ancestor nodes (including target)
@@ -197,35 +217,22 @@ export function buildNodePreviewMaterial(
 
     // 2. Filter nodes and edges to only include ancestors
     const partialNodes = nodes.filter(n => ancestorIds.has(n.id));
-    const partialEdges = edges.filter(e => ancestorIds.has(e.source) && ancestorIds.has(e.target));
+    const partialEdges = dependencyEdges.filter(e => ancestorIds.has(e.source) && ancestorIds.has(e.target));
 
     // 3. Compile the partial graph (without material node)
-    const code = compileGraph(partialNodes, partialEdges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
+    const code = compileGraph(partialNodes, partialEdges, subgraphs, codeNodes, {
+        uniformMode: 'runtime',
+        globals,
+        previewSubgraphInputs: true,
+        previewTarget: {
+            nodeId: targetNodeId,
+            outputHandle: getPreviewOutputHandle(targetNode),
+            varName: '__preview_target__',
+        },
+    });
 
     // Ensure uniform factory is wired to TSL runtime
     setUniformFactory(TSL.uniform);
-
-    // 4. Extract the variable names from compiled code
-    // The code produces lines like "const _node0 = ...;" or "const myVarName = ...;"
-    // We need to find all defined variables and identify the target node's variable
-    const varMatches = code.matchAll(/const\s+(\w+)\s*=/g);
-    const definedVars: string[] = [];
-    for (const match of varMatches) {
-        // Skip material, texture vars, and comment-only lines
-        if (!match[1].includes('material') && !match[1].endsWith('_tex')) {
-            definedVars.push(match[1]);
-        }
-    }
-
-    // If no vars found, just return a fallback
-    if (definedVars.length === 0) {
-        const fallback = new THREE.MeshBasicNodeMaterial();
-        fallback.color = new THREE.Color(0x888888);
-        return fallback;
-    }
-
-    // The target node should be the last variable defined (since it's the "sink" of the partial graph)
-    const targetVarName = definedVars[definedVars.length - 1];
 
     // Build execution scope
     const scope = createTSLRuntimeScope();
@@ -240,8 +247,6 @@ export function buildNodePreviewMaterial(
         const material = new NodeMaterial();
         
         // Map the target node output to fragment
-        // Use unique variable name to avoid collision with compiled code
-        const __preview_target__ = ${targetVarName};
         material.fragmentNode = __preview_target__;
         
         return material;

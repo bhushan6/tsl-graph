@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Bug, Repeat, Combine, Sparkles, FileCode2 } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, Sparkles, FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -42,8 +42,6 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
         createLoopGroup,
         removeNodesFromGroup,
         convertChainToMultiOp,
-        debugMode,
-        setDebugMode,
     } = useEditorStore();
 
     // Ref to track subgraph name without causing re-renders
@@ -123,7 +121,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
             })
 
         }
-    }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing, setCenter, getZoom]);
+    }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing, setCenter, getZoom, fitView]);
 
     // Check if any selected node is a material node
     const isMaterialSelected = selectedNodeIds.some(id => {
@@ -545,22 +543,6 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                     <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
                 </Tooltip>
             </div>
-
-            <div className="w-px h-4 bg-border" />
-
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant={debugMode ? 'secondary' : 'ghost'}
-                        size="icon"
-                        onClick={() => setDebugMode(!debugMode)}
-                        className="h-8 w-8"
-                    >
-                        <Bug className="w-4 h-4" />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>Debug Mode {debugMode ? '(On)' : '(Off)'}</TooltipContent>
-            </Tooltip>
 
             {onOpenAiDock && (
                 <>
