@@ -24,6 +24,119 @@ import { ensureUniform, setUniformFactory } from './uniform-store';
 import { withLocalDependencyEdges } from './local-utils';
 import * as tslEasings from './tsl-easings';
 import { registry } from './registry';
+import { resolveNodeOutputTypeById } from './type-inference';
+
+export type NodePreviewDisplayMode = 'color' | 'raw';
+
+interface BuildNodePreviewMaterialOptions {
+    displayMode?: NodePreviewDisplayMode;
+}
+
+const DEBUG_VALUE_HUD_WGSL = `
+fn debugValueHud(value: vec4<f32>, channels: f32, uv: vec2<f32>) -> vec4<f32> {
+    let rowHeight = 0.22;
+    let totalHeight = rowHeight * channels;
+    let blockTop = 0.5 + totalHeight * 0.5;
+    let row = i32(floor((blockTop - uv.y) / rowHeight));
+    if (row < 0 || row >= i32(channels)) {
+        return vec4<f32>(0.015, 0.018, 0.025, 1.0);
+    }
+
+    let glyphSize = vec2<f32>(0.045, 0.19);
+    let advance = 0.052;
+    let textWidth = advance * 6.0 + glyphSize.x;
+    let rowTop = blockTop - f32(row) * rowHeight;
+    let origin = vec2<f32>(
+        0.5 - textWidth * 0.5,
+        rowTop - (rowHeight + glyphSize.y) * 0.5
+    );
+    let channelValue = select(select(select(value.w, value.z, row == 2), value.y, row == 1), value.x, row == 0);
+    let ink = debugDrawNumberWithSize(uv, origin, channelValue, glyphSize, advance);
+    let channelColor = select(
+        select(
+            select(vec3<f32>(0.85, 0.85, 0.92), vec3<f32>(0.35, 0.55, 1.0), row == 2),
+            vec3<f32>(0.35, 0.95, 0.55),
+            row == 1
+        ),
+        vec3<f32>(1.0, 0.35, 0.35),
+        row == 0
+    );
+    let marker = step(0.04, uv.x) * step(uv.x, 0.13) * step(origin.y + 0.045, uv.y) * step(uv.y, origin.y + 0.125);
+    let baseColor = vec3<f32>(0.015, 0.018, 0.025);
+    let markedColor = mix(baseColor, channelColor * 0.7, marker);
+    let textColor = mix(markedColor, vec3<f32>(0.95, 0.98, 1.0), ink);
+    return vec4<f32>(textColor, 1.0);
+}
+
+fn debugGlyphBits(charCode: i32) -> u32 {
+    switch charCode {
+        case 0: { return 31599u; }
+        case 1: { return 9362u; }
+        case 2: { return 29671u; }
+        case 3: { return 29391u; }
+        case 4: { return 23497u; }
+        case 5: { return 31183u; }
+        case 6: { return 31215u; }
+        case 7: { return 29257u; }
+        case 8: { return 31727u; }
+        case 9: { return 31695u; }
+        case 10: { return 448u; }
+        case 11: { return 2u; }
+        default: { return 0u; }
+    }
+}
+
+fn debugDrawGlyph(uv: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, charCode: i32) -> f32 {
+    let q = (uv - origin) / size;
+    if (q.x < 0.0 || q.x >= 1.0 || q.y < 0.0 || q.y >= 1.0) {
+        return 0.0;
+    }
+
+    let col = i32(floor(q.x * 3.0));
+    let row = i32(floor((1.0 - q.y) * 5.0));
+    if (col < 0 || col > 2 || row < 0 || row > 4) {
+        return 0.0;
+    }
+
+    let bitIndex = u32((4 - row) * 3 + (2 - col));
+    let bit = (debugGlyphBits(charCode) >> bitIndex) & 1u;
+    let pixel = vec2<f32>(fract(q.x * 3.0), fract(q.y * 5.0));
+    let inset = step(0.10, pixel.x) * step(pixel.x, 0.90) * step(0.10, pixel.y) * step(pixel.y, 0.90);
+    return select(0.0, inset, bit == 1u);
+}
+
+fn debugDrawNumberWithSize(uv: vec2<f32>, origin: vec2<f32>, value: f32, glyphSize: vec2<f32>, advanceX: f32) -> f32 {
+    let advance = vec2<f32>(advanceX, 0.0);
+    let clampedValue = clamp(value, -999.99, 999.99);
+    let absValue = abs(clampedValue);
+    let scaled = i32(floor(absValue * 100.0 + 0.5));
+    let whole = scaled / 100;
+    let frac = scaled - whole * 100;
+    let hundreds = whole / 100;
+    let tens = (whole / 10) - hundreds * 10;
+    let ones = whole - (whole / 10) * 10;
+    let dec1 = frac / 10;
+    let dec2 = frac - dec1 * 10;
+
+    var ink = 0.0;
+    let signChar = select(-1, 10, clampedValue < 0.0);
+    let hundredsChar = select(-1, hundreds, whole >= 100);
+    let tensChar = select(-1, tens, whole >= 10);
+
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 0.0, glyphSize, signChar));
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 1.0, glyphSize, hundredsChar));
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 2.0, glyphSize, tensChar));
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 3.0, glyphSize, ones));
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 4.0, glyphSize, 11));
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 5.0, glyphSize, dec1));
+    ink = max(ink, debugDrawGlyph(uv, origin + advance * 6.0, glyphSize, dec2));
+    return ink;
+}
+
+fn debugDrawNumber(uv: vec2<f32>, origin: vec2<f32>, value: f32) -> f32 {
+    return debugDrawNumberWithSize(uv, origin, value, vec2<f32>(0.045, 0.19), 0.052);
+}
+`;
 
 const setTSLUniformFactory = () => {
     setUniformFactory(TSL.uniform as unknown as Parameters<typeof setUniformFactory>[0]);
@@ -256,6 +369,43 @@ export function getPreviewOutputHandle(node: Node<TSLNodeData>): string | null {
         ?? null;
 }
 
+function getPreviewValueDisplayType(
+    targetNodeId: string,
+    outputHandle: string | null,
+    nodes: Node<TSLNodeData>[],
+    edges: Edge[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    globals?: GlobalContextEntry[]
+) {
+    return resolveNodeOutputTypeById(
+        targetNodeId,
+        outputHandle,
+        new Map(nodes.map((node) => [node.id, node])),
+        edges,
+        globals ?? [],
+        subgraphs
+    );
+}
+
+function getRawPreviewExpression(targetVarName: string, type: string): { valueExpression: string; channels: number } {
+    switch (type) {
+        case 'vec4':
+            return { valueExpression: `vec4(${targetVarName})`, channels: 4 };
+        case 'vec3':
+        case 'color':
+            return { valueExpression: `vec4(${targetVarName}, 1.0)`, channels: 3 };
+        case 'vec2':
+            return { valueExpression: `vec4(${targetVarName}, 0.0, 1.0)`, channels: 2 };
+        case 'int':
+        case 'uint':
+        case 'float':
+        case 'bool':
+        case 'any':
+        default:
+            return { valueExpression: `vec4(float(${targetVarName}), 0.0, 0.0, 1.0)`, channels: 1 };
+    }
+}
+
 /**
  * Build a preview material for a specific node.
  * This compiles only the portion of the graph feeding into the target node
@@ -267,7 +417,8 @@ export function buildNodePreviewMaterial(
     edges: Edge[],
     subgraphs?: Record<string, SubgraphDefinition>,
     codeNodes?: Record<string, CodeNodeDefinition>,
-    globals?: GlobalContextEntry[]
+    globals?: GlobalContextEntry[],
+    options: BuildNodePreviewMaterialOptions = {}
 ): THREE.Material {
     const targetNode = nodes.find((node) => node.id === targetNodeId);
     if (!targetNode) {
@@ -275,6 +426,15 @@ export function buildNodePreviewMaterial(
     }
 
     const dependencyEdges = withLocalDependencyEdges(nodes, edges);
+    const previewOutputHandle = getPreviewOutputHandle(targetNode);
+    const previewOutputType = getPreviewValueDisplayType(
+        targetNodeId,
+        previewOutputHandle,
+        nodes,
+        dependencyEdges,
+        subgraphs,
+        globals
+    );
 
     // 1. Find all ancestor nodes (including target)
     const ancestorIds = getAncestorNodeIds(targetNodeId, dependencyEdges);
@@ -290,7 +450,7 @@ export function buildNodePreviewMaterial(
         previewSubgraphInputs: true,
         previewTarget: {
             nodeId: targetNodeId,
-            outputHandle: getPreviewOutputHandle(targetNode),
+            outputHandle: previewOutputHandle,
             varName: '__preview_target__',
         },
     });
@@ -305,13 +465,20 @@ export function buildNodePreviewMaterial(
     const scopeValues = Object.values(scope);
 
     // Create code that evaluates the partial graph and creates a preview material
+    const { valueExpression, channels } = getRawPreviewExpression('__preview_target__', previewOutputType);
+    const useDebugHud = options.displayMode === 'raw';
+    const fragmentNodeExpression = useDebugHud
+        ? `__debugValueHud({ value: ${valueExpression}, channels: float(${channels}), uv: uv() })`
+        : '__preview_target__';
+
     const functionBody = `
         ${code}
         
         const material = new NodeMaterial();
         
         // Map the target node output to fragment
-        material.fragmentNode = __preview_target__;
+        ${useDebugHud ? `const __debugValueHud = wgslFn(${JSON.stringify(DEBUG_VALUE_HUD_WGSL)});` : ''}
+        material.fragmentNode = ${fragmentNodeExpression};
         
         return material;
     `;

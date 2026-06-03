@@ -42,7 +42,7 @@ import {
   generateGradientString,
   normalizeGradientStops,
 } from "@/lib/gradient-utils";
-import { Bug } from "lucide-react";
+import { Bug, Hash } from "lucide-react";
 import {
   getDebugPreviewStatus,
   type DebugPreviewStatus,
@@ -90,9 +90,20 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const debugPreviewError = useEditorStore(
     useCallback((state) => state.debugPreviewErrors[id] ?? null, [id]),
   );
+  const debugPreviewMode = useEditorStore(
+    useCallback((state) => state.debugPreviewModes[id] ?? "color", [id]),
+  );
   const toggleDebugPreviewActive = useEditorStore(
     (s) => s.toggleDebugPreviewActive,
   );
+  const toggleDebugPreviewMode = useEditorStore(
+    (s) => s.toggleDebugPreviewMode,
+  );
+  const edges = useEditorStore((s) => s.edges);
+  const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
+  const subgraphs = useEditorStore((s) => s.subgraphs);
+  const codeNodes = useEditorStore((s) => s.codeNodes);
+  const globals = useEditorStore((s) => s.globals);
   const liveNodeData = useEditorStore(
     useCallback(
       (state) => state.nodes.find((node) => node.id === id)?.data,
@@ -396,6 +407,39 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
           </div>
         )}
       </div>
+      {isDebugPreviewActive && (
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "nodrag nopan inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                debugPreviewMode === "raw"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                  : "border-transparent text-gray-500 hover:bg-white/40 dark:hover:bg-white/10",
+              )}
+              aria-label={
+                debugPreviewMode === "raw"
+                  ? "Show color debug preview"
+                  : "Show raw value debug preview"
+              }
+              aria-pressed={debugPreviewMode !== "color"}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleDebugPreviewMode(id);
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <Hash className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-[10px]">
+            {debugPreviewMode === "raw"
+              ? "Raw value preview"
+              : "Color preview"}
+          </TooltipContent>
+        </Tooltip>
+      )}
       <Tooltip delayDuration={300}>
         <TooltipTrigger asChild>
           <button

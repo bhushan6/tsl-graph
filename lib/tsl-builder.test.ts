@@ -182,4 +182,24 @@ describe('buildNodePreviewMaterial', () => {
             []
         )).toThrow('has no renderable output');
     });
+
+    it('builds raw value preview materials', () => {
+        const nodes: Node<TSLNodeData>[] = [
+            createNode('vec3-1', 'const/vec3', { x: 1, y: 0, z: 0 }),
+        ];
+
+        const material = buildNodePreviewMaterial(
+            'vec3-1',
+            nodes,
+            [],
+            undefined,
+            undefined,
+            undefined,
+            { displayMode: 'raw' }
+        );
+
+        expect(material).toBeInstanceOf(THREE.NodeMaterial);
+        expect((material as THREE.NodeMaterial).fragmentNode).toBeTruthy();
+    });
+
 });

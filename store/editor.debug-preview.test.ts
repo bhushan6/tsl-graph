@@ -86,6 +86,22 @@ describe('Editor debug preview UI state', () => {
         expect(useEditorStore.getState().postDebugPreviewOutputBuilder).toBe(null);
     });
 
+    it('toggles preview display mode without dirtying or versioning the graph', () => {
+        const initialVersion = useEditorStore.getState().graphStructureVersion;
+
+        useEditorStore.getState().toggleDebugPreviewMode('node-1');
+
+        expect(useEditorStore.getState().debugPreviewModes).toEqual({ 'node-1': 'raw' });
+        expect(useEditorStore.getState().graphStructureVersion).toBe(initialVersion);
+        expect(useEditorStore.getState().isDirty).toBe(false);
+
+        useEditorStore.getState().toggleDebugPreviewMode('node-1');
+
+        expect(useEditorStore.getState().debugPreviewModes).toEqual({ 'node-1': 'color' });
+        expect(useEditorStore.getState().graphStructureVersion).toBe(initialVersion);
+        expect(useEditorStore.getState().isDirty).toBe(false);
+    });
+
     it('clears active preview UI state when entering a subgraph editor context', () => {
         useEditorStore.setState((state) => ({
             ...state,
@@ -96,11 +112,13 @@ describe('Editor debug preview UI state', () => {
         }));
 
         useEditorStore.getState().toggleDebugPreviewActive('node-1');
+        useEditorStore.getState().toggleDebugPreviewMode('node-1');
         useEditorStore.getState().setDebugPreviewError('node-1', 'Failed');
 
         expect(useEditorStore.getState().enterSubgraphEditor(SUBGRAPH_ID)).toBe(true);
 
         expect(useEditorStore.getState().activeDebugPreviewNodeIds).toEqual([]);
+        expect(useEditorStore.getState().debugPreviewModes).toEqual({});
         expect(useEditorStore.getState().debugPreviewErrors).toEqual({});
     });
 });

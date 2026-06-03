@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three/webgpu';
 import { buildNodePreviewMaterial } from '@/lib/tsl-builder';
 import { getCanvasRelativeDebugPreviewRect } from '@/lib/debug-preview';
-import { useEditorStore } from '@/store/editor';
+import { useEditorStore, type DebugPreviewMode } from '@/store/editor';
 import type { PostDebugPreviewOutput } from '@/store/editor';
 import { DEFAULT_POST_OUTPUT_SETTINGS, getPostOutputSettings, type PostOutputSettings } from '@/lib/post-output-settings';
 
 interface CachedMaterial {
     version: number;
+    mode: DebugPreviewMode;
     material: THREE.Material;
 }
 
@@ -148,7 +149,9 @@ export function NodeDebugPreviewOverlay() {
         const getMaterial = (nodeId: string): THREE.Material | null => {
             const cached = materialCache.get(nodeId);
             const currentVersion = graphStructureVersionRef.current;
-            if (cached && cached.version === currentVersion) return cached.material;
+            const { debugPreviewModes } = useEditorStore.getState();
+            const mode = debugPreviewModes[nodeId] ?? 'color';
+            if (cached && cached.version === currentVersion && cached.mode === mode) return cached.material;
 
             cached?.material.dispose();
             materialCache.delete(nodeId);
@@ -156,9 +159,12 @@ export function NodeDebugPreviewOverlay() {
             const { nodes, edges, subgraphs, codeNodes, globals } = useEditorStore.getState();
 
             try {
-                const material = buildNodePreviewMaterial(nodeId, nodes, edges, subgraphs, codeNodes, globals);
+                const material = buildNodePreviewMaterial(nodeId, nodes, edges, subgraphs, codeNodes, globals, {
+                    displayMode: mode,
+                });
                 materialCache.set(nodeId, {
                     version: currentVersion,
+                    mode,
                     material,
                 });
                 setDebugPreviewError(nodeId, null);

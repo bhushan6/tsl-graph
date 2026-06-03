@@ -112,6 +112,7 @@ export interface GraphData {
 
 // Editor mode - main graph or editing a subgraph
 export type EditorMode = 'main' | 'subgraph';
+export type DebugPreviewMode = 'color' | 'raw';
 
 export interface PostDebugPreviewOutput {
     outputNode: unknown;
@@ -788,8 +789,10 @@ interface EditorState {
 
     // Per-node debug preview UI state
     activeDebugPreviewNodeIds: string[];
+    debugPreviewModes: Record<string, DebugPreviewMode>;
     debugPreviewErrors: Record<string, string>;
     toggleDebugPreviewActive: (nodeId: string) => void;
+    toggleDebugPreviewMode: (nodeId: string) => void;
     setDebugPreviewError: (nodeId: string, error: string | null) => void;
     clearDebugPreviewErrors: () => void;
     postDebugPreviewOutputBuilder: PostDebugPreviewOutputBuilder | null;
@@ -1191,6 +1194,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Per-node debug preview state - off by default on every node
     activeDebugPreviewNodeIds: [],
+    debugPreviewModes: {},
     debugPreviewErrors: {},
     toggleDebugPreviewActive: (nodeId) => set((state) => {
         const isActive = state.activeDebugPreviewNodeIds.includes(nodeId);
@@ -1201,6 +1205,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 : isSinglePreviewMode
                     ? [nodeId]
                     : [...state.activeDebugPreviewNodeIds, nodeId],
+        };
+    }),
+    toggleDebugPreviewMode: (nodeId) => set((state) => {
+        const currentMode = state.debugPreviewModes[nodeId] ?? 'color';
+        return {
+            debugPreviewModes: {
+                ...state.debugPreviewModes,
+                [nodeId]: currentMode === 'color' ? 'raw' : 'color',
+            },
         };
     }),
     setDebugPreviewError: (nodeId, error) => set((state) => {
@@ -2812,6 +2825,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             edges: [...subgraph.edges],
             selectedNodeId: null,
             activeDebugPreviewNodeIds: [],
+            debugPreviewModes: {},
             debugPreviewErrors: {},
             history: { past: [], future: [] }, // Reset history for new context
         });
@@ -2829,6 +2843,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 editingSubgraphId: null,
                 editingSubgraphScopeDraft: null,
                 activeDebugPreviewNodeIds: [],
+                debugPreviewModes: {},
                 debugPreviewErrors: {},
             });
             return null;
@@ -2981,6 +2996,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         editingSubgraphId: previousSubgraphId,
                         editingSubgraphScopeDraft: stackItem.editingScopeDraft,
                         activeDebugPreviewNodeIds: [],
+                        debugPreviewModes: {},
                         debugPreviewErrors: {},
                         history: stackItem.history, // Restore parent history
                     });
@@ -3072,6 +3088,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         editingSubgraphId: previousSubgraphId,
                         editingSubgraphScopeDraft: stackItem.editingScopeDraft,
                         activeDebugPreviewNodeIds: [],
+                        debugPreviewModes: {},
                         debugPreviewErrors: {},
                         history: stackItem.history, // Restore parent history
                     });
@@ -3114,6 +3131,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     editingSubgraphId: previousSubgraphId,
                     editingSubgraphScopeDraft: stackItem.editingScopeDraft,
                     activeDebugPreviewNodeIds: [],
+                    debugPreviewModes: {},
                     debugPreviewErrors: {},
                     history: stackItem.history, // Restore parent history
                 });
@@ -3135,6 +3153,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeId: null,
             selectedNodeIds: [],
             activeDebugPreviewNodeIds: [],
+            debugPreviewModes: {},
             debugPreviewErrors: {},
             history: stackItem.history, // Restore parent history
         });
@@ -4412,6 +4431,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             history: createEmptyHistoryState(),
             canvasMode: 'pan',
             activeDebugPreviewNodeIds: [],
+            debugPreviewModes: {},
             debugPreviewErrors: {},
             postDebugPreviewOutputBuilder: null,
             codeNodes: {},

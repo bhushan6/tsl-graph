@@ -24,11 +24,11 @@ Notes:
 
 ### UX: Add per-node debug preview
 
-- [ ] Replace or supplement the current global debug view with a per-node debug view.
-- [ ] Decide where the per-node debug control lives on each node.
-- [ ] Ensure only the selected/debugged node is evaluated for preview when possible.
-- [ ] Measure performance impact on medium and large graphs.
-- [ ] Add clear empty/error states for unsupported node outputs.
+- [x] Replace or supplement the current global debug view with a per-node debug view.
+- [x] Decide where the per-node debug control lives on each node.
+- [x] Ensure only the selected/debugged node is evaluated for preview when possible.
+- [x] Measure performance impact on medium and large graphs.
+- [x] Add clear empty/error states for unsupported node outputs.
 
 Notes:
 
@@ -37,10 +37,10 @@ Notes:
 
 ### UX: Restore Shift multi-select
 
-- [ ] Re-enable `Shift` as a multi-select modifier.
-- [ ] Keep `Cmd` / `Ctrl` multi-select support if it is already useful.
+- [x] Re-enable `Shift` as a multi-select modifier.
+- [x] Keep `Cmd` / `Ctrl` multi-select support if it is already useful.
 - [ ] Verify selection behavior for nodes, edges, box selection, and mixed selections.
-- [ ] Update any user-facing docs or shortcuts if they exist.
+- [x] Update any user-facing docs or shortcuts if they exist.
 
 Notes:
 
