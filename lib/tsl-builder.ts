@@ -25,6 +25,10 @@ import { withLocalDependencyEdges } from './local-utils';
 import * as tslEasings from './tsl-easings';
 import { registry } from './registry';
 
+const setTSLUniformFactory = () => {
+    setUniformFactory(TSL.uniform as unknown as Parameters<typeof setUniformFactory>[0]);
+};
+
 function createTSLRuntimeScope() {
     return {
         ...TSL,
@@ -74,7 +78,7 @@ export function buildTSLMaterial(
     const code = compileGraph(nodes, edges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
 
     // Ensure uniform factory is wired to TSL runtime
-    setUniformFactory(TSL.uniform);
+    setTSLUniformFactory();
 
     // 2. Prepare the execution scope
     // We need all TSL functions (float, vec3, Fn, etc.) and Material classes available
@@ -123,7 +127,7 @@ export function buildTSLPostOutputNode(
     const compiled = compilePostGraph(postNodes, postEdges, subgraphs, codeNodes, { uniformMode: 'runtime', globals });
 
     // Ensure uniform factory is wired to TSL runtime
-    setUniformFactory(TSL.uniform);
+    setTSLUniformFactory();
 
     const scope = createTSLRuntimeScope();
     const scopeKeys = Object.keys(scope);
@@ -232,7 +236,7 @@ export function buildNodePreviewMaterial(
     });
 
     // Ensure uniform factory is wired to TSL runtime
-    setUniformFactory(TSL.uniform);
+    setTSLUniformFactory();
 
     // Build execution scope
     const scope = createTSLRuntimeScope();

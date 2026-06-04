@@ -1,13 +1,24 @@
 import { Fn, float, vec2, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, length, max, min, color } from 'three/tsl';
 
+type TSLLooseNode = {
+    x: TSLLooseNode;
+    y: TSLLooseNode;
+    z: TSLLooseNode;
+    mul: (...values: unknown[]) => TSLLooseNode;
+    add: (...values: unknown[]) => TSLLooseNode;
+    sub: (...values: unknown[]) => TSLLooseNode;
+};
+
+const mat4Unchecked = mat4 as unknown as (...values: unknown[]) => { mul: (value: unknown) => { xyz: unknown } };
+
 //@ts-expect-error: this is valid but TSL types seems off
 export const rotation3d = Fn(([pos, axis, angle]) => {
-    const axisNorm = normalize(axis);
+    const axisNorm = normalize(axis) as unknown as TSLLooseNode;
     const s = sin(angle);
     const c = cos(angle);
-    const oc = float(1).sub(c);
+    const oc = float(1).sub(c) as unknown as TSLLooseNode;
 
-    const matrix4 = mat4(
+    const matrix4 = mat4Unchecked(
         oc.mul(axisNorm.x).mul(axisNorm.x).add(c), oc.mul(axisNorm.x).mul(axisNorm.y).sub(axisNorm.z.mul(s)), oc.mul(axisNorm.z).mul(axisNorm.x).add(axisNorm.y.mul(s)), 0.0,
         oc.mul(axisNorm.x).mul(axisNorm.y).add(axisNorm.z.mul(s)), oc.mul(axisNorm.y).mul(axisNorm.y).add(c), oc.mul(axisNorm.y).mul(axisNorm.z).sub(axisNorm.x.mul(s)), 0.0,
         oc.mul(axisNorm.z).mul(axisNorm.x).sub(axisNorm.y.mul(s)), oc.mul(axisNorm.y).mul(axisNorm.z).add(axisNorm.x.mul(s)), oc.mul(axisNorm.z).mul(axisNorm.z).add(c), 0.0,
@@ -20,7 +31,6 @@ export const rotation3d = Fn(([pos, axis, angle]) => {
 export const rotate2D = Fn(([pos, angle]) => {
     const s = sin(angle);
     const c = cos(angle);
-    // @ts-expect-error: mat2 types are missing in TSL definition
     const m = mat2(c, s, s.mul(-1), c);
     return m.mul(pos);
 });

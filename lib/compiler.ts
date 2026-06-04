@@ -2580,6 +2580,14 @@ export function getRequiredImports(
         imports.add('float');
     }
 
+    if (nodes.some((node) =>
+        node.id === POST_INPUT_ID ||
+        node.id === POST_OUTPUT_ID ||
+        (POST_ANCHOR_NODE_TYPES as readonly string[]).includes(node.data.type)
+    )) {
+        imports.add('Fn');
+    }
+
     let hasSubgraphs = false;
 
     // Helper to add imports from a node (recursive for subgraphs?)

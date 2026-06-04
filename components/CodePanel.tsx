@@ -40,6 +40,10 @@ export function mergeImportGroups(groups: ImportGroup[]): ImportGroup[] {
         .sort((a, b) => a.from.localeCompare(b.from));
 }
 
+export function needsThreeNamespaceImport(code: string): boolean {
+    return /\bTHREE\./.test(code);
+}
+
 export function CodePanel({ isOpen, onClose }: CodePanelProps) {
     const [copied, setCopied] = useState(false);
     const { resolvedTheme } = useTheme();
@@ -128,10 +132,10 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             sections.push('// Pipeline Wiring');
             sections.push('const scenePass = pass(scene, camera);');
             sections.push('scenePass.setMRT(mrt({ output, normal: normalView }));');
-            sections.push('const postProcessing = new PostProcessing(renderer);');
+            sections.push('const renderPipeline = new RenderPipeline(renderer);');
             if (postFn) {
-                sections.push(`postProcessing.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`);
-                sections.push('postProcessing.render();');
+                sections.push(`renderPipeline.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`);
+                sections.push('renderPipeline.render();');
             } else {
                 sections.push('renderer.render(scene, camera);');
             }
@@ -171,7 +175,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         if (postGraphEnabled) {
             const postGraph = getRootGraph('post');
             groups.push(...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals));
-            groups.push({ from: 'three/tsl', imports: ['pass', 'mrt', 'output', 'normalView'] });
+            groups.push({ from: 'three/tsl', imports: ['Fn', 'pass', 'mrt', 'output', 'normalView'] });
         }
 
         return mergeImportGroups(groups);
@@ -205,12 +209,21 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         const codeWithImports = importBlock
             ? `${importBlock}\n\n${codeWithHelpers}`
             : codeWithHelpers;
-        const needsPostProcessingImport = postGraphEnabled && !subgraphDefinition;
+        const prefixImports: string[] = [];
+        if (!subgraphDefinition && needsThreeNamespaceImport(codeWithHelpers)) {
+            prefixImports.push(`import * as THREE from 'three/webgpu';`);
+        }
+        if (postGraphEnabled && !subgraphDefinition) {
+            prefixImports.push(`import { RenderPipeline } from 'three/webgpu';`);
+        }
+
+        const codeWithRuntimeImports = prefixImports.length > 0
+            ? `${prefixImports.join('\n')}\n\n${codeWithImports}`
+            : codeWithImports;
+
         return subgraphDefinition
             ? codeWithImports
-            : needsPostProcessingImport
-                ? `import { PostProcessing } from 'three/webgpu';\n\n${codeWithImports}`
-                : codeWithImports;
+            : codeWithRuntimeImports;
     }, [compiledCode, importBlock, inlinedImportsResult.helperCode, postGraphEnabled, subgraphDefinition]);
 
     const displayedNodeCount = useMemo(() => {

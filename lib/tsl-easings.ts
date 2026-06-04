@@ -15,6 +15,8 @@
  */
 import { Fn, cos, float, mix, pow, select, sin, sqrt, step } from 'three/tsl';
 
+const powUnchecked = pow as unknown as (...values: unknown[]) => never;
+
 //@ts-expect-error: TSL node signatures are more permissive than available TS types
 export const easeLinear = Fn(([t]) => {
     return t;
@@ -135,8 +137,8 @@ export const easeOutCircular = Fn(([t]) => {
 
 //@ts-expect-error: TSL node signatures are more permissive than available TS types
 export const easeInOutCircular = Fn(([t]) => {
-    const a = sqrt(float(1).sub(pow(float(2).mul(t), 2))).oneMinus().mul(0.5);
-    const b = sqrt(float(1).sub(pow(float(-2).mul(t).add(2), 2))).add(1).mul(0.5);
+    const a = sqrt(float(1).sub(powUnchecked(float(2).mul(t), 2))).oneMinus().mul(0.5);
+    const b = sqrt(float(1).sub(powUnchecked(float(-2).mul(t).add(2), 2))).add(1).mul(0.5);
     return select(t.lessThan(0.5), a, b);
 });
 

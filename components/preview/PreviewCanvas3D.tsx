@@ -45,7 +45,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     const perspectiveCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const orthographicCameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const controlsRef = useRef<OrbitControls | null>(null);
-    const postProcessingRef = useRef<THREE.PostProcessing | null>(null);
+    const renderPipelineRef = useRef<THREE.RenderPipeline | null>(null);
     const usePostProcessingRef = useRef(false);
     const meshRef = useRef<THREE.Mesh | null>(null);
     const backdropRef = useRef<THREE.Group | null>(null);
@@ -179,8 +179,8 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             return;
         }
 
-        if (!postProcessingRef.current) {
-            postProcessingRef.current = new THREE.PostProcessing(rendererRef.current);
+        if (!renderPipelineRef.current) {
+            renderPipelineRef.current = new THREE.RenderPipeline(rendererRef.current);
         }
 
         if (!(previewSettings.postEnabled ?? true) || !postGraphEnabled) {
@@ -214,8 +214,8 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 return;
             }
 
-            postProcessingRef.current.outputNode = outputNode;
-            postProcessingRef.current.needsUpdate = true;
+            renderPipelineRef.current.outputNode = outputNode;
+            renderPipelineRef.current.needsUpdate = true;
             usePostProcessingRef.current = true;
             onPostErrorChange(null);
         } catch (e) {
@@ -284,7 +284,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             renderer.setPixelRatio(window.devicePixelRatio);
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
-            postProcessingRef.current = new THREE.PostProcessing(renderer);
+            renderPipelineRef.current = new THREE.RenderPipeline(renderer);
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
             scene.add(ambientLight);
@@ -315,8 +315,8 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 }
                 const activeCamera = getActiveCamera();
                 if (!activeCamera) return;
-                if (usePostProcessingRef.current && postProcessingRef.current) {
-                    postProcessingRef.current.render();
+                if (usePostProcessingRef.current && renderPipelineRef.current) {
+                    renderPipelineRef.current.render();
                 } else {
                     renderer.render(scene, activeCamera);
                 }
@@ -398,14 +398,14 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 gridRef.current = null;
             }
 
-            const postProcessing = postProcessingRef.current;
-            if (postProcessing) {
+            const renderPipeline = renderPipelineRef.current;
+            if (renderPipeline) {
                 try {
-                    postProcessing.dispose();
+                    renderPipeline.dispose();
                 } catch (error) {
-                    console.warn('Preview post-processing dispose failed:', error);
+                    console.warn('Preview render pipeline dispose failed:', error);
                 }
-                postProcessingRef.current = null;
+                renderPipelineRef.current = null;
             }
 
             if (scene) {

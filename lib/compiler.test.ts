@@ -1781,6 +1781,16 @@ describe('getRequiredImports', () => {
         expect(imports).toEqual(expect.arrayContaining(['Fn', 'Loop', 'Var', 'int', 'max']));
     });
 
+    it('should include Fn for root post graphs', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+        ];
+
+        const imports = getRequiredImports(nodes);
+        expect(imports).toContain('Fn');
+    });
+
     it('should include global context imports', () => {
         const nodes = [createNode('g1', 'global/ref', { values: { globalId: 'global-1' } })];
         const globals: GlobalContextEntry[] = [

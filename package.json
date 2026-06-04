@@ -55,7 +55,7 @@
     "react-scan": "^0.4.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
-    "three": "^0.182.0",
+    "three": "^0.184.0",
     "tsl-easings": "^0.0.1",
     "zustand": "^5.0.9"
   },
@@ -65,7 +65,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.184.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
