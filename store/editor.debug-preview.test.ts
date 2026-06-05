@@ -39,6 +39,23 @@ describe('Editor debug preview UI state', () => {
         expect(useEditorStore.getState().isDirty).toBe(false);
     });
 
+    it('keeps only one active preview in the main post graph', () => {
+        const store = useEditorStore.getState();
+        store.setActiveRootGraph('post');
+
+        const initialVersion = useEditorStore.getState().graphStructureVersion;
+        store.toggleDebugPreviewActive('node-1');
+        store.toggleDebugPreviewActive('node-2');
+
+        expect(useEditorStore.getState().activeDebugPreviewNodeIds).toEqual(['node-2']);
+        expect(useEditorStore.getState().graphStructureVersion).toBe(initialVersion);
+        expect(useEditorStore.getState().isDirty).toBe(false);
+
+        useEditorStore.getState().toggleDebugPreviewActive('node-2');
+
+        expect(useEditorStore.getState().activeDebugPreviewNodeIds).toEqual([]);
+    });
+
     it('tracks preview errors as resettable UI-only state', () => {
         useEditorStore.getState().setDebugPreviewError('node-1', 'Failed');
         expect(useEditorStore.getState().debugPreviewErrors).toEqual({ 'node-1': 'Failed' });
@@ -49,6 +66,24 @@ describe('Editor debug preview UI state', () => {
         useEditorStore.getState().setDebugPreviewError('node-2', 'Still failed');
         useEditorStore.getState().clearDebugPreviewErrors();
         expect(useEditorStore.getState().debugPreviewErrors).toEqual({});
+    });
+
+    it('stores the post debug output builder as resettable UI-only state', () => {
+        const initialVersion = useEditorStore.getState().graphStructureVersion;
+        const builder = () => ({
+            outputNode: null,
+            update: () => {},
+        });
+
+        useEditorStore.getState().setPostDebugPreviewOutputBuilder(builder);
+
+        expect(useEditorStore.getState().postDebugPreviewOutputBuilder).toBe(builder);
+        expect(useEditorStore.getState().graphStructureVersion).toBe(initialVersion);
+        expect(useEditorStore.getState().isDirty).toBe(false);
+
+        useEditorStore.getState().resetEditor();
+
+        expect(useEditorStore.getState().postDebugPreviewOutputBuilder).toBe(null);
     });
 
     it('clears active preview UI state when entering a subgraph editor context', () => {

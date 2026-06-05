@@ -110,6 +110,14 @@ export interface GraphData {
 // Editor mode - main graph or editing a subgraph
 export type EditorMode = 'main' | 'subgraph';
 
+export interface PostDebugPreviewOutput {
+    outputNode: unknown;
+    update: (aspect: number) => void;
+    dispose?: () => void;
+}
+
+export type PostDebugPreviewOutputBuilder = (nodeId: string) => PostDebugPreviewOutput;
+
 const GRAPH_VERSION = 2;
 const STORAGE_KEY = 'tsl-editor-graph';
 
@@ -781,6 +789,8 @@ interface EditorState {
     toggleDebugPreviewActive: (nodeId: string) => void;
     setDebugPreviewError: (nodeId: string, error: string | null) => void;
     clearDebugPreviewErrors: () => void;
+    postDebugPreviewOutputBuilder: PostDebugPreviewOutputBuilder | null;
+    setPostDebugPreviewOutputBuilder: (builder: PostDebugPreviewOutputBuilder | null) => void;
 
     // Preview settings
     previewSettings: PreviewSettings;
@@ -1142,6 +1152,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     })(),
     previewSnapshotProvider: null,
     setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
+    postDebugPreviewOutputBuilder: null,
+    setPostDebugPreviewOutputBuilder: (builder) => set({ postDebugPreviewOutputBuilder: builder }),
 
     // Subgraph state initialization
     subgraphs: {},
@@ -1179,10 +1191,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     debugPreviewErrors: {},
     toggleDebugPreviewActive: (nodeId) => set((state) => {
         const isActive = state.activeDebugPreviewNodeIds.includes(nodeId);
+        const isSinglePreviewMode = state.editorMode === 'main' && state.activeRootGraph === 'post';
         return {
             activeDebugPreviewNodeIds: isActive
                 ? state.activeDebugPreviewNodeIds.filter((id) => id !== nodeId)
-                : [...state.activeDebugPreviewNodeIds, nodeId],
+                : isSinglePreviewMode
+                    ? [nodeId]
+                    : [...state.activeDebugPreviewNodeIds, nodeId],
         };
     }),
     setDebugPreviewError: (nodeId, error) => set((state) => {
@@ -4369,6 +4384,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             canvasMode: 'pan',
             activeDebugPreviewNodeIds: [],
             debugPreviewErrors: {},
+            postDebugPreviewOutputBuilder: null,
             codeNodes: {},
             previewSettings: createDefaultPreviewSettings(),
             previewSnapshotProvider: null,

@@ -14,8 +14,9 @@ import { pass, mrt, output, normalView } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { buildTSLMaterial, buildTSLPostOutputNode } from '@/lib/tsl-builder';
+import { buildTSLMaterial, buildTSLPostDebugOutputNode, buildTSLPostOutputNode } from '@/lib/tsl-builder';
 import { useEditorStore } from '@/store/editor';
+import type { PostDebugPreviewOutput } from '@/store/editor';
 import { buildPreviewGeometry } from './geometry';
 import type { PreviewCanvas3DProps, PreviewCanvasHandle, PreviewCaptureOptions } from './types';
 import { DEFAULT_POST_OUTPUT_SETTINGS, getPostOutputSettings, type PostOutputSettings } from '@/lib/post-output-settings';
@@ -79,6 +80,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+    const setPostDebugPreviewOutputBuilder = useEditorStore((state) => state.setPostDebugPreviewOutputBuilder);
     const isFullscreenQuad = previewSettings.mesh === 'fullscreenQuad';
 
     const getActiveCamera = useCallback((): THREE.Camera | null => {
@@ -194,6 +196,74 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
     useEffect(() => {
         onReadyChange(isReady);
     }, [isReady, onReadyChange]);
+
+    const buildPostDebugPreviewOutput = useCallback((targetNodeId: string): PostDebugPreviewOutput => {
+        const scene = sceneRef.current;
+        const camera = getActiveCamera();
+        if (!isReady || !scene || !camera) {
+            throw new Error('Preview scene is not ready.');
+        }
+
+        const previewScene = scene.clone(true);
+        const previewCamera = camera.clone();
+        const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
+        const postGraph = getRootGraph('post');
+        const scenePass = pass(previewScene, previewCamera);
+        scenePass.setMRT(mrt({ output, normal: normalView }));
+        const outputNode = buildTSLPostDebugOutputNode(
+            targetNodeId,
+            scenePass,
+            scenePass.getTextureNode(),
+            scenePass.getLinearDepthNode(),
+            scenePass.getTextureNode('depth'),
+            scenePass.getTextureNode('normal'),
+            previewCamera,
+            postGraph.nodes,
+            postGraph.edges,
+            subgraphs,
+            codeNodes,
+            globals
+        );
+
+        if (!outputNode) {
+            throw new Error('Post debug preview output could not be built.');
+        }
+
+        const updateCamera = (aspect: number) => {
+            const liveCamera = getActiveCamera();
+            if (!liveCamera || aspect <= 0 || !Number.isFinite(aspect)) return;
+
+            if (previewCamera instanceof THREE.PerspectiveCamera && liveCamera instanceof THREE.PerspectiveCamera) {
+                previewCamera.copy(liveCamera);
+                previewCamera.aspect = aspect;
+                previewCamera.updateProjectionMatrix();
+            } else if (previewCamera instanceof THREE.OrthographicCamera && liveCamera instanceof THREE.OrthographicCamera) {
+                previewCamera.copy(liveCamera);
+                previewCamera.left = -aspect;
+                previewCamera.right = aspect;
+                previewCamera.top = 1;
+                previewCamera.bottom = -1;
+                previewCamera.updateProjectionMatrix();
+            } else {
+                previewCamera.copy(liveCamera);
+            }
+
+            previewCamera.updateMatrixWorld(true);
+        };
+
+        return {
+            outputNode,
+            update: updateCamera,
+            dispose: () => {
+                previewScene.clear();
+            },
+        };
+    }, [getActiveCamera, isReady]);
+
+    useEffect(() => {
+        setPostDebugPreviewOutputBuilder(isReady ? buildPostDebugPreviewOutput : null);
+        return () => setPostDebugPreviewOutputBuilder(null);
+    }, [buildPostDebugPreviewOutput, isReady, setPostDebugPreviewOutputBuilder]);
 
     useEffect(() => {
         const camera = getActiveCamera();
