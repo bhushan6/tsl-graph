@@ -115,7 +115,9 @@ describe('Editor Store Persistence', () => {
         const postGraph = state.getRootGraph('post');
 
         expect(state.activeRootGraph).toBe('material');
-        expect(postGraph.nodes.some((node) => node.id === 'post-input')).toBe(true);
+        const postInput = postGraph.nodes.find((node) => node.id === 'post-input');
+        expect(postInput).toBeTruthy();
+        expect(postInput?.data.activeInputs).toEqual(['color', 'depth', 'normal']);
         expect(postGraph.nodes.some((node) => node.id === 'post-output')).toBe(true);
     });
 

@@ -405,6 +405,22 @@ function getLinearGradientArgs(
     return { tArg, modeArg, stopsLiteral };
 }
 
+function getPostConvenienceExpression(
+    type: string,
+    argsMap?: Record<string, string>
+): string | null {
+    switch (type) {
+        case 'post/sceneColor':
+            return argsMap?.['in_color'] ?? 'vec4(0, 0, 0, 1)';
+        case 'post/sceneDepth':
+            return argsMap?.['in_depth'] ?? 'float(0)';
+        case 'post/sceneNormal':
+            return argsMap?.['in_normal'] ?? 'vec3(0, 0, 1)';
+        default:
+            return null;
+    }
+}
+
 function getMultiOpOperations(node: Node<TSLNodeData>): MultiOp[] {
     const ops = node.data.operations;
     return Array.isArray(ops) ? (ops as MultiOp[]) : [];
@@ -951,7 +967,10 @@ function compileSubgraphDefinition(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.type === 'geo/camera') {
+        const postConvenienceCode = getPostConvenienceExpression(def.type, argsMap);
+        if (postConvenienceCode) {
+            code = postConvenienceCode;
+        } else if (def.type === 'geo/camera') {
             code = options.runtimeCameraFromScope
                 ? 'vec2(camera.near, camera.far)'
                 : 'vec2(cameraNear, cameraFar)';
@@ -1484,8 +1503,13 @@ export function compilePostGraph(
                     case 'depthTexture':
                         mappedSourceHandle = 'in_depthTexture';
                         break;
+                    case 'normalTexture':
+                        mappedSourceHandle = 'in_normalTexture';
+                        break;
                     case 'normal':
-                        mappedSourceHandle = 'in_normal';
+                        mappedSourceHandle = edge.targetHandle === 'texture'
+                            ? 'in_normalTexture'
+                            : 'in_normal';
                         break;
                     case 'cameraNear':
                     case 'cameraFar':
@@ -1521,10 +1545,11 @@ export function compilePostGraph(
         scope: 'project',
         inputs: [
             { id: 'in_color', label: 'Color', type: 'vec4' },
-            { id: 'in_sceneTexture', label: 'Scene Texture', type: 'any' },
             { id: 'in_depth', label: 'Depth', type: 'float' },
-            { id: 'in_depthTexture', label: 'Depth Texture', type: 'any' },
-            { id: 'in_normal', label: 'Normal Texture', type: 'any' },
+            { id: 'in_normal', label: 'Normal', type: 'vec3' },
+            { id: 'in_sceneTexture', label: 'Scene Texture', type: 'texture' },
+            { id: 'in_depthTexture', label: 'Depth Texture', type: 'texture' },
+            { id: 'in_normalTexture', label: 'Normal Texture', type: 'texture' },
         ],
         outputs: [{ id: 'out_0', label: 'Output', type: 'vec4' }],
         nodes: internalNodes,
@@ -2152,7 +2177,10 @@ export function compileGraph(
         const inputKeys = Object.keys(inputs);
         let code: string;
 
-        if (def.type === 'geo/camera') {
+        const postConvenienceCode = getPostConvenienceExpression(def.type);
+        if (postConvenienceCode) {
+            code = postConvenienceCode;
+        } else if (def.type === 'geo/camera') {
             code = 'vec2(cameraNear, cameraFar)';
         } else if (def.pure && inputKeys.length === 0) {
             code = def.callable ? `${def.tsl}()` : def.tsl;

@@ -7,7 +7,7 @@ export const textureNodes = [
         category: 'Texture',
         description: 'Samples a connected texture node at the provided UV coordinates.',
         inputs: {
-            texture: { label: 'Texture', type: 'any', connectionOnly: true },
+            texture: { label: 'Texture', type: 'texture', connectionOnly: true },
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
         },
         outputs: { out: { label: 'Out', type: 'vec4' } },

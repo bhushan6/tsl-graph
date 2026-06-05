@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { replaceEdgeOnTargetHandle } from '@/lib/graph-utils';
-import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
+import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
@@ -109,6 +109,14 @@ export interface GraphData {
 
 // Editor mode - main graph or editing a subgraph
 export type EditorMode = 'main' | 'subgraph';
+
+export interface PostDebugPreviewOutput {
+    outputNode: unknown;
+    update: (aspect: number) => void;
+    dispose?: () => void;
+}
+
+export type PostDebugPreviewOutputBuilder = (nodeId: string) => PostDebugPreviewOutput;
 
 const GRAPH_VERSION = 2;
 const STORAGE_KEY = 'tsl-editor-graph';
@@ -256,6 +264,7 @@ const createPostInputAnchorNode = (position = POST_INPUT_POSITION): Node<TSLNode
         type: 'post/input',
         values: {},
         connected: {},
+        activeInputs: [...POST_INPUT_DEFAULT_OUTPUTS],
     },
 });
 
@@ -285,19 +294,34 @@ const normalizePostGraph = (
     if (outputAlias) aliases.set(outputAlias.id, POST_OUTPUT_ID);
 
     const internalNodes = nodes.filter((node) => !isPostAnchorNode(node));
+    const postInputNode = createPostInputAnchorNode(inputAlias?.position ?? POST_INPUT_POSITION);
     const normalizedNodes: Node<TSLNodeData>[] = [
-        createPostInputAnchorNode(inputAlias?.position ?? POST_INPUT_POSITION),
+        {
+            ...postInputNode,
+            data: {
+                ...postInputNode.data,
+                activeInputs: inputAlias?.data.activeInputs ?? [...POST_INPUT_DEFAULT_OUTPUTS],
+            },
+        },
         createPostOutputAnchorNode(outputAlias?.position ?? POST_OUTPUT_POSITION),
         ...internalNodes,
     ];
 
     const validNodeIds = new Set(normalizedNodes.map((node) => node.id));
     const normalizedEdges = edges
-        .map((edge) => ({
-            ...edge,
-            source: aliases.get(edge.source) ?? edge.source,
-            target: aliases.get(edge.target) ?? edge.target,
-        }))
+        .map((edge) => {
+            const source = aliases.get(edge.source) ?? edge.source;
+            const target = aliases.get(edge.target) ?? edge.target;
+            const legacyNormalTextureEdge = source === POST_INPUT_ID &&
+                edge.sourceHandle === 'normal' &&
+                edge.targetHandle === 'texture';
+            return {
+                ...edge,
+                source,
+                target,
+                sourceHandle: legacyNormalTextureEdge ? 'normalTexture' : edge.sourceHandle,
+            };
+        })
         .filter((edge) => validNodeIds.has(edge.source) && validNodeIds.has(edge.target));
 
     return {
@@ -765,6 +789,8 @@ interface EditorState {
     toggleDebugPreviewActive: (nodeId: string) => void;
     setDebugPreviewError: (nodeId: string, error: string | null) => void;
     clearDebugPreviewErrors: () => void;
+    postDebugPreviewOutputBuilder: PostDebugPreviewOutputBuilder | null;
+    setPostDebugPreviewOutputBuilder: (builder: PostDebugPreviewOutputBuilder | null) => void;
 
     // Preview settings
     previewSettings: PreviewSettings;
@@ -1126,6 +1152,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     })(),
     previewSnapshotProvider: null,
     setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
+    postDebugPreviewOutputBuilder: null,
+    setPostDebugPreviewOutputBuilder: (builder) => set({ postDebugPreviewOutputBuilder: builder }),
 
     // Subgraph state initialization
     subgraphs: {},
@@ -1163,10 +1191,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     debugPreviewErrors: {},
     toggleDebugPreviewActive: (nodeId) => set((state) => {
         const isActive = state.activeDebugPreviewNodeIds.includes(nodeId);
+        const isSinglePreviewMode = state.editorMode === 'main' && state.activeRootGraph === 'post';
         return {
             activeDebugPreviewNodeIds: isActive
                 ? state.activeDebugPreviewNodeIds.filter((id) => id !== nodeId)
-                : [...state.activeDebugPreviewNodeIds, nodeId],
+                : isSinglePreviewMode
+                    ? [nodeId]
+                    : [...state.activeDebugPreviewNodeIds, nodeId],
         };
     }),
     setDebugPreviewError: (nodeId, error) => set((state) => {
@@ -1434,13 +1465,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const { activeRootGraph, forcedRootMaterial } = get();
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
+        const isPostNode = (POST_NODE_TYPES as readonly string[]).includes(type);
         const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(type);
         if (activeRootGraph === 'post' && isMaterialNode) {
             toast.error('Material nodes are not allowed in the post graph.');
             return false;
         }
-        if (activeRootGraph === 'material' && isPostFxNode) {
-            toast.error('Post FX nodes are only allowed in the post graph.');
+        if (activeRootGraph === 'material' && (isPostNode || isPostFxNode)) {
+            toast.error('Post nodes are only allowed in the post graph.');
             return false;
         }
         if (activeRootGraph === 'post' && type === 'texture/viewportShared') {
@@ -4352,6 +4384,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             canvasMode: 'pan',
             activeDebugPreviewNodeIds: [],
             debugPreviewErrors: {},
+            postDebugPreviewOutputBuilder: null,
             codeNodes: {},
             previewSettings: createDefaultPreviewSettings(),
             previewSnapshotProvider: null,

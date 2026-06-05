@@ -135,7 +135,8 @@ export function buildTSLPostOutputNode(
     const functionBody = `
         ${compiled.code}
         const camera = sceneCamera;
-        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode, sceneNormalTextureNode);
+        const sceneNormalNode = texture(sceneNormalTextureNode, screenUV).xyz;
+        return ${compiled.functionName}(sceneColorNode, sceneDepthNode, sceneNormalNode, sceneTextureNode, sceneDepthTextureNode, sceneNormalTextureNode);
     `;
 
     const fn = new Function(
@@ -157,6 +158,65 @@ export function buildTSLPostOutputNode(
         sceneNormalTextureNode,
         sceneCamera
     ) as THREE.Node;
+}
+
+export function buildTSLPostDebugOutputNode(
+    targetNodeId: string,
+    sceneColorNode: unknown,
+    sceneTextureNode: unknown,
+    sceneDepthNode: unknown,
+    sceneDepthTextureNode: unknown,
+    sceneNormalTextureNode: unknown,
+    sceneCamera: unknown,
+    postNodes: Node<TSLNodeData>[],
+    postEdges: Edge[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    globals?: GlobalContextEntry[]
+): THREE.Node | null {
+    const targetNode = postNodes.find((node) => node.id === targetNodeId);
+    if (!targetNode) {
+        throw new Error(`Preview target node "${targetNodeId}" was not found.`);
+    }
+
+    const outputHandle = getPreviewOutputHandle(targetNode);
+    if (!outputHandle) {
+        throw new Error(`Preview target node "${targetNodeId}" has no renderable output.`);
+    }
+
+    const dependencyEdges = withLocalDependencyEdges(postNodes, postEdges);
+    const ancestorIds = getAncestorNodeIds(targetNodeId, dependencyEdges);
+    ancestorIds.add('post-input');
+    ancestorIds.add('post-output');
+
+    const partialNodes = postNodes.filter((node) => ancestorIds.has(node.id));
+    const partialEdges = dependencyEdges.filter((edge) => (
+        ancestorIds.has(edge.source) &&
+        ancestorIds.has(edge.target) &&
+        edge.target !== 'post-output'
+    ));
+
+    partialEdges.push({
+        id: `debug-preview-${targetNodeId}`,
+        source: targetNodeId,
+        sourceHandle: outputHandle,
+        target: 'post-output',
+        targetHandle: 'color',
+    });
+
+    return buildTSLPostOutputNode(
+        sceneColorNode,
+        sceneTextureNode,
+        sceneDepthNode,
+        sceneDepthTextureNode,
+        sceneNormalTextureNode,
+        sceneCamera,
+        partialNodes,
+        partialEdges,
+        subgraphs,
+        codeNodes,
+        globals
+    );
 }
 
 /**

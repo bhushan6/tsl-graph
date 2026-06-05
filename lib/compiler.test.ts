@@ -247,7 +247,7 @@ const mockDefs: NodeDef[] = [
         category: 'Texture',
         tsl: 'texture',
         inputs: {
-            texture: { type: 'any', label: 'Texture', connectionOnly: true },
+            texture: { type: 'texture', label: 'Texture', connectionOnly: true },
             uv: { type: 'vec2', label: 'UV', connectionOnly: true },
         },
         outputs: { out: { type: 'vec4', label: 'Out' } }
@@ -317,6 +317,30 @@ const mockDefs: NodeDef[] = [
             color: { type: 'vec3', label: 'Color', connectionOnly: true },
         },
         outputs: { out: { type: 'float', label: 'Out' } },
+    },
+    {
+        type: 'post/sceneColor',
+        label: 'Scene Color',
+        category: 'Post',
+        tsl: '__post_scene_color__',
+        pure: true,
+        outputs: { out: { type: 'vec4', label: 'Color' } },
+    },
+    {
+        type: 'post/sceneDepth',
+        label: 'Scene Depth',
+        category: 'Post',
+        tsl: '__post_scene_depth__',
+        pure: true,
+        outputs: { out: { type: 'float', label: 'Depth' } },
+    },
+    {
+        type: 'post/sceneNormal',
+        label: 'Scene Normal',
+        category: 'Post',
+        tsl: '__post_scene_normal__',
+        pure: true,
+        outputs: { out: { type: 'vec3', label: 'Normal' } },
     },
     // Logic Nodes
     {
@@ -1150,7 +1174,37 @@ describe('compilePostGraph', () => {
         expect(result.code).toContain('texture(arg_in_depthTexture, screenUV)');
     });
 
-    it('maps normal input handle for post graph', () => {
+    it('maps normal handle as sampled scene normal for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('add', 'math/add', { values: { b: 1 } }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'normal', target: 'add', targetHandle: 'a' },
+            { id: 'e2', source: 'add', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('add(arg_in_normal, 1)');
+    });
+
+    it('maps normalTexture input handle for post graph', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sample', 'texture/sampleNode'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-input', sourceHandle: 'normalTexture', target: 'sample', targetHandle: 'texture' },
+            { id: 'e2', source: 'sample', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('texture(arg_in_normalTexture, screenUV)');
+    });
+
+    it('keeps legacy normal texture sampling edges working', () => {
         const nodes = [
             createNode('post-input', 'post/input'),
             createNode('sample', 'texture/sampleNode'),
@@ -1162,7 +1216,26 @@ describe('compilePostGraph', () => {
         ];
 
         const result = compilePostGraph(nodes, edges);
-        expect(result.code).toContain('texture(arg_in_normal, screenUV)');
+        expect(result.code).toContain('texture(arg_in_normalTexture, screenUV)');
+    });
+
+    it('compiles post convenience sampler nodes', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('sceneColor', 'post/sceneColor'),
+            createNode('sceneDepth', 'post/sceneDepth'),
+            createNode('sceneNormal', 'post/sceneNormal'),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'sceneColor', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        expect(result.code).toContain('const _subgraph_node0 = arg_in_color;');
+        expect(result.code).toContain('const _subgraph_node1 = arg_in_depth;');
+        expect(result.code).toContain('const _subgraph_node2 = arg_in_normal;');
+        expect(result.code).not.toContain('__post_scene_color__');
     });
 
     it('compiles geo/camera in post graph using camera.near/camera.far', () => {

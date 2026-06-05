@@ -4,9 +4,10 @@ import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
-import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
+import { MATERIAL_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_INPUT_RAW_TEXTURE_OUTPUTS } from '@/lib/nodes';
 import { getMaterialActiveInputsSet, getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { TEXTURE_PROP_INPUTS } from '@/lib/texture-props';
+import { POST_OUTPUT_COLOR_CONTROL_INPUTS } from '@/lib/post-output-settings';
 import { Button } from '@/components/ui/button';
 import { HexColorPicker } from 'react-colorful';
 import { useReactFlow } from '@xyflow/react';
@@ -60,6 +61,7 @@ const PORT_TYPES: { value: TSLType; label: string }[] = [
     { value: 'vec3', label: 'Vec3' },
     { value: 'vec4', label: 'Vec4' },
     { value: 'color', label: 'Color' },
+    { value: 'texture', label: 'Texture' },
     { value: 'int', label: 'Int' },
     { value: 'bool', label: 'Bool' },
 ];
@@ -1482,6 +1484,8 @@ function PropertiesPanelContent() {
     const inputKeys = Object.keys(inputs);
     const visibleInputKeys = inputKeys.filter((key) => !inputs[key].hidden);
     const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
+    const isPostInputNode = node.data.type === 'post/input';
+    const isPostOutputNode = node.data.type === 'post/output';
     const isTextureSample = def.type === 'texture/sample';
     const textureToggleKeys = isTextureSample ? TEXTURE_PROP_INPUTS : [];
     const textureToggleSet: Set<string> = new Set(textureToggleKeys);
@@ -1490,11 +1494,28 @@ function PropertiesPanelContent() {
     const textureActiveInputsSet = isTextureSample
         ? getMaterialActiveInputsSet(node.data, def, connectedInputs)
         : new Set<string>();
+    const connectedOutputs = new Set(
+        edges.filter((e) => e.source === selectedNodeId).map((e) => e.sourceHandle)
+    );
+    const storedPostOutputs = Array.isArray(node.data.activeInputs)
+        ? node.data.activeInputs
+        : [...POST_INPUT_DEFAULT_OUTPUTS];
+    const postActiveOutputsSet = isPostInputNode
+        ? new Set([
+            ...storedPostOutputs,
+            ...Array.from(connectedOutputs).filter((key): key is string => !!key),
+        ])
+        : new Set<string>();
+    const postOutputControlSet = new Set<string>(POST_OUTPUT_COLOR_CONTROL_INPUTS);
+    const postActiveControlsSet = isPostOutputNode
+        ? new Set(Array.isArray(node.data.activeInputs) ? node.data.activeInputs : [])
+        : new Set<string>();
     const editableInputs = visibleInputKeys.filter((key) =>
         !connectedInputs.has(key)
         && !inputs[key].connectionOnly
         && (!isMaterialNode || activeInputsSet.has(key))
         && (!isTextureSample || !textureToggleSet.has(key))
+        && (!isPostOutputNode || !postOutputControlSet.has(key) || postActiveControlsSet.has(key))
     );
     // const activeInputKeys = isMaterialNode ? visibleInputKeys.filter((key) => activeInputsSet.has(key)) : visibleInputKeys;
     // const activeEditableCandidates = isMaterialNode
@@ -1512,7 +1533,100 @@ function PropertiesPanelContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-                {isMaterialNode ? (
+                {isPostInputNode ? (
+                    <>
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
+                                Outputs
+                            </h4>
+                            <span className="text-[10px] text-muted-foreground">Active outputs show on node</span>
+                        </div>
+                        <div className="mt-2 flex flex-col gap-2">
+                            {Object.entries(def.outputs ?? {}).map(([key, output]) => {
+                                const isConnected = connectedOutputs.has(key);
+                                const isActive = postActiveOutputsSet.has(key);
+                                const isRawTexture = (POST_INPUT_RAW_TEXTURE_OUTPUTS as readonly string[]).includes(key);
+                                const hints: string[] = [output.type];
+                                if (isRawTexture) hints.push('raw texture');
+                                if (isConnected) hints.push('connected');
+
+                                return (
+                                    <div key={key} className="rounded-md border border-sidebar-border/60 px-2 py-1.5">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-medium text-sidebar-foreground truncate">
+                                                    {output.label}
+                                                </div>
+                                                <div className="text-[10px] text-muted-foreground truncate">
+                                                    {hints.join(' • ')}
+                                                </div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={isActive}
+                                                disabled={isConnected}
+                                                onChange={(e) => setNodeActiveInput(node.id, key, e.target.checked)}
+                                                title={isConnected ? 'Disconnect to deactivate' : (isActive ? 'Deactivate output' : 'Activate output')}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                ) : isPostOutputNode ? (
+                    <>
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
+                                Color Management
+                            </h4>
+                            <span className="text-[10px] text-muted-foreground">Enable controls to override defaults</span>
+                        </div>
+                        <div className="mt-2 flex flex-col gap-2">
+                            {POST_OUTPUT_COLOR_CONTROL_INPUTS.map((key) => {
+                                const input = inputs[key];
+                                if (!input || input.hidden) return null;
+                                const isActive = postActiveControlsSet.has(key);
+
+                                return (
+                                    <div key={key} className="rounded-md border border-sidebar-border/60 px-2 py-1.5">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-medium text-sidebar-foreground truncate">
+                                                    {input.label}
+                                                </div>
+                                                <div className="text-[10px] text-muted-foreground truncate">
+                                                    {input.type} • default {String(input.default)}
+                                                    {key === 'exposure' ? ' • uses linear tone mapping' : ''}
+                                                </div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-primary"
+                                                checked={isActive}
+                                                onChange={(e) => setNodeActiveInput(node.id, key, e.target.checked)}
+                                                title={isActive ? 'Use default value' : 'Override default value'}
+                                            />
+                                        </div>
+                                        {isActive && (
+                                            <div className="mt-2">
+                                                <PropertyInputInline
+                                                    nodeId={node.id}
+                                                    inputKey={key}
+                                                    inputType={input.type}
+                                                    inputDefault={input.default}
+                                                    inputOptions={input.options}
+                                                    onChange={(v) => updateNodeValue(node.id, key, v)}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                ) : isMaterialNode ? (
                     <>
                         {visibleInputKeys.length > 0 && (
                             <div className="flex items-center justify-between">

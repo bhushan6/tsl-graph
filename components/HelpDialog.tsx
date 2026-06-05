@@ -22,7 +22,7 @@ const COLOR_GUIDE: { label: string; type: TSLType }[] = [
     { label: 'Bool / BVec', type: 'bool' },
     { label: 'Color', type: 'color' },
     { label: 'Matrix', type: 'mat4' },
-    { label: 'Texture', type: 'sampler2D' },
+    { label: 'Texture', type: 'texture' },
     { label: 'Any', type: 'any' },
 ];
 

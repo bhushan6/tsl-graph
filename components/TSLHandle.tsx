@@ -30,6 +30,7 @@ export const TYPE_COLORS: Partial<Record<TSLType, string>> = {
     mat3: '#ec4899',
     mat4: '#ec4899',
     color: '#f59e0b',   // amber
+    texture: '#e11d48', // rose
     sampler2D: '#a855f7', // purple
     any: '#a1a1aa',     // zinc-400 (gray)
 };

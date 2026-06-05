@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import * as THREE from 'three/webgpu';
-import { buildNodePreviewMaterial, getPreviewOutputHandle } from './tsl-builder';
+import { buildNodePreviewMaterial, buildTSLPostDebugOutputNode, getPreviewOutputHandle } from './tsl-builder';
 import type { SubgraphDefinition, TSLNodeData } from '@/lib/types';
 import { initializeNodes } from './nodes';
 
@@ -162,5 +162,24 @@ describe('buildNodePreviewMaterial', () => {
         const node = createNode('vec3-1', 'const/vec3', { x: 1, y: 0, z: 0 });
 
         expect(getPreviewOutputHandle(node)).toBe('out');
+    });
+
+    it('reports post debug preview targets without renderable outputs', () => {
+        const nodes: Node<TSLNodeData>[] = [
+            createNode('post-input', 'post/input'),
+            createNode('post-output', 'post/output'),
+        ];
+
+        expect(() => buildTSLPostDebugOutputNode(
+            'post-output',
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            nodes,
+            []
+        )).toThrow('has no renderable output');
     });
 });
