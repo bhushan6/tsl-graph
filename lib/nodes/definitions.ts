@@ -7,7 +7,7 @@ export type TSLVector =
     | 'uvec2' | 'uvec3' | 'uvec4'
     | 'bvec2' | 'bvec3' | 'bvec4';
 export type TSLMatrix = 'mat2' | 'mat3' | 'mat4';
-export type TSLOther = 'color' | 'sampler2D' | 'any' | 'string';
+export type TSLOther = 'color' | 'texture' | 'sampler2D' | 'any' | 'string';
 export type TSLType = TSLScalar | TSLVector | TSLMatrix | TSLOther;
 
 // Asset values for texture/file uploads

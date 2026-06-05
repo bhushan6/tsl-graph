@@ -61,6 +61,7 @@ const PORT_TYPES: { value: TSLType; label: string }[] = [
     { value: 'vec3', label: 'Vec3' },
     { value: 'vec4', label: 'Vec4' },
     { value: 'color', label: 'Color' },
+    { value: 'texture', label: 'Texture' },
     { value: 'int', label: 'Int' },
     { value: 'bool', label: 'Bool' },
 ];

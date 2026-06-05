@@ -247,7 +247,7 @@ const mockDefs: NodeDef[] = [
         category: 'Texture',
         tsl: 'texture',
         inputs: {
-            texture: { type: 'any', label: 'Texture', connectionOnly: true },
+            texture: { type: 'texture', label: 'Texture', connectionOnly: true },
             uv: { type: 'vec2', label: 'UV', connectionOnly: true },
         },
         outputs: { out: { type: 'vec4', label: 'Out' } }
