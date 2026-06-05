@@ -1,8 +1,11 @@
 import type { TSLNodeData, NodeDef } from './types';
 
 const normalizeKeys = (keys: readonly string[], def?: NodeDef): string[] => {
-    if (!def?.inputs) return [...keys];
-    const allowed = new Set(Object.keys(def.inputs));
+    if (!def?.inputs && !def?.outputs) return [...keys];
+    const allowed = new Set([
+        ...Object.keys(def.inputs ?? {}),
+        ...Object.keys(def.outputs ?? {}),
+    ]);
     return keys.filter((key) => allowed.has(key));
 };
 

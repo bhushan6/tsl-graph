@@ -134,7 +134,8 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             sections.push('scenePass.setMRT(mrt({ output, normal: normalView }));');
             sections.push('const renderPipeline = new RenderPipeline(renderer);');
             if (postFn) {
-                sections.push(`renderPipeline.outputNode = ${postFn}(scenePass, scenePass.getTextureNode(), scenePass.getLinearDepthNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`);
+                sections.push(`const sceneNormalNode = texture(scenePass.getTextureNode('normal'), screenUV).xyz;`);
+                sections.push(`renderPipeline.outputNode = ${postFn}(scenePass, scenePass.getLinearDepthNode(), sceneNormalNode, scenePass.getTextureNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`);
                 sections.push('renderPipeline.render();');
             } else {
                 sections.push('renderer.render(scene, camera);');
@@ -175,7 +176,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         if (postGraphEnabled) {
             const postGraph = getRootGraph('post');
             groups.push(...getRequiredImportsByModule(postGraph.nodes, subgraphs, codeNodes, globals));
-            groups.push({ from: 'three/tsl', imports: ['Fn', 'pass', 'mrt', 'output', 'normalView'] });
+            groups.push({ from: 'three/tsl', imports: ['Fn', 'pass', 'mrt', 'output', 'normalView', 'texture', 'screenUV'] });
         }
 
         return mergeImportGroups(groups);

@@ -135,7 +135,8 @@ export function buildTSLPostOutputNode(
     const functionBody = `
         ${compiled.code}
         const camera = sceneCamera;
-        return ${compiled.functionName}(sceneColorNode, sceneTextureNode, sceneDepthNode, sceneDepthTextureNode, sceneNormalTextureNode);
+        const sceneNormalNode = texture(sceneNormalTextureNode, screenUV).xyz;
+        return ${compiled.functionName}(sceneColorNode, sceneDepthNode, sceneNormalNode, sceneTextureNode, sceneDepthTextureNode, sceneNormalTextureNode);
     `;
 
     const fn = new Function(

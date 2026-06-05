@@ -7,7 +7,7 @@ import { useEditorStore } from "@/store/editor";
 import { cn } from "@/lib/utils";
 import { TSLHandle } from "./TSLHandle";
 import { useTheme } from "next-themes";
-import { MATERIAL_NODE_TYPES } from "@/lib/nodes";
+import { MATERIAL_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS } from "@/lib/nodes";
 import { getMaterialActiveInputsSet } from "@/lib/material-inputs";
 import { TEXTURE_PROP_INPUTS } from "@/lib/texture-props";
 import { resolveNodeOutputTypeById } from "@/lib/type-inference";
@@ -161,6 +161,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(
     nodeType,
   );
+  const isPostInputNode = nodeType === "post/input";
   const operations = Array.isArray(nodeData.operations)
     ? (nodeData.operations as MultiOp[])
     : [];
@@ -551,6 +552,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
 
   // Filter out hidden inputs from node UI
   let visibleInputKeys = inputKeys.filter((k) => !inputs[k].hidden);
+  let visibleOutputKeys = outputKeys.filter((k) => !outputs[k].hidden);
   if (isMaterialNode) {
     const activeInputs = getMaterialActiveInputsSet(data, def, connectedInputs);
     visibleInputKeys = visibleInputKeys.filter((key) => activeInputs.has(key));
@@ -560,9 +562,22 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       (key) => !textureToggleKeys.has(key) || activeInputs.has(key),
     );
   }
+  if (isPostInputNode) {
+    const activeOutputs = new Set(
+      Array.isArray(nodeData.activeInputs)
+        ? nodeData.activeInputs
+        : POST_INPUT_DEFAULT_OUTPUTS,
+    );
+    for (const key of connectedOutputs) {
+      if (key) activeOutputs.add(key);
+    }
+    visibleOutputKeys = visibleOutputKeys.filter((key) =>
+      activeOutputs.has(key),
+    );
+  }
   // Include 'out' in the main list of outputs.
   // We strictly align by index now for compactness
-  const maxRows = Math.max(visibleInputKeys.length, outputKeys.length);
+  const maxRows = Math.max(visibleInputKeys.length, visibleOutputKeys.length);
 
   const rows: Array<{
     key: string;
@@ -572,7 +587,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
 
   for (let i = 0; i < maxRows; i++) {
     const inputKey = visibleInputKeys[i];
-    const outputKey = outputKeys[i];
+    const outputKey = visibleOutputKeys[i];
 
     rows.push({
       key: `row-${i}`,

@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import { getAbsolutePosition, getErrorMessage } from '@/lib/utils';
 import { replaceEdgeOnTargetHandle } from '@/lib/graph-utils';
-import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
+import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
 import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
@@ -256,6 +256,7 @@ const createPostInputAnchorNode = (position = POST_INPUT_POSITION): Node<TSLNode
         type: 'post/input',
         values: {},
         connected: {},
+        activeInputs: [...POST_INPUT_DEFAULT_OUTPUTS],
     },
 });
 
@@ -285,19 +286,34 @@ const normalizePostGraph = (
     if (outputAlias) aliases.set(outputAlias.id, POST_OUTPUT_ID);
 
     const internalNodes = nodes.filter((node) => !isPostAnchorNode(node));
+    const postInputNode = createPostInputAnchorNode(inputAlias?.position ?? POST_INPUT_POSITION);
     const normalizedNodes: Node<TSLNodeData>[] = [
-        createPostInputAnchorNode(inputAlias?.position ?? POST_INPUT_POSITION),
+        {
+            ...postInputNode,
+            data: {
+                ...postInputNode.data,
+                activeInputs: inputAlias?.data.activeInputs ?? [...POST_INPUT_DEFAULT_OUTPUTS],
+            },
+        },
         createPostOutputAnchorNode(outputAlias?.position ?? POST_OUTPUT_POSITION),
         ...internalNodes,
     ];
 
     const validNodeIds = new Set(normalizedNodes.map((node) => node.id));
     const normalizedEdges = edges
-        .map((edge) => ({
-            ...edge,
-            source: aliases.get(edge.source) ?? edge.source,
-            target: aliases.get(edge.target) ?? edge.target,
-        }))
+        .map((edge) => {
+            const source = aliases.get(edge.source) ?? edge.source;
+            const target = aliases.get(edge.target) ?? edge.target;
+            const legacyNormalTextureEdge = source === POST_INPUT_ID &&
+                edge.sourceHandle === 'normal' &&
+                edge.targetHandle === 'texture';
+            return {
+                ...edge,
+                source,
+                target,
+                sourceHandle: legacyNormalTextureEdge ? 'normalTexture' : edge.sourceHandle,
+            };
+        })
         .filter((edge) => validNodeIds.has(edge.source) && validNodeIds.has(edge.target));
 
     return {
@@ -1434,13 +1450,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const { activeRootGraph, forcedRootMaterial } = get();
         const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(type);
+        const isPostNode = (POST_NODE_TYPES as readonly string[]).includes(type);
         const isPostFxNode = (POST_FX_NODE_TYPES as readonly string[]).includes(type);
         if (activeRootGraph === 'post' && isMaterialNode) {
             toast.error('Material nodes are not allowed in the post graph.');
             return false;
         }
-        if (activeRootGraph === 'material' && isPostFxNode) {
-            toast.error('Post FX nodes are only allowed in the post graph.');
+        if (activeRootGraph === 'material' && (isPostNode || isPostFxNode)) {
+            toast.error('Post nodes are only allowed in the post graph.');
             return false;
         }
         if (activeRootGraph === 'post' && type === 'texture/viewportShared') {
