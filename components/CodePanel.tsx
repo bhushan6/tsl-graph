@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { inlineCustomTslImports } from '@/lib/editor-host/tsl-utils-inline';
 import { useEditorHostConfig } from '@/lib/editor-host/context';
 import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
+import { getPostOutputActiveControls, getPostOutputSettings } from '@/lib/post-output-settings';
 import {
     Dialog,
     DialogContent,
@@ -113,6 +114,8 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
         let postFn: string | null = null;
         if (postGraphEnabled) {
             const postGraph = getRootGraph('post');
+            const postOutputSettings = getPostOutputSettings(postGraph.nodes);
+            const postOutputActiveControls = getPostOutputActiveControls(postGraph.nodes);
             let postCode = '// Post graph could not be compiled.';
             try {
                 const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
@@ -134,6 +137,15 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             sections.push('scenePass.setMRT(mrt({ output, normal: normalView }));');
             sections.push('const renderPipeline = new RenderPipeline(renderer);');
             if (postFn) {
+                if (postOutputActiveControls.toneMapping || postOutputActiveControls.exposure) {
+                    sections.push(`renderer.toneMapping = THREE.${postOutputSettings.toneMapping};`);
+                }
+                if (postOutputActiveControls.exposure) {
+                    sections.push(`renderer.toneMappingExposure = ${postOutputSettings.exposure};`);
+                }
+                if (postOutputActiveControls.outputColorSpace) {
+                    sections.push(`renderer.outputColorSpace = THREE.${postOutputSettings.outputColorSpace};`);
+                }
                 sections.push(`const sceneNormalNode = texture(scenePass.getTextureNode('normal'), screenUV).xyz;`);
                 sections.push(`renderPipeline.outputNode = ${postFn}(scenePass, scenePass.getLinearDepthNode(), sceneNormalNode, scenePass.getTextureNode(), scenePass.getTextureNode('depth'), scenePass.getTextureNode('normal'));`);
                 sections.push('renderPipeline.render();');

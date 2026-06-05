@@ -56,6 +56,35 @@ export const postNodes = [
         description: 'Defines the final color output for the post-processing pipeline.',
         inputs: {
             color: { label: 'Color', type: 'vec4', connectionOnly: true },
+            toneMapping: {
+                label: 'Tone Mapping',
+                type: 'string',
+                default: 'NoToneMapping',
+                options: [
+                    { label: 'None', value: 'NoToneMapping' },
+                    { label: 'Linear', value: 'LinearToneMapping' },
+                    { label: 'Reinhard', value: 'ReinhardToneMapping' },
+                    { label: 'Cineon', value: 'CineonToneMapping' },
+                    { label: 'ACES', value: 'ACESFilmicToneMapping' },
+                ],
+                propertyOnly: true,
+            },
+            exposure: {
+                label: 'Exposure',
+                type: 'float',
+                default: 1,
+                propertyOnly: true,
+            },
+            outputColorSpace: {
+                label: 'Output Color Space',
+                type: 'string',
+                default: 'SRGBColorSpace',
+                options: [
+                    { label: 'sRGB', value: 'SRGBColorSpace' },
+                    { label: 'Linear sRGB', value: 'LinearSRGBColorSpace' },
+                ],
+                propertyOnly: true,
+            },
         },
         outputs: {},
         tsl: '__post_output__',

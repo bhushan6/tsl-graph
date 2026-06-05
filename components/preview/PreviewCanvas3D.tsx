@@ -18,6 +18,7 @@ import { buildTSLMaterial, buildTSLPostOutputNode } from '@/lib/tsl-builder';
 import { useEditorStore } from '@/store/editor';
 import { buildPreviewGeometry } from './geometry';
 import type { PreviewCanvas3DProps, PreviewCanvasHandle, PreviewCaptureOptions } from './types';
+import { DEFAULT_POST_OUTPUT_SETTINGS, getPostOutputSettings, type PostOutputSettings } from '@/lib/post-output-settings';
 
 interface CapturedFrame {
     blob: Blob;
@@ -25,6 +26,28 @@ interface CapturedFrame {
     width: number;
     height: number;
     format: string;
+}
+
+const TONE_MAPPING_CONSTANTS = {
+    NoToneMapping: THREE.NoToneMapping,
+    LinearToneMapping: THREE.LinearToneMapping,
+    ReinhardToneMapping: THREE.ReinhardToneMapping,
+    CineonToneMapping: THREE.CineonToneMapping,
+    ACESFilmicToneMapping: THREE.ACESFilmicToneMapping,
+} as const;
+
+const OUTPUT_COLOR_SPACE_CONSTANTS = {
+    SRGBColorSpace: THREE.SRGBColorSpace,
+    LinearSRGBColorSpace: THREE.LinearSRGBColorSpace,
+} as const;
+
+function applyRendererOutputSettings(
+    renderer: THREE.WebGPURenderer,
+    settings: PostOutputSettings
+) {
+    renderer.toneMapping = TONE_MAPPING_CONSTANTS[settings.toneMapping];
+    renderer.toneMappingExposure = settings.exposure;
+    renderer.outputColorSpace = OUTPUT_COLOR_SPACE_CONSTANTS[settings.outputColorSpace];
 }
 
 export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DProps>(function PreviewCanvas3D(
@@ -185,6 +208,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
 
         if (!(previewSettings.postEnabled ?? true) || !postGraphEnabled) {
             usePostProcessingRef.current = false;
+            applyRendererOutputSettings(rendererRef.current, DEFAULT_POST_OUTPUT_SETTINGS);
             onPostErrorChange(null);
             return;
         }
@@ -192,6 +216,7 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
         try {
             const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
             const postGraph = getRootGraph('post');
+            applyRendererOutputSettings(rendererRef.current, getPostOutputSettings(postGraph.nodes));
             const scenePass = pass(sceneRef.current, camera);
             scenePass.setMRT(mrt({ output, normal: normalView }));
             const outputNode = buildTSLPostOutputNode(

@@ -10,6 +10,7 @@ import { useTheme } from "next-themes";
 import { MATERIAL_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS } from "@/lib/nodes";
 import { getMaterialActiveInputsSet } from "@/lib/material-inputs";
 import { TEXTURE_PROP_INPUTS } from "@/lib/texture-props";
+import { POST_OUTPUT_COLOR_CONTROL_INPUTS } from "@/lib/post-output-settings";
 import { resolveNodeOutputTypeById } from "@/lib/type-inference";
 import {
   Tooltip,
@@ -162,6 +163,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     nodeType,
   );
   const isPostInputNode = nodeType === "post/input";
+  const isPostOutputNode = nodeType === "post/output";
   const operations = Array.isArray(nodeData.operations)
     ? (nodeData.operations as MultiOp[])
     : [];
@@ -573,6 +575,15 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     }
     visibleOutputKeys = visibleOutputKeys.filter((key) =>
       activeOutputs.has(key),
+    );
+  }
+  if (isPostOutputNode) {
+    const colorControlKeys = new Set<string>(POST_OUTPUT_COLOR_CONTROL_INPUTS);
+    const activeControls = new Set(
+      Array.isArray(nodeData.activeInputs) ? nodeData.activeInputs : [],
+    );
+    visibleInputKeys = visibleInputKeys.filter(
+      (key) => !colorControlKeys.has(key) || activeControls.has(key),
     );
   }
   // Include 'out' in the main list of outputs.
