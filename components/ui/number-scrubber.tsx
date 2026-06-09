@@ -91,6 +91,7 @@ export const NumericScrubber = React.forwardRef<
     const internalValueRef = React.useRef(value);
     const inputValueRef = React.useRef(String(value));
 
+
     const decimals = React.useMemo(() => {
       if (!Number.isFinite(step)) return 0;
       const stepString = step.toString();
@@ -111,6 +112,20 @@ export const NumericScrubber = React.forwardRef<
       },
       [decimals, max, min, step]
     );
+
+    // Refs for latest callback values – keeps document listeners stable
+    // across re-renders so they never go stale mid-scrub.
+    const onChangeRef = React.useRef(onChange);
+    const clampAndQuantizeRef = React.useRef(clampAndQuantize);
+    const clampValueRef = React.useRef(clampValue);
+    const stepRef = React.useRef(step);
+    const scrubSensitivityRef = React.useRef(scrubSensitivity);
+
+    onChangeRef.current = onChange;
+    clampAndQuantizeRef.current = clampAndQuantize;
+    clampValueRef.current = clampValue;
+    stepRef.current = step;
+    scrubSensitivityRef.current = scrubSensitivity;
 
     const parseInputValue = React.useCallback(
       (rawValue: string) => {
@@ -155,9 +170,11 @@ export const NumericScrubber = React.forwardRef<
       (e: PointerEvent) => {
         if (!isDraggingRef.current) return;
 
+        e.preventDefault();
         const deltaX = e.clientX - initialXRef.current;
-        const nextValue = clampAndQuantize(
-          initialValueRef.current + deltaX * step * scrubSensitivity
+        const nextValue = clampAndQuantizeRef.current(
+          initialValueRef.current +
+            deltaX * stepRef.current * scrubSensitivityRef.current
         );
 
         if (Object.is(internalValueRef.current, nextValue)) {
@@ -169,9 +186,9 @@ export const NumericScrubber = React.forwardRef<
         internalValueRef.current = nextValue;
         inputValueRef.current = normalizedValue;
         setInputValue(normalizedValue);
-        onChange(nextValue, { mode: "scrub" });
+        onChangeRef.current(nextValue, { mode: "scrub" });
       },
-      [clampAndQuantize, onChange, scrubSensitivity, step]
+      []
     );
 
     const handlePointerUp = React.useCallback(
@@ -194,12 +211,12 @@ export const NumericScrubber = React.forwardRef<
         const parsedDraftValue = Number.parseFloat(inputValueRef.current);
         initialValueRef.current = Number.isNaN(parsedDraftValue)
           ? internalValueRef.current
-          : clampValue(parsedDraftValue);
+          : clampValueRef.current(parsedDraftValue);
 
         document.addEventListener("pointermove", handlePointerMove);
         document.addEventListener("pointerup", handlePointerUp);
       },
-      [clampValue, handlePointerMove, handlePointerUp]
+      [handlePointerMove, handlePointerUp]
     );
 
     const handleInputPointerDown = React.useCallback(
