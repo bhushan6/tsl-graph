@@ -1,5 +1,5 @@
 import { Node, Edge } from '@xyflow/react';
-import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port, GlobalContextEntry, type NodeDef } from '@/lib/types';
+import { TSLNodeData, SubgraphDefinition, CodeNodeDefinition, type Port, GlobalContextEntry, type NodeDef, type TSLValueType } from '@/lib/types';
 import { registry } from './registry';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES } from './nodes';
 import { topologicalSort } from './graph-utils';
@@ -17,6 +17,7 @@ import {
     isLocalSetType,
     withLocalDependencyEdges,
 } from './local-utils';
+import { inferLiteralTSLType } from './value-type-utils';
 
 interface CompiledNode {
     id: string;
@@ -110,7 +111,11 @@ function addGeneratedValueImports(
     type: string,
     value: unknown
 ) {
-    if (type === 'color') {
+    const valueType = type === 'any' && value !== undefined && value !== null
+        ? inferLiteralTSLType(value as TSLValueType)
+        : type;
+
+    if (valueType === 'color') {
         imports.add('color');
         return;
     }
@@ -355,13 +360,16 @@ function getInputValue(
     }
 
     const value = node.data.values?.[inputKey] ?? inputDef.default;
+    const valueType = inputDef.type === 'any' && value !== undefined && value !== null
+        ? inferLiteralTSLType(value)
+        : inputDef.type;
 
-    if (inputDef.type === 'color') {
+    if (valueType === 'color') {
         const hex = String(value ?? '#ffffff');
         return `color("${hex}")`;
     }
 
-    if (inputDef.type === 'bool') {
+    if (valueType === 'bool') {
         return value ? 'true' : 'false';
     }
 
@@ -378,7 +386,7 @@ function getInputValue(
     }
 
     const num = Number(value ?? 0);
-    if (inputDef.type === 'int' || inputDef.type === 'uint') {
+    if (valueType === 'int' || valueType === 'uint') {
         return String(Math.round(num));
     }
 

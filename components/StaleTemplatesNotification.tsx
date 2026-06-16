@@ -49,11 +49,12 @@ export function StaleTemplatesNotification() {
     } = useTemplateLibrary();
 
     // Get embedded definitions and nodes from store
-    const nodes = useEditorStore((s) => s.nodes);
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const updateSubgraphDefinition = useEditorStore((s) => s.updateSubgraphDefinition);
     const updateCodeNode = useEditorStore((s) => s.updateCodeNode);
+    const nodes = useMemo(() => useEditorStore.getState().nodes, [graphStructureVersion]);
 
     // Build sets of template names the user already owns
     const userOwnedSubgraphNames = useMemo(() => new Set(

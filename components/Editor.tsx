@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useCallback, useState, useRef } from 'react';
+import { memo, useMemo, useEffect, useCallback, useState, useRef } from 'react';
 import {
     ReactFlow,
     Background,
@@ -48,6 +48,8 @@ import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 import type { Id } from '@/convex/_generated/dataModel';
 import { DEFAULT_EDITOR_HOST_CAPABILITIES, type EditorHostCapabilities } from '@/lib/editor-host/types';
+import { TutorialOverlay, TutorialHighlight, TutorialComplete, TutorialLauncher } from '@/components/tutorial';
+import { useTutorialStore } from '@/store/tutorial-store';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -68,41 +70,171 @@ interface EditorProps extends NavbarProps {
     isReadOnly?: boolean;
 }
 
+interface EditorChromeProps {
+    navbarProps?: NavbarProps;
+    projectId?: Id<"projects">;
+    hasThumbnail?: boolean;
+    isReadOnly?: boolean;
+    isFindOpen: boolean;
+    onCloseFind: () => void;
+}
+
+const EditorChrome = memo(function EditorChrome({
+    navbarProps,
+    projectId,
+    hasThumbnail,
+    isReadOnly,
+    isFindOpen,
+    onCloseFind,
+}: EditorChromeProps) {
+    const editorMode = useEditorStore((s) => s.editorMode);
+    const isTutorialActive = useTutorialStore((s) => s.isActive);
+    const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
+    const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
+    const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
+    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
+    const canUseAI = navbarProps?.capabilities?.canUseAI ?? DEFAULT_EDITOR_HOST_CAPABILITIES.canUseAI;
+    const effectiveBottomBarMode = canUseAI ? bottomBarMode : 'toolbar';
+
+    const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
+    const onOpenNodePicker = useCallback(() => setIsNodePickerOpen(true), []);
+    const onOpenCodePanel = useCallback(() => setIsCodePanelOpen(true), []);
+    const onCloseCodePanel = useCallback(() => setIsCodePanelOpen(false), []);
+    const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
+    const onOpenAiDock = useCallback(() => setBottomBarMode('ai'), []);
+    const onOpenToolbar = useCallback(() => setBottomBarMode('toolbar'), []);
+
+    return (
+        <>
+            <UILayer>
+                {!isReadOnly && isTutorialActive && (
+                    <UILayer.CenterPanel>
+                        <TutorialOverlay />
+                    </UILayer.CenterPanel>
+                )}
+
+                <UILayer.TopBar>
+                    <Navbar
+                        {...navbarProps}
+                        projectId={projectId}
+                        isReadOnly={isReadOnly}
+                        capabilities={navbarProps?.capabilities}
+                        noteSearchBar={
+                            isFindOpen ? (
+                                <NoteSearchBar
+                                    open={true}
+                                    onClose={onCloseFind}
+                                />
+                            ) : null
+                        }
+                    />
+                </UILayer.TopBar>
+
+                {!isReadOnly && (
+                    <UILayer.LeftPanel>
+                        {isNodePickerOpen ? (
+                            <NodePicker
+                                onClose={onNodePickerClose}
+                            />
+                        ) : (
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={onOpenNodePicker}
+                                className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-10 w-10 pointer-events-auto"
+                                title="Open Node Picker"
+                            >
+                                <PanelLeft className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </UILayer.LeftPanel>
+                )}
+
+                <UILayer.RightPanel>
+                    {editorMode === 'main' && <Preview projectId={projectId} hasThumbnail={hasThumbnail} />}
+                    {!isReadOnly && <PropertiesPanel />}
+                </UILayer.RightPanel>
+
+                {!isReadOnly && (
+                    <UILayer.BottomBar>
+                        {editorMode === 'subgraph' ? (
+                            <Toolbar
+                                onOpenCodePanel={onOpenCodePanel}
+                                onCreateCodeNode={onOpenCodeNodeDialog}
+                            />
+                        ) : (
+                            <div className="pointer-events-auto">
+                                <div className={effectiveBottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
+                                    <Toolbar
+                                        onOpenCodePanel={onOpenCodePanel}
+                                        onOpenAiDock={canUseAI ? onOpenAiDock : undefined}
+                                        onCreateCodeNode={onOpenCodeNodeDialog}
+                                    />
+                                </div>
+                                {canUseAI && (
+                                    <div className={effectiveBottomBarMode === 'ai' ? 'block' : 'hidden'}>
+                                        <AiChatDock onOpenToolbar={onOpenToolbar} isOpen={effectiveBottomBarMode === 'ai'} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </UILayer.BottomBar>
+                )}
+            </UILayer>
+
+            {!isReadOnly && (
+                <>
+                    {isCodePanelOpen && (
+                        <CodePanel
+                            isOpen={true}
+                            onClose={onCloseCodePanel}
+                        />
+                    )}
+
+                    {isCodeNodeDialogOpen && (
+                        <CodeNodeDialog
+                            open={true}
+                            onOpenChange={setIsCodeNodeDialogOpen}
+                            mode="create"
+                        />
+                    )}
+
+                    <StaleTemplatesNotification />
+
+                    <TutorialHighlight />
+                    <TutorialComplete />
+                    <TutorialLauncher />
+                </>
+            )}
+        </>
+    );
+});
+
 function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { navbarProps?: NavbarProps; projectId?: Id<"projects">; hasThumbnail?: boolean; isReadOnly?: boolean }) {
-    const {
-        nodes,
-        edges,
-        onNodesChange,
-        onEdgesChange,
-        onConnect,
-        setSelectedNode,
-        setSelectedNodes,
-        editorMode,
-        undo,
-        redo,
-        takeSnapshot,
-        canvasMode,
-        copySelection,
-        pasteSelection,
-        editingSubgraphId,
-        activeRootGraph,
-    } = useEditorStore();
+    const nodes = useEditorStore((s) => s.nodes);
+    const edges = useEditorStore((s) => s.edges);
+    const onNodesChange = useEditorStore((s) => s.onNodesChange);
+    const onEdgesChange = useEditorStore((s) => s.onEdgesChange);
+    const onConnect = useEditorStore((s) => s.onConnect);
+    const setSelectedNode = useEditorStore((s) => s.setSelectedNode);
+    const setSelectedNodes = useEditorStore((s) => s.setSelectedNodes);
+    const undo = useEditorStore((s) => s.undo);
+    const redo = useEditorStore((s) => s.redo);
+    const takeSnapshot = useEditorStore((s) => s.takeSnapshot);
+    const canvasMode = useEditorStore((s) => s.canvasMode);
+    const copySelection = useEditorStore((s) => s.copySelection);
+    const pasteSelection = useEditorStore((s) => s.pasteSelection);
+    const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
+    const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
     const { screenToFlowPosition } = useReactFlow();
 
     // const isInitialized = useRef(false);
-    const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
-    const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
-    const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
     const [isFindOpen, setIsFindOpen] = useState(false);
-    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
     const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
-    const canUseAI = navbarProps?.capabilities?.canUseAI ?? DEFAULT_EDITOR_HOST_CAPABILITIES.canUseAI;
-    const effectiveBottomBarMode = canUseAI ? bottomBarMode : 'toolbar';
 
-    const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
-    const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
+    const onCloseFind = useCallback(() => setIsFindOpen(false), []);
 
     // Keyboard shortcuts for Undo/Redo + Copy/Paste
     useEffect(() => {
@@ -552,7 +684,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     return (
         <>
             {/* Canvas Layer */}
-            <div className="absolute inset-0">
+            <div data-tutorial-target="canvas" className="absolute inset-0">
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -618,98 +750,14 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 {!isReadOnly && <CanvasEdgeDropPicker />}
             </div >
 
-            {/* UI Layer */}
-            < UILayer >
-                <UILayer.TopBar>
-                    <Navbar
-                        {...navbarProps}
-                        projectId={projectId}
-                        isReadOnly={isReadOnly}
-                        capabilities={navbarProps?.capabilities}
-                        noteSearchBar={
-                            isFindOpen ? (
-                                <NoteSearchBar
-                                    open={true}
-                                    onClose={() => setIsFindOpen(false)}
-                                />
-                            ) : null
-                        }
-                    />
-                </UILayer.TopBar>
-
-                {!isReadOnly && (
-                    <UILayer.LeftPanel>
-                        {isNodePickerOpen ? (
-                            <NodePicker
-                                onClose={onNodePickerClose}
-                            />
-                        ) : (
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setIsNodePickerOpen(true)}
-                                className="bg-background/95 backdrop-blur shadow-sm border-sidebar-border h-10 w-10 pointer-events-auto"
-                                title="Open Node Picker"
-                            >
-                                <PanelLeft className="h-4 w-4" />
-                            </Button>
-                        )}
-                    </UILayer.LeftPanel>
-                )}
-
-                <UILayer.RightPanel>
-                    {editorMode === 'main' && <Preview projectId={projectId} hasThumbnail={hasThumbnail} />}
-                    {!isReadOnly && <PropertiesPanel />}
-                </UILayer.RightPanel>
-
-                {!isReadOnly && (
-                    <UILayer.BottomBar>
-                        {editorMode === 'subgraph' ? (
-                            <Toolbar
-                                onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                                onCreateCodeNode={onOpenCodeNodeDialog}
-                            />
-                        ) : (
-                            <div className="pointer-events-auto">
-                                <div className={effectiveBottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
-                                    <Toolbar
-                                        onOpenCodePanel={() => setIsCodePanelOpen(true)}
-                                        onOpenAiDock={canUseAI ? () => setBottomBarMode('ai') : undefined}
-                                        onCreateCodeNode={onOpenCodeNodeDialog}
-                                    />
-                                </div>
-                                {canUseAI && (
-                                    <div className={effectiveBottomBarMode === 'ai' ? 'block' : 'hidden'}>
-                                        <AiChatDock onOpenToolbar={() => setBottomBarMode('toolbar')} isOpen={effectiveBottomBarMode === 'ai'} />
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </UILayer.BottomBar>
-                )}
-            </UILayer >
-
-            {!isReadOnly && (
-                <>
-                    {/* Code Panel Modal */}
-                    <CodePanel
-                        isOpen={isCodePanelOpen}
-                        onClose={() => setIsCodePanelOpen(false)}
-                    />
-
-                    {/* Code Node Dialog */}
-                    {isCodeNodeDialogOpen && (
-                        <CodeNodeDialog
-                            open={true}
-                            onOpenChange={setIsCodeNodeDialogOpen}
-                            mode="create"
-                        />
-                    )}
-
-                    {/* Stale Templates Notification */}
-                    <StaleTemplatesNotification />
-                </>
-            )}
+            <EditorChrome
+                navbarProps={navbarProps}
+                projectId={projectId}
+                hasThumbnail={hasThumbnail}
+                isReadOnly={isReadOnly}
+                isFindOpen={isFindOpen}
+                onCloseFind={onCloseFind}
+            />
         </>
     );
 }

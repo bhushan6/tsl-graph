@@ -85,6 +85,26 @@ const mockDefs: NodeDef[] = [
             out: { type: 'any', label: 'Out' },
         },
     },
+    {
+        type: 'geo/positionWorld',
+        label: 'Position World',
+        category: 'Geometry',
+        tsl: 'positionWorld',
+        inputs: {},
+        outputs: { out: { type: 'vec3', label: 'Out' } }
+    },
+    {
+        type: 'noise/noise_float',
+        label: 'Noise Float',
+        category: 'Noise',
+        tsl: 'mx_noise_float',
+        inputs: {
+            position: { type: 'vec3', default: [0, 0, 0], label: 'Position' },
+            scale: { type: 'float', default: 1, label: 'Scale' },
+            seed: { type: 'float', default: 0, label: 'Seed' },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } }
+    },
     // Material nodes
     {
         type: 'material/standard',
@@ -1023,6 +1043,26 @@ describe('compileGraph', () => {
             const code = compileGraph(nodes, []);
             expect(code).toContain('mix(vec3(1, 0, 0), vec3(0, 1, 0), 0.5)');
         });
+
+        it('should compile mix with inline color values on any inputs', () => {
+            const nodes = [
+                createNode('pos', 'geo/positionWorld'),
+                createNode('noise', 'noise/noise_float', { values: { scale: 1, seed: 0 } }),
+                createNode('mix1', 'math/mix', { values: { a: '#ff0000', b: '#0000ff' } }),
+                createNode('mat', 'material/standard', { activeInputs: ['colorNode'] }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'pos', sourceHandle: 'out', target: 'noise', targetHandle: 'position' },
+                { id: 'e2', source: 'noise', sourceHandle: 'out', target: 'mix1', targetHandle: 't' },
+                { id: 'e3', source: 'mix1', sourceHandle: 'out', target: 'mat', targetHandle: 'colorNode' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('mix(color("#ff0000"), color("#0000ff"), _node1)');
+            expect(code).toContain('material.colorNode = _node2;');
+            expect(code).not.toContain('NaN');
+        });
     });
 });
 
@@ -1763,6 +1803,12 @@ describe('getRequiredImports', () => {
         const nodes = [createNode('add1', 'math/add', { values: { a: [1, 2, 3, 4] } })];
         const imports = getRequiredImports(nodes);
         expect(imports).toContain('vec4');
+    });
+
+    it('should include color when any inputs use inline color literals', () => {
+        const nodes = [createNode('mix1', 'math/mix', { values: { a: '#ff0000', b: '#0000ff' } })];
+        const imports = getRequiredImports(nodes);
+        expect(imports).toEqual(expect.arrayContaining(['mix', 'color']));
     });
 
     it('should include screenUV for sample texture node default UV', () => {

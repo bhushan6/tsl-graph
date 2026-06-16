@@ -146,6 +146,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         canvasRef.current?.downloadSnapshot();
     }, []);
 
+    const handleToggleFullScreen = useCallback(() => {
+        setIsFullScreen((prev) => !prev);
+    }, []);
+
     useEffect(() => {
         if (isReady && canUploadThumbnail && !props.hasThumbnail && !initialSnapshotTaken.current) {
             const timeout = setTimeout(() => {
@@ -207,6 +211,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
 
     return (
         <div
+            data-tutorial-target="preview-panel"
             className={cn(
                 'pointer-events-auto bg-card border border-border overflow-hidden transition-all duration-200',
                 isFullScreen
@@ -216,7 +221,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
         >
             <PreviewControls
                 isFullScreen={isFullScreen}
-                onToggleFullScreen={() => setIsFullScreen((prev) => !prev)}
+                onToggleFullScreen={handleToggleFullScreen}
                 onDownloadSnapshot={handleDownloadSnapshot}
                 isReady={isReady}
                 allowPostProcessingToggle={postGraphEnabled}

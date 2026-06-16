@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import posthog from "posthog-js";
 import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, Sparkles, FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,35 +20,37 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: ToolbarProps) {
-    const {
-        nodes,
-        edges,
-        selectedNodeIds,
-        createSubgraph,
-        enterSubgraphEditor,
-        editorMode,
-        exitSubgraphEditor,
-        editingSubgraphId,
-        editingSubgraphScopeDraft,
-        setEditingSubgraphScopeDraft,
-        subgraphs,
-        undo,
-        redo,
-        history,
-        canvasMode,
-        setCanvasMode,
-        groupNodes,
-        ungroupNodes,
-        createLoopGroup,
-        removeNodesFromGroup,
-        convertChainToMultiOp,
-    } = useEditorStore();
+    const selectedNodeIds = useEditorStore((s) => s.selectedNodeIds);
+    const createSubgraph = useEditorStore((s) => s.createSubgraph);
+    const enterSubgraphEditor = useEditorStore((s) => s.enterSubgraphEditor);
+    const editorMode = useEditorStore((s) => s.editorMode);
+    const exitSubgraphEditor = useEditorStore((s) => s.exitSubgraphEditor);
+    const editingSubgraphId = useEditorStore((s) => s.editingSubgraphId);
+    const editingSubgraphScopeDraft = useEditorStore((s) => s.editingSubgraphScopeDraft);
+    const setEditingSubgraphScopeDraft = useEditorStore((s) => s.setEditingSubgraphScopeDraft);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
+    const undo = useEditorStore((s) => s.undo);
+    const redo = useEditorStore((s) => s.redo);
+    const canUndo = useEditorStore((s) => s.history.past.length > 0);
+    const canRedo = useEditorStore((s) => s.history.future.length > 0);
+    const canvasMode = useEditorStore((s) => s.canvasMode);
+    const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
+    const groupNodes = useEditorStore((s) => s.groupNodes);
+    const ungroupNodes = useEditorStore((s) => s.ungroupNodes);
+    const createLoopGroup = useEditorStore((s) => s.createLoopGroup);
+    const removeNodesFromGroup = useEditorStore((s) => s.removeNodesFromGroup);
+    const convertChainToMultiOp = useEditorStore((s) => s.convertChainToMultiOp);
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
 
     // Ref to track subgraph name without causing re-renders
     const subgraphNameRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
     const { setCenter, getZoom, screenToFlowPosition, fitView } = useReactFlow();
+    const { nodes, edges } = useMemo(() => {
+        const state = useEditorStore.getState();
+        return { nodes: state.nodes, edges: state.edges };
+    }, [editorMode, graphStructureVersion, selectedNodeIds]);
 
     // Create subgraph from selected nodes (sync - DB save is fire-and-forget)
     const handleCreateSubgraph = useCallback(() => {
@@ -207,7 +209,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                     variant="ghost"
                                     size="icon"
                                     onClick={undo}
-                                    disabled={history.past.length === 0}
+                                    disabled={!canUndo}
                                     className="h-8 w-8 text-primary hover:text-primary"
                                 >
                                     <Undo2 className="w-4 h-4" />
@@ -224,7 +226,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                     variant="ghost"
                                     size="icon"
                                     onClick={redo}
-                                    disabled={history.future.length === 0}
+                                    disabled={!canRedo}
                                     className="h-8 w-8 text-primary hover:text-primary"
                                 >
                                     <Redo2 className="w-4 h-4" />
@@ -517,7 +519,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 variant="ghost"
                                 size="icon"
                                 onClick={undo}
-                                disabled={history.past.length === 0}
+                                disabled={!canUndo}
                                 className="h-8 w-8"
                             >
                                 <Undo2 className="w-4 h-4" />
@@ -533,7 +535,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 variant="ghost"
                                 size="icon"
                                 onClick={redo}
-                                disabled={history.future.length === 0}
+                                disabled={!canRedo}
                                 className="h-8 w-8"
                             >
                                 <Redo2 className="w-4 h-4" />

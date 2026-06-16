@@ -32,6 +32,9 @@ import {
     normalizeLocalName,
 } from '@/lib/local-utils';
 
+// Counter to keep addNode IDs unique even when many nodes are created in the same millisecond
+let addNodeIdCounter = 0;
+
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder' | 'fullscreenQuad';
 export type RootGraphMode = 'material' | 'post';
@@ -216,7 +219,7 @@ const cloneNodes = (nodes: Node<TSLNodeData>[]): Node<TSLNodeData>[] => nodes.ma
 
 const cloneEdges = (edges: Edge[]): Edge[] => edges.map(cloneEdge);
 
-const createDefaultPreviewSettings = (): PreviewSettings => ({
+export const createDefaultPreviewSettings = (): PreviewSettings => ({
     mesh: 'sphere',
     isInstanced: false,
     instanceCount: 100,
@@ -1233,7 +1236,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         onCodeNodeTemplateUpdate: callbacks.onCodeNodeTemplateUpdate ?? null,
     }),
 
-    markDirty: () => set({ isDirty: true }),
+    markDirty: () => {
+        if (!get().isDirty) {
+            set({ isDirty: true });
+        }
+    },
     markSaved: () => set({ isDirty: false }),
 
     onNodesChange: (changes) => {
@@ -1507,7 +1514,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
         }
 
-        const id = `${type}-${Date.now()}`;
+        const id = `${type}-${Date.now()}-${addNodeIdCounter++}`;
 
         // Set default value for InstanceCount node based on current store state
         if (type === 'geo/instanceCount') {
@@ -2643,12 +2650,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             e => selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target)
         );
 
-        // Filter out edges that connect selected nodes to non-selected nodes
+        // Remove edges that are fully internal to the selected nodes; they become part of the
+        // subgraph definition. Keep cross edges (selected <-> non-selected) and external edges
+        // so exitSubgraphEditor can rewire them to the new instance node.
         const edgesToKeep = edges.filter(e => {
             const sourceSelected = selectedNodeIds.includes(e.source);
             const targetSelected = selectedNodeIds.includes(e.target);
-            // Keep internal edges (both selected) or completely external edges (neither selected)
-            return (sourceSelected && targetSelected) || (!sourceSelected && !targetSelected);
+            return !(sourceSelected && targetSelected);
         });
 
         // Calculate bounding box of selected nodes using React Flow helper
@@ -3004,6 +3012,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 const newNodes = restoredNodes.filter(n => !originalNodeIds.includes(n.id));
                 newNodes.push(instanceNode);
 
+                // Build maps from original node handles to subgraph ports using the
+                // internal wiring captured in the subgraph editor.
+                const originalToInputPort = new Map<string, string>();
+                const originalToOutputPort = new Map<string, string>();
+                for (const ie of internalEdges) {
+                    if (ie.source === SUBGRAPH_INPUT_ID && originalNodeIds.includes(ie.target)) {
+                        const key = `${ie.target}:${ie.targetHandle}`;
+                        originalToInputPort.set(key, ie.sourceHandle);
+                    }
+                    if (ie.target === SUBGRAPH_OUTPUT_ID && originalNodeIds.includes(ie.source)) {
+                        const key = `${ie.source}:${ie.sourceHandle}`;
+                        originalToOutputPort.set(key, ie.targetHandle);
+                    }
+                }
+
                 // Rewire external edges to the instance node
                 const newEdges = restoredEdges
                     .filter(e => {
@@ -3016,17 +3039,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                         const targetIsOriginal = originalNodeIds.includes(e.target);
 
                         if (targetIsOriginal && !sourceIsOriginal) {
-                            const inputPortIndex = inputPorts.findIndex((_, i) => i === 0);
+                            const portId = originalToInputPort.get(`${e.target}:${e.targetHandle}`)
+                                ?? inputPorts[0]?.id
+                                ?? 'in_0';
                             return {
                                 ...e,
                                 target: instanceId,
-                                targetHandle: inputPorts[inputPortIndex]?.id || 'in_0',
+                                targetHandle: portId,
                             };
                         } else if (sourceIsOriginal && !targetIsOriginal) {
+                            const portId = originalToOutputPort.get(`${e.source}:${e.sourceHandle}`)
+                                ?? outputPorts[0]?.id
+                                ?? 'out_0';
                             return {
                                 ...e,
                                 source: instanceId,
-                                sourceHandle: outputPorts[0]?.id || 'out_0',
+                                sourceHandle: portId,
                             };
                         }
                         return e;
@@ -4358,6 +4386,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     resetEditor: () => {
+        addNodeIdCounter = 0;
         clearUniforms();
         const postGraph = normalizePostGraph(undefined, undefined);
         set({

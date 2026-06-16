@@ -195,7 +195,9 @@ function renderBasicMarkdown(markdown: string): ReactNode {
     return <>{blocks}</>;
 }
 
-function CommentNodeComponent({ id, data, selected }: NodeProps<AppNode>) {
+type CommentNodeProps = NodeProps<AppNode>;
+
+function CommentNodeComponent({ id, data, selected }: CommentNodeProps) {
     const updateCommentNodeDraft = useEditorStore((s) => s.updateCommentNodeDraft);
     const commitCommentNodeDraft = useEditorStore((s) => s.commitCommentNodeDraft);
 
@@ -393,4 +395,13 @@ function CommentNodeComponent({ id, data, selected }: NodeProps<AppNode>) {
     );
 }
 
-export const CommentNode = memo(CommentNodeComponent);
+function areCommentNodePropsEqual(prev: CommentNodeProps, next: CommentNodeProps) {
+    return (
+        prev.id === next.id &&
+        prev.type === next.type &&
+        prev.selected === next.selected &&
+        prev.data === next.data
+    );
+}
+
+export const CommentNode = memo(CommentNodeComponent, areCommentNodePropsEqual);

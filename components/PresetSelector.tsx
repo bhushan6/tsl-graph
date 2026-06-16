@@ -1,8 +1,9 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CopyPlus, Loader2 } from "lucide-react";
+import { BookOpen, CopyPlus, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
+import Link from "next/link";
 
 interface Preset {
     name: string;
@@ -108,7 +109,17 @@ export function PresetSelector({ onSelect, onCancel }: PresetSelectorProps) {
                         ))}
                     </div>
                 </CardContent>
-                <CardFooter className="flex justify-center pb-8">
+                <CardFooter className="flex justify-center gap-4 pb-8">
+                    <Link href="/editor/tutorial">
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className="font-medium"
+                        >
+                            <BookOpen className="mr-2 h-4 w-4" />
+                            Open tutorial
+                        </Button>
+                    </Link>
                     <Button
                         variant="ghost"
                         size="lg"

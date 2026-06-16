@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { AlertCircle, Camera, Maximize2, Minimize2, Settings2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -45,7 +46,7 @@ const hdriOptions = [
     { value: 'workshop', label: 'Workshop' },
 ];
 
-export function PreviewControls({
+function PreviewControlsComponent({
     isFullScreen,
     onToggleFullScreen,
     onDownloadSnapshot,
@@ -518,3 +519,5 @@ export function PreviewControls({
         </>
     );
 }
+
+export const PreviewControls = memo(PreviewControlsComponent);

@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { AppNode, TSLType } from '@/lib/types';
 import { TYPE_COLORS, DEFAULT_HANDLE_COLOR } from './TSLHandle';
@@ -63,17 +63,20 @@ const LOOP_INTERNAL_CONFIG: Record<string, {
 };
 
 function LoopInternalNode({ id, data, selected }: NodeProps<AppNode>) {
-    const edges = useEditorStore((s) => s.edges);
     const config = LOOP_INTERNAL_CONFIG[data.type];
+    const isConnected = useEditorStore(
+        useCallback(
+            (state) =>
+                !!config?.valueKey &&
+                state.edges.some((e) => e.target === id && e.targetHandle === config.valueKey),
+            [config?.valueKey, id]
+        )
+    );
     if (!config) return null;
 
     const inputColor = config.input?.type ? (TYPE_COLORS[config.input.type] ?? DEFAULT_HANDLE_COLOR) : DEFAULT_HANDLE_COLOR;
     const outputColor = config.output?.type ? (TYPE_COLORS[config.output.type] ?? DEFAULT_HANDLE_COLOR) : DEFAULT_HANDLE_COLOR;
     const value = config.valueKey ? data.values?.[config.valueKey] : undefined;
-    const isConnected = useMemo(() => {
-        if (!config.valueKey) return false;
-        return edges.some((e) => e.target === id && e.targetHandle === config.valueKey);
-    }, [config.valueKey, edges, id]);
     const valueText = value === undefined || isConnected ? '' : String(value);
 
     return (
@@ -112,4 +115,13 @@ function LoopInternalNode({ id, data, selected }: NodeProps<AppNode>) {
     );
 }
 
-export default memo(LoopInternalNode);
+function areLoopInternalNodePropsEqual(prev: NodeProps<AppNode>, next: NodeProps<AppNode>) {
+    return (
+        prev.id === next.id &&
+        prev.type === next.type &&
+        prev.selected === next.selected &&
+        prev.data === next.data
+    );
+}
+
+export default memo(LoopInternalNode, areLoopInternalNodePropsEqual);
