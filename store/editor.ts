@@ -3017,11 +3017,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 const originalToInputPort = new Map<string, string>();
                 const originalToOutputPort = new Map<string, string>();
                 for (const ie of internalEdges) {
-                    if (ie.source === SUBGRAPH_INPUT_ID && originalNodeIds.includes(ie.target)) {
+                    if (ie.source === SUBGRAPH_INPUT_ID && originalNodeIds.includes(ie.target) && ie.sourceHandle) {
                         const key = `${ie.target}:${ie.targetHandle}`;
                         originalToInputPort.set(key, ie.sourceHandle);
                     }
-                    if (ie.target === SUBGRAPH_OUTPUT_ID && originalNodeIds.includes(ie.source)) {
+                    if (ie.target === SUBGRAPH_OUTPUT_ID && originalNodeIds.includes(ie.source) && ie.targetHandle) {
                         const key = `${ie.source}:${ie.sourceHandle}`;
                         originalToOutputPort.set(key, ie.targetHandle);
                     }
