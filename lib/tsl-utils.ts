@@ -1,4 +1,4 @@
-import { Fn, float, vec2, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, length, max, min, color } from 'three/tsl';
+import { Fn, float, vec2, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, length, max, min, color, atan, PI } from 'three/tsl';
 
 type TSLLooseNode = {
     x: TSLLooseNode;
@@ -211,6 +211,15 @@ export const adjustContrast = Fn(([color, contrast]) => {
 //@ts-expect-error: this is valid but TSL types seems off
 export const adjustSaturate = Fn(([color, saturation]) => {
     return mix(vec3(dot(color, LUMINANCE_WEIGHTS)), color, saturation);
+});
+
+// Convert cartesian UV to polar coordinates (radius, angle) normalized to 0..1
+//@ts-expect-error: this is valid but TSL types seems off
+export const polarUV = Fn(([uv, center]) => {
+    const d = uv.sub(center);
+    const radius = length(d).mul(2);
+    const angle = atan(d.y, d.x).div(PI.mul(2)).add(0.5);
+    return vec2(radius, angle);
 });
 
 // h is expected in degrees [0, 360], s/l in [0, 1]

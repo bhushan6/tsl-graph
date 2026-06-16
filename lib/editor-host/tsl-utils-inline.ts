@@ -32,6 +32,7 @@ const INLINE_TSL_MODULES: Record<string, InlineTslModuleDefinition> = {
         label: 'Inline TSL Utils',
         sharedImports: [
             'Fn',
+            'atan',
             'clamp',
             'color',
             'cos',
@@ -251,6 +252,14 @@ const INLINE_TSL_MODULES: Record<string, InlineTslModuleDefinition> = {
                 deps: ['LUMINANCE_WEIGHTS'],
                 code: `const adjustSaturate = Fn(([color, saturation]) => {
     return mix(vec3(dot(color, LUMINANCE_WEIGHTS)), color, saturation);
+});`,
+            },
+            polarUV: {
+                code: `const polarUV = Fn(([uv, center]) => {
+    const d = uv.sub(center);
+    const radius = length(d).mul(2);
+    const angle = atan(d.y, d.x).div(Math.PI * 2).add(0.5);
+    return vec2(radius, angle);
 });`,
             },
             hslToRgb: {

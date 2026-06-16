@@ -79,4 +79,22 @@ describe('Utils Blend/Filter Nodes', () => {
         expect(code).toContain('const _node0 = hslToRgb(120, 0.5, 0.4);');
         expect(byModule.get('@/lib/tsl-utils')).toEqual(['hslToRgb']);
     });
+
+    it('compiles polarUV via tsl-utils helper and exposes radius/angle swizzles', () => {
+        const nodes = [
+            createNode('polar', 'utils/polarUV', {
+                values: {
+                    uv: [0.5, 0.5],
+                    center: [0.5, 0.5],
+                },
+            }),
+        ];
+
+        const code = compileGraph(nodes, []);
+        const groups = getRequiredImportsByModule(nodes);
+        const byModule = new Map(groups.map((group) => [group.from, group.imports]));
+
+        expect(code).toContain('const _node0 = polarUV(vec2(0.5, 0.5), vec2(0.5, 0.5));');
+        expect(byModule.get('@/lib/tsl-utils')).toEqual(['polarUV']);
+    });
 });

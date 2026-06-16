@@ -473,6 +473,23 @@ export const utilsNodes = [
         tsl: 'rotateUV',
     },
     {
+        type: 'utils/polarUV',
+        label: 'Polar UV',
+        category: 'Utils',
+        inputs: {
+            uv: { label: 'UV', type: 'vec2', default: [0, 0] },
+            center: { label: 'Center', type: 'vec2', default: [0.5, 0.5] },
+        },
+        outputs: {
+            x: { label: 'Radius', type: 'float' },
+            y: { label: 'Angle', type: 'float' },
+            out: { label: 'Out', type: 'vec2' },
+        },
+        tsl: 'polarUV',
+        pure: true,
+        importFrom: '@/lib/tsl-utils',
+    },
+    {
         type: 'utils/linearGradient',
         label: 'Linear Gradient',
         category: 'Utils',
