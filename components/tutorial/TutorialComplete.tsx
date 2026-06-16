@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useTutorialStore } from '@/store/tutorial-store';
 import { tutorialDefinitions } from '@/lib/tutorial-definitions';
 import { useRouter } from 'next/navigation';
+import posthog from 'posthog-js';
 
 const coveredByTutorial: Record<string, string[]> = {
   tutorial_4: [
@@ -104,6 +105,18 @@ export function TutorialComplete() {
   const hasNext = nextIndex < tutorialDefinitions.length;
   const nextTutorialTitle = hasNext ? tutorialDefinitions[nextIndex].title : '';
   const covered = coveredByTutorial[activeTutorialId] ?? [];
+  const displayOrder = tutorialDefinitions.findIndex((t) => t.id === activeTutorialId) + 1;
+
+  const captureCompletionEvent = (event: string, extra?: Record<string, unknown>) => {
+    posthog.capture(event, {
+      tutorialId: activeTutorialId,
+      tutorialTitle: currentTutorial?.title,
+      displayOrder,
+      totalTasks: currentTutorial?.tasks.length,
+      hasNext,
+      ...extra,
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex pointer-events-auto items-center justify-center bg-black/45 p-4">
@@ -141,7 +154,13 @@ export function TutorialComplete() {
         <div className="flex flex-col gap-2 border-t border-border px-5 py-4">
           {hasNext ? (
             <Button
-              onClick={nextTutorial}
+              onClick={() => {
+                captureCompletionEvent('tutorial_completion_next_clicked', {
+                  nextTutorialId: tutorialDefinitions[nextIndex]?.id,
+                  nextTutorialTitle,
+                });
+                nextTutorial();
+              }}
               className="h-9 w-full text-xs font-medium"
             >
               Next: {nextTutorialTitle}
@@ -157,6 +176,7 @@ export function TutorialComplete() {
             <Button
               variant="outline"
               onClick={() => {
+                captureCompletionEvent('tutorial_completion_keep_editing_clicked');
                 setShowCompleteModal(false);
                 exitTutorial();
               }}
@@ -169,6 +189,7 @@ export function TutorialComplete() {
             <Button
               variant="secondary"
               onClick={() => {
+                captureCompletionEvent('tutorial_completion_dashboard_clicked');
                 exitTutorial();
                 router.replace('/dashboard');
               }}

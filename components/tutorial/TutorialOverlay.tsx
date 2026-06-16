@@ -7,6 +7,7 @@ import { useTutorialStore } from '@/store/tutorial-store';
 import { useEditorStore } from '@/store/editor';
 import { TutorialTaskItem } from './TutorialTaskItem';
 import { tutorialDefinitions } from '@/lib/tutorial-definitions';
+import posthog from 'posthog-js';
 
 export function TutorialOverlay() {
   const isActive = useTutorialStore((s) => s.isActive);
@@ -53,16 +54,34 @@ export function TutorialOverlay() {
   const totalTasks = currentTutorial.tasks.length;
   const completedCount = currentTutorial.tasks.filter((t) => completedTasks[t.id]).length;
   const progressPercent = (completedCount / totalTasks) * 100;
+  const displayOrder = tutorialDefinitions.findIndex((t) => t.id === activeTutorialId) + 1;
 
   const isFirstTutorial = tutorialDefinitions[0].id === activeTutorialId;
   const isLastTutorial = tutorialDefinitions[tutorialDefinitions.length - 1].id === activeTutorialId;
   const isCurrentTutorialFullyCompleted = completedCount === totalTasks;
 
+  const captureTutorialEvent = (event: string, extra?: Record<string, unknown>) => {
+    posthog.capture(event, {
+      tutorialId: activeTutorialId,
+      tutorialTitle: currentTutorial.title,
+      displayOrder,
+      taskIndex: activeTaskIndex,
+      taskLabel: currentTutorial.tasks[activeTaskIndex]?.label,
+      completedTasks: completedCount,
+      totalTasks,
+      progressPercent: Math.round(progressPercent),
+      ...extra,
+    });
+  };
+
   if (isMinimized) {
     return (
       <div className="absolute top-4 left-4 z-40 pointer-events-auto">
         <button
-          onClick={() => setIsMinimized(false)}
+          onClick={() => {
+            captureTutorialEvent('tutorial_overlay_restored');
+            setIsMinimized(false);
+          }}
           className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar px-3 py-2 text-xs font-medium text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-accent"
         >
           <BookOpen className="h-4 w-4 text-muted-foreground" />
@@ -85,14 +104,20 @@ export function TutorialOverlay() {
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={() => setIsMinimized(true)}
+            onClick={() => {
+              captureTutorialEvent('tutorial_overlay_minimized');
+              setIsMinimized(true);
+            }}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             title="Minimize tutorial"
           >
             <Minimize2 className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={exitTutorial}
+            onClick={() => {
+              captureTutorialEvent('tutorial_exit_clicked');
+              exitTutorial();
+            }}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             title="Exit tutorial"
           >
@@ -145,7 +170,10 @@ export function TutorialOverlay() {
 
       <div className="flex shrink-0 items-center justify-between border-t border-sidebar-border px-3 py-2.5">
         <button
-          onClick={exitTutorial}
+          onClick={() => {
+            captureTutorialEvent('tutorial_exit_clicked');
+            exitTutorial();
+          }}
           className="rounded px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
         >
           Exit
@@ -155,7 +183,10 @@ export function TutorialOverlay() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={previousTutorial}
+            onClick={() => {
+              captureTutorialEvent('tutorial_previous_clicked');
+              previousTutorial();
+            }}
             disabled={isFirstTutorial}
             className="h-7 w-7 rounded-md"
             title="Previous tutorial"
@@ -164,13 +195,16 @@ export function TutorialOverlay() {
           </Button>
 
           <span className="text-[10px] font-semibold text-muted-foreground px-1">
-            {tutorialDefinitions.findIndex((t) => t.id === activeTutorialId) + 1} / {tutorialDefinitions.length}
+            {displayOrder} / {tutorialDefinitions.length}
           </span>
 
           <Button
             variant="ghost"
             size="icon"
-            onClick={nextTutorial}
+            onClick={() => {
+              captureTutorialEvent('tutorial_next_clicked');
+              nextTutorial();
+            }}
             disabled={isLastTutorial || !isCurrentTutorialFullyCompleted}
             className="h-7 w-7 rounded-md"
             title="Next tutorial"

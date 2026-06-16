@@ -16,7 +16,7 @@ export interface TutorialState {
 }
 
 export interface TutorialActions {
-  startTutorial: (tutorialId: string) => void;
+  startTutorial: (tutorialId: string, source?: 'launcher' | 'url' | 'next' | 'previous') => void;
   completeTask: (taskId: string) => void;
   nextTutorial: () => void;
   previousTutorial: () => void;
@@ -195,7 +195,7 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
     return tutorial.tasks[activeTaskIndex];
   },
 
-  startTutorial: (tutorialId: string) => {
+  startTutorial: (tutorialId: string, source: 'launcher' | 'url' | 'next' | 'previous' = 'launcher') => {
     const tutorial = tutorialDefinitions.find((t) => t.id === tutorialId);
     if (!tutorial) return;
 
@@ -222,7 +222,13 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
     });
     saveStoredSession(get());
 
-    posthog.capture('tutorial_started', { tutorialId });
+    posthog.capture('tutorial_started', {
+      tutorialId,
+      tutorialTitle: tutorial.title,
+      totalTasks: tutorial.tasks.length,
+      displayOrder: tutorialDefinitions.findIndex((t) => t.id === tutorialId) + 1,
+      source,
+    });
   },
 
   completeTask: (taskId: string) => {
@@ -258,7 +264,12 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
       });
       saveStoredSession(get());
 
-      posthog.capture('tutorial_completed', { tutorialId: activeTutorialId });
+      posthog.capture('tutorial_completed', {
+        tutorialId: activeTutorialId,
+        tutorialTitle: tutorial.title,
+        totalTasks: tutorial.tasks.length,
+        displayOrder: tutorialDefinitions.findIndex((t) => t.id === activeTutorialId) + 1,
+      });
     } else {
       // Move to next task
       set({
@@ -269,8 +280,13 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
 
       posthog.capture('tutorial_step_completed', {
         tutorialId: activeTutorialId,
+        tutorialTitle: tutorial.title,
         taskIndex: activeTaskIndex,
         taskId,
+        taskLabel: task.label,
+        manualComplete: task.manualComplete ?? false,
+        totalTasks: tutorial.tasks.length,
+        completedTasks: nextIndex,
       });
     }
   },
@@ -286,7 +302,7 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
     }
 
     const nextTutorialId = tutorialDefinitions[currentIndex + 1].id;
-    get().startTutorial(nextTutorialId);
+    get().startTutorial(nextTutorialId, 'next');
   },
 
   previousTutorial: () => {
@@ -300,7 +316,7 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
     }
 
     const prevTutorialId = tutorialDefinitions[currentIndex - 1].id;
-    get().startTutorial(prevTutorialId);
+    get().startTutorial(prevTutorialId, 'previous');
   },
 
   exitTutorial: () => {
@@ -313,7 +329,12 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
       if (!isFinished) {
         posthog.capture('tutorial_abandoned', {
           tutorialId: activeTutorialId,
-          progress: `${activeTaskIndex}/${totalTasks}`,
+          tutorialTitle: tutorial?.title,
+          taskIndex: activeTaskIndex,
+          taskLabel: tutorial?.tasks[activeTaskIndex]?.label,
+          completedTasks: activeTaskIndex,
+          totalTasks,
+          progressPercent: totalTasks > 0 ? Math.round((activeTaskIndex / totalTasks) * 100) : 0,
         });
       }
     }
@@ -330,6 +351,7 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
   },
 
   resetProgress: () => {
+    const previousCompleted = get().completedTutorials;
     const storage = getStorage();
     if (storage) {
       try {
@@ -341,6 +363,11 @@ export const useTutorialStore = create<TutorialState & TutorialActions>((set, ge
     removeStoredSession();
     set({
       completedTutorials: [],
+    });
+
+    posthog.capture('tutorial_progress_reset', {
+      previouslyCompletedCount: previousCompleted.length,
+      previouslyCompletedTutorials: previousCompleted,
     });
   },
 

@@ -1,11 +1,13 @@
 'use client';
 
+import { useEffect } from 'react';
 import { X, Play, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTutorialStore } from '@/store/tutorial-store';
 import { tutorialDefinitions } from '@/lib/tutorial-definitions';
 import { cn } from '@/lib/utils';
 import { useRouter, usePathname } from 'next/navigation';
+import posthog from 'posthog-js';
 
 interface TutorialLauncherProps {
   onClose?: () => void;
@@ -21,20 +23,55 @@ export function TutorialLauncher({ onClose }: TutorialLauncherProps) {
   const pathname = usePathname();
   const router = useRouter();
 
+  useEffect(() => {
+    if (showLauncher) {
+      posthog.capture('tutorial_launcher_opened', {
+        totalTutorials: tutorialDefinitions.length,
+        completedTutorials: completedTutorials.length,
+        currentPath: pathname,
+      });
+    }
+  }, [showLauncher, completedTutorials.length, pathname]);
+
   if (!showLauncher) return null;
 
   const handleClose = () => {
+    posthog.capture('tutorial_launcher_closed', {
+      totalTutorials: tutorialDefinitions.length,
+      completedTutorials: completedTutorials.length,
+      currentPath: pathname,
+    });
     setLauncherOpen(false);
     if (onClose) onClose();
   };
 
   const handleStart = (id: string) => {
+    const tutorial = tutorialDefinitions.find((t) => t.id === id);
+    const displayOrder = tutorialDefinitions.findIndex((t) => t.id === id) + 1;
+    const isRestart = tutorial ? completedTutorials.includes(tutorial.id) : false;
+
+    posthog.capture('tutorial_start_clicked', {
+      tutorialId: id,
+      tutorialTitle: tutorial?.title,
+      displayOrder,
+      isRestart,
+      currentPath: pathname,
+    });
+
     if (pathname !== '/editor/tutorial') {
       setLauncherOpen(false);
       router.push(`/editor/tutorial?start=${id}`);
     } else {
-      startTutorial(id);
+      startTutorial(id, 'launcher');
     }
+  };
+
+  const handleResetProgress = () => {
+    posthog.capture('tutorial_reset_progress_clicked', {
+      completedTutorials: completedTutorials.length,
+      currentPath: pathname,
+    });
+    resetProgress();
   };
 
   return (
@@ -115,7 +152,7 @@ export function TutorialLauncher({ onClose }: TutorialLauncherProps) {
         <div className="flex shrink-0 items-center justify-between border-t border-border px-5 py-3">
           {completedTutorials.length > 0 ? (
             <button
-              onClick={resetProgress}
+              onClick={handleResetProgress}
               className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <RotateCcw className="w-3 h-3" />

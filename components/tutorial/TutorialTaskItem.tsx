@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { TutorialTask } from '@/lib/tutorial-definitions';
 import { useEditorStore } from '@/store/editor';
 import { Button } from '@/components/ui/button';
+import posthog from 'posthog-js';
 
 interface TutorialTaskItemProps {
   task: TutorialTask;
@@ -59,13 +60,18 @@ export function TutorialTaskItem({ task, isActive, isCompleted, isLastTask = fal
 
     const timer = setTimeout(() => {
       setShowHintButton(true);
+      posthog.capture('tutorial_hint_shown', {
+        taskId: task.id,
+        taskLabel: task.label,
+        manualComplete: task.manualComplete ?? false,
+      });
     }, 15000); // 15 seconds
 
     return () => {
       cancelAnimationFrame(resetFrameId);
       clearTimeout(timer);
     };
-  }, [isActive, isCompleted, task.hint, task.id]);
+  }, [isActive, isCompleted, task.hint, task.id, task.label, task.manualComplete]);
 
   return (
     <div
@@ -145,6 +151,12 @@ export function TutorialTaskItem({ task, isActive, isCompleted, isLastTask = fal
                   onClick={(e) => {
                     e.stopPropagation();
                     setRevealHint(true);
+                    posthog.capture('tutorial_hint_revealed', {
+                      taskId: task.id,
+                      taskLabel: task.label,
+                      manualComplete: task.manualComplete ?? false,
+                      autoShown: showHintButton,
+                    });
                   }}
                   className={cn(
                     'inline-flex items-center gap-1 text-[11px] font-medium transition-colors duration-150',

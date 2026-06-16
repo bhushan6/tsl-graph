@@ -17,7 +17,7 @@ function TutorialPageContent() {
     useEffect(() => {
         const startId = searchParams.get('start');
         if (startId) {
-            startTutorial(startId);
+            startTutorial(startId, 'url');
         } else if (!hasStoredActiveTutorial()) {
             // Automatically open the tutorial welcome/launcher screen on mount
             setLauncherOpen(true);
