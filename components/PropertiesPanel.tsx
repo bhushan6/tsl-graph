@@ -2,6 +2,7 @@
 
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editor';
+import { useShallow } from 'zustand/react/shallow';
 import { registry } from '@/lib/registry';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
 import { MATERIAL_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_INPUT_RAW_TEXTURE_OUTPUTS } from '@/lib/nodes';
@@ -96,6 +97,11 @@ const LOOP_COMPARE_OPTIONS = [
 
 function useGraphEdgesSnapshot() {
     return useEditorStore((s) => s.edges);
+}
+
+function useGraphNodesSnapshot() {
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
+    return useMemo(() => useEditorStore.getState().nodes, [graphStructureVersion]);
 }
 
 interface AnchorNodePortEditorProps {
@@ -615,7 +621,6 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setUniformType = useEditorStore((s) => s.setUniformType);
     const selectSingleNode = useEditorStore((s) => s.selectSingleNode);
-    const nodes = useEditorStore((s) => s.nodes);
     const { setCenter, getZoom } = useReactFlow<AppNode>();
 
     const uniformKind = getUniformKindFromNode(node);
@@ -627,6 +632,7 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
             event.preventDefault();
             event.stopPropagation();
             selectSingleNode(node.id);
+            const nodes = useEditorStore.getState().nodes;
             const absPosition = getAbsolutePosition(node, nodes);
             const { width, height } = getNodeDimensions(node);
             setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
@@ -634,7 +640,7 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
                 duration: 300,
             });
         },
-        [node, nodes, selectSingleNode, setCenter, getZoom]
+        [node, selectSingleNode, setCenter, getZoom]
     );
 
     // console.log({ node });
@@ -765,7 +771,7 @@ function GlobalUniformListItem({ entry, value }: { entry: GlobalContextEntry; va
 }
 
 function UniformsPanelContent() {
-    const nodes = useEditorStore((s) => s.nodes);
+    const nodes = useGraphNodesSnapshot();
     const globals = useEditorStore((s) => s.globals);
     const uniforms = useMemo(() => {
         const nodeUniforms = nodes
@@ -1069,7 +1075,7 @@ function GlobalRefPanel({ node }: { node: AppNode }) {
 }
 
 function LocalSetPanel({ node }: { node: AppNode }) {
-    const nodes = useEditorStore((s) => s.nodes);
+    const nodes = useGraphNodesSnapshot();
     const edges = useGraphEdgesSnapshot();
     const nodesById = useMemo(() => new Map(nodes.map((candidate) => [candidate.id, candidate])), [nodes]);
     const usageCount = useMemo(
@@ -1108,7 +1114,7 @@ function LocalSetPanel({ node }: { node: AppNode }) {
 }
 
 function LocalGetPanel({ node }: { node: AppNode }) {
-    const nodes = useEditorStore((s) => s.nodes);
+    const nodes = useGraphNodesSnapshot();
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const edges = useGraphEdgesSnapshot();
     const nodesById = useMemo(() => new Map(nodes.map((candidate) => [candidate.id, candidate])), [nodes]);
@@ -1334,9 +1340,19 @@ function CommentNodePanel({ node }: { node: AppNode }) {
 
 function PropertiesPanelContent() {
     const selectedNodeId = useEditorStore((s) => s.selectedNodeId);
-    // Subscribe to the selected node reactively
-    const node = useEditorStore((s) =>
-        s.nodes.find((n) => n.id === s.selectedNodeId)
+    // Position-only updates during dragging should not rebuild the properties UI.
+    const node = useEditorStore(
+        useShallow((s) => {
+            const selected = s.nodes.find((n) => n.id === s.selectedNodeId);
+            return selected
+                ? {
+                    id: selected.id,
+                    type: selected.type,
+                    parentId: selected.parentId,
+                    data: selected.data,
+                } as AppNode
+                : null;
+        })
     );
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setNodeActiveInput = useEditorStore((s) => s.setNodeActiveInput);
@@ -1651,7 +1667,7 @@ function PropertiesPanelContent() {
                                     const hintText = hints.length > 0 ? ` • ${hints.join(' • ')}` : '';
 
                                     return (
-                                        <div key={key} className="rounded-md border border-sidebar-border/60 px-2 py-1.5">
+                                        <div key={key} className="rounded-md border border-sidebar-border/60 px-2 py-1.5" data-tutorial-target={`property-input-${key}`}>
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <div className="text-xs font-medium text-sidebar-foreground truncate">
@@ -2089,6 +2105,7 @@ function NumberInput({
 function PropertiesPanelComponent() {
     return (
         <div
+            data-tutorial-target="properties-panel"
             className={cn(
                 'pointer-events-auto w-72 shrink flex-1 min-h-0',
                 'bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg',

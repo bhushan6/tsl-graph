@@ -12,23 +12,38 @@ import type { NodeProps } from '@xyflow/react';
 
 type LocalPortalNodeProps = NodeProps<AppNode>;
 
+const HANDLE_SEPARATOR = "\u001f";
+const HANDLE_GROUP_SEPARATOR = "\u001e";
+
+const serializeHandleSet = (handles: string[]) => handles.sort().join(HANDLE_SEPARATOR);
+
+const deserializeHandleSet = (value: string) =>
+    new Set(value ? value.split(HANDLE_SEPARATOR).filter(Boolean) : []);
+
 function LocalPortalNodeComponent({ id, data, selected }: LocalPortalNodeProps) {
-    const edges = useEditorStore((s) => s.edges);
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
     const isLocalSet = isLocalSetType(data.type);
     const isLocalGet = isLocalGetType(data.type);
 
-    const connectedInputs = useMemo(() => {
-        return new Set(
-            edges.filter((edge) => edge.target === id).map((edge) => edge.targetHandle)
-        );
-    }, [edges, id]);
-    const connectedOutputs = useMemo(() => {
-        return new Set(
-            edges.filter((edge) => edge.source === id).map((edge) => edge.sourceHandle)
-        );
-    }, [edges, id]);
+    const connectedHandlesKey = useEditorStore(useCallback((state) => {
+        const inputHandles: string[] = [];
+        const outputHandles: string[] = [];
+        for (const edge of state.edges) {
+            if (edge.target === id && edge.targetHandle) {
+                inputHandles.push(edge.targetHandle);
+            }
+            if (edge.source === id && edge.sourceHandle) {
+                outputHandles.push(edge.sourceHandle);
+            }
+        }
+        return `${serializeHandleSet(inputHandles)}${HANDLE_GROUP_SEPARATOR}${serializeHandleSet(outputHandles)}`;
+    }, [id]));
+
+    const [connectedInputs, connectedOutputs] = useMemo(() => {
+        const [inputPart = '', outputPart = ''] = connectedHandlesKey.split(HANDLE_GROUP_SEPARATOR);
+        return [deserializeHandleSet(inputPart), deserializeHandleSet(outputPart)];
+    }, [connectedHandlesKey]);
 
     const localSourceIdValue = data.values?.localSourceId;
     const localSourceId = isLocalGet && typeof localSourceIdValue === 'string' && localSourceIdValue.length > 0
@@ -161,4 +176,13 @@ function LocalPortalNodeComponent({ id, data, selected }: LocalPortalNodeProps) 
     );
 }
 
-export const LocalPortalNode = memo(LocalPortalNodeComponent);
+function areLocalPortalNodePropsEqual(prev: LocalPortalNodeProps, next: LocalPortalNodeProps) {
+    return (
+        prev.id === next.id &&
+        prev.type === next.type &&
+        prev.selected === next.selected &&
+        prev.data === next.data
+    );
+}
+
+export const LocalPortalNode = memo(LocalPortalNodeComponent, areLocalPortalNodePropsEqual);

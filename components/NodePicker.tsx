@@ -40,14 +40,15 @@ interface CategoryGroupProps {
     count?: number;
     defaultOpen?: boolean;
     forceOpen?: boolean;
+    tutorialTarget?: string;
 }
 
-function CategoryGroup({ title, children, count, defaultOpen = false, forceOpen = false }: CategoryGroupProps) {
+function CategoryGroup({ title, children, count, defaultOpen = false, forceOpen = false, tutorialTarget }: CategoryGroupProps) {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const show = forceOpen || isOpen;
 
     return (
-        <SidebarGroup className="py-0">
+        <SidebarGroup className="py-0" data-tutorial-target={tutorialTarget}>
             <SidebarGroupLabel
                 className="w-full justify-between hover:bg-sidebar-accent/50 cursor-pointer h-8 group/label"
                 onClick={() => setIsOpen(!isOpen)}
@@ -81,14 +82,17 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
     const addNode = useEditorStore((s) => s.addNode);
     const editorMode = useEditorStore((s) => s.editorMode);
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
-    const nodes = useEditorStore((s) => s.nodes);
-    const edges = useEditorStore((s) => s.edges);
+    const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
     const subgraphs = useEditorStore((s) => s.subgraphs);
     const codeNodes = useEditorStore((s) => s.codeNodes);
     const globals = useEditorStore((s) => s.globals);
     const { screenToFlowPosition } = useReactFlow();
     const nodesByCategory = registry.byCategory();
     const [searchQuery, setSearchQuery] = useState('');
+    const { nodes, edges } = useMemo(() => {
+        const state = useEditorStore.getState();
+        return { nodes: state.nodes, edges: state.edges };
+    }, [activeRootGraph, editorMode, graphStructureVersion]);
 
     // Check which anchor nodes are present in the current graph
     const hasInputAnchor = useMemo(() =>
@@ -586,7 +590,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
     );
 
     return (
-        <div className="pointer-events-auto nowheel bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg w-52 h-full flex flex-col overflow-hidden">
+        <div data-tutorial-target="node-picker" className="pointer-events-auto nowheel bg-sidebar text-sidebar-foreground border border-sidebar-border rounded-xl shadow-lg w-52 h-full flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-3 py-2 border-b border-sidebar-border shrink-0 space-y-2">
                 <div className="flex items-center justify-between">
@@ -623,6 +627,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                             (category === 'Locals' ? localPickerEntries.length : 0)
                         }
                         forceOpen={!!searchQuery}
+                        tutorialTarget={`node-category-${category}`}
                     >
                         <SidebarMenu>
                             {category === 'Globals' && globalPickerEntries.map((entry) => (
@@ -650,6 +655,7 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                                     <button
                                         onClick={() => handleAddNode(node.type)}
                                         className={menuButtonStyles}
+                                        data-tutorial-target={`node-item-${node.type}`}
                                     >
                                         {node.label}
                                     </button>

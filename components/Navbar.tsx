@@ -1,6 +1,6 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2, BookOpen } from 'lucide-react';
+import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2, BookOpen, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -25,6 +25,7 @@ import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
 import { HelpDialog } from '@/components/HelpDialog';
 import Link from 'next/link';
+import { useTutorialStore } from '@/store/tutorial-store';
 import {
     DEFAULT_EDITOR_HOST_CAPABILITIES,
     normalizeEnabledGraphs,
@@ -49,17 +50,15 @@ export function Navbar({
 }: NavbarProps) {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const {
-        saveToJSON,
-        loadFromJSON,
-        clearGraph,
-        nodes,
-        isSaving,
-        isDirty,
-        activeRootGraph,
-        setActiveRootGraph,
-        editorMode,
-    } = useEditorStore();
+    const saveToJSON = useEditorStore((s) => s.saveToJSON);
+    const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
+    const clearGraph = useEditorStore((s) => s.clearGraph);
+    const nodeCount = useEditorStore((s) => s.nodes.length);
+    const isSaving = useEditorStore((s) => s.isSaving);
+    const isDirty = useEditorStore((s) => s.isDirty);
+    const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
+    const setActiveRootGraph = useEditorStore((s) => s.setActiveRootGraph);
+    const editorMode = useEditorStore((s) => s.editorMode);
 
     const hostConfig = useEditorHostConfig();
     const projectService = hostConfig?.services?.project;
@@ -208,9 +207,9 @@ export function Navbar({
 
     // Initial check before showing dialog
     const handleClearClick = useCallback(() => {
-        if (nodes.length === 0) return;
+        if (nodeCount === 0) return;
         setShowClearDialog(true);
-    }, [nodes.length]);
+    }, [nodeCount]);
 
     // Actual clear action
     const handleConfirmClear = useCallback(() => {
@@ -307,7 +306,7 @@ export function Navbar({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={handleClearClick}
-                            disabled={nodes.length === 0}
+                            disabled={nodeCount === 0}
                             className="gap-2 text-destructive focus:text-destructive"
                         >
                             <Trash2 className="w-4 h-4" />
@@ -362,6 +361,15 @@ export function Navbar({
                 </Button>
 
                 <FeedbackDialog />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    title="Interactive Tutorials"
+                    onClick={() => useTutorialStore.getState().setLauncherOpen(true)}
+                >
+                    <GraduationCap className="h-4 w-4" />
+                </Button>
                 <HelpDialog />
                 <ThemeToggle />
             </div>

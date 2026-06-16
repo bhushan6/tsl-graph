@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { Node } from '@xyflow/react';
 import { compileGraph, getRequiredImports, getRequiredImportsByModule } from '../compiler';
 import { registry } from '../registry';
-import { TSLNodeData, NodeType } from '@/lib/types';
+import { TSLNodeData, NodeType, type NodeDef } from '@/lib/types';
 import { utilsNodes } from './utils';
 
 const createNode = (id: string, type: string, data: Partial<TSLNodeData> = {}): Node<TSLNodeData> => ({
@@ -78,5 +78,32 @@ describe('Utils Blend/Filter Nodes', () => {
 
         expect(code).toContain('const _node0 = hslToRgb(120, 0.5, 0.4);');
         expect(byModule.get('@/lib/tsl-utils')).toEqual(['hslToRgb']);
+    });
+
+    it('compiles polarUV via tsl-utils helper and exposes radius/angle swizzles', () => {
+        const nodes = [
+            createNode('polar', 'utils/polarUV', {
+                values: {
+                    uv: [0.5, 0.5],
+                    center: [0.5, 0.5],
+                },
+            }),
+        ];
+
+        const code = compileGraph(nodes, []);
+        const groups = getRequiredImportsByModule(nodes);
+        const byModule = new Map(groups.map((group) => [group.from, group.imports]));
+
+        expect(code).toContain('const _node0 = polarUV(vec2(0.5, 0.5), vec2(0.5, 0.5));');
+        expect(byModule.get('@/lib/tsl-utils')).toEqual(['polarUV']);
+    });
+
+    it('requires Fresnel normal and view direction as connections', () => {
+        const fresnel = utilsNodes.find((node) => node.type === 'utils/fresnel') as NodeDef | undefined;
+
+        expect(fresnel?.inputs?.normal?.connectionOnly).toBe(true);
+        expect(fresnel?.inputs?.viewDir?.connectionOnly).toBe(true);
+        expect(fresnel?.inputs?.normal?.default).toBeUndefined();
+        expect(fresnel?.inputs?.viewDir?.default).toBeUndefined();
     });
 });

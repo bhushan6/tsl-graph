@@ -13,7 +13,9 @@ const LOOP_MODE_OPTIONS = [
     { label: 'Condition', value: 'condition' },
 ];
 
-function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
+type GroupNodeProps = NodeProps<AppNode>;
+
+function GroupNode({ id, data, selected }: GroupNodeProps) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setLoopMode = useEditorStore((s) => s.setLoopMode);
     const hoveredGroupId = useEditorStore((s) => s.hoveredGroupId);
@@ -161,4 +163,13 @@ function GroupNode({ id, data, selected }: NodeProps<AppNode>) {
     );
 }
 
-export default memo(GroupNode);
+function areGroupNodePropsEqual(prev: GroupNodeProps, next: GroupNodeProps) {
+    return (
+        prev.id === next.id &&
+        prev.type === next.type &&
+        prev.selected === next.selected &&
+        prev.data === next.data
+    );
+}
+
+export default memo(GroupNode, areGroupNodePropsEqual);

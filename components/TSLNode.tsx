@@ -50,6 +50,14 @@ import {
 
 type TSLNodeProps = NodeProps<AppNode>;
 
+const HANDLE_SEPARATOR = "\u001f";
+const HANDLE_GROUP_SEPARATOR = "\u001e";
+
+const serializeHandleSet = (handles: string[]) => handles.sort().join(HANDLE_SEPARATOR);
+
+const deserializeHandleSet = (value: string) =>
+  new Set(value ? value.split(HANDLE_SEPARATOR).filter(Boolean) : []);
+
 const categoryColors: Record<string, string> = {
   Math: "border-red-200 bg-red-100 dark:bg-red-900/20",
   Constants: "border-violet-500 bg-violet-100 dark:bg-violet-900/20",
@@ -85,11 +93,6 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const toggleDebugPreviewActive = useEditorStore(
     (s) => s.toggleDebugPreviewActive,
   );
-  const edges = useEditorStore((s) => s.edges);
-  const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
-  const subgraphs = useEditorStore((s) => s.subgraphs);
-  const codeNodes = useEditorStore((s) => s.codeNodes);
-  const globals = useEditorStore((s) => s.globals);
   const liveNodeData = useEditorStore(
     useCallback(
       (state) => state.nodes.find((node) => node.id === id)?.data,
@@ -113,17 +116,26 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   );
   const showDebugPreviewSlot = isDebugPreviewActive;
 
-  const connectedInputs = useMemo(() => {
-    return new Set(
-      edges.filter((e) => e.target === id).map((e) => e.targetHandle),
-    );
-  }, [edges, id]);
+  const connectedHandlesKey = useEditorStore(
+    useCallback((state) => {
+      const inputHandles: string[] = [];
+      const outputHandles: string[] = [];
+      for (const edge of state.edges) {
+        if (edge.target === id && edge.targetHandle) {
+          inputHandles.push(edge.targetHandle);
+        }
+        if (edge.source === id && edge.sourceHandle) {
+          outputHandles.push(edge.sourceHandle);
+        }
+      }
+      return `${serializeHandleSet(inputHandles)}${HANDLE_GROUP_SEPARATOR}${serializeHandleSet(outputHandles)}`;
+    }, [id]),
+  );
 
-  const connectedOutputs = useMemo(() => {
-    return new Set(
-      edges.filter((e) => e.source === id).map((e) => e.sourceHandle),
-    );
-  }, [edges, id]);
+  const [connectedInputs, connectedOutputs] = useMemo(() => {
+    const [inputPart = "", outputPart = ""] = connectedHandlesKey.split(HANDLE_GROUP_SEPARATOR);
+    return [deserializeHandleSet(inputPart), deserializeHandleSet(outputPart)];
+  }, [connectedHandlesKey]);
 
   const storedNameValue = nodeData.values?.localName;
   const storedName = typeof storedNameValue === "string" ? storedNameValue : "";
@@ -164,9 +176,43 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   );
   const isPostInputNode = nodeType === "post/input";
   const isPostOutputNode = nodeType === "post/output";
+  const isSubgraphInput = nodeType === "subgraph/input";
+  const isSubgraphOutput = nodeType === "subgraph/output";
+  const isGlobalRef = nodeType === "global/ref";
+  const isAnchorNode = isSubgraphInput || isSubgraphOutput;
   const operations = Array.isArray(nodeData.operations)
     ? (nodeData.operations as MultiOp[])
     : [];
+  const selectedGlobalId =
+    typeof nodeData.values?.globalId === "string" ? nodeData.values.globalId : "";
+  const subgraphDef = useEditorStore(
+    useCallback(
+      (state) => (isSubgraphInstance ? state.subgraphs[nodeType] : undefined),
+      [isSubgraphInstance, nodeType],
+    ),
+  );
+  const codeNode = useEditorStore(
+    useCallback(
+      (state) => (isCodeNodeInstance ? state.codeNodes[nodeType] : undefined),
+      [isCodeNodeInstance, nodeType],
+    ),
+  );
+  const globalEntry = useEditorStore(
+    useCallback(
+      (state) =>
+        isGlobalRef && selectedGlobalId
+          ? state.globals.find((entry) => entry.id === selectedGlobalId)
+          : undefined,
+      [isGlobalRef, selectedGlobalId],
+    ),
+  );
+  const shouldInferOutputTypes = nodeType === "math/multiOp" || nodeType.startsWith("math/");
+  const outputTypeVersion = useEditorStore(
+    useCallback(
+      (state) => (shouldInferOutputTypes ? state.graphStructureVersion : 0),
+      [shouldInferOutputTypes],
+    ),
+  );
 
   // For subgraph and code node instances, we don't need a registry definition
   // We'll use the dynamicPorts from node data
@@ -178,19 +224,12 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     );
   }
 
-  // Check if this is a subgraph anchor node with dynamic ports
-  const isSubgraphInput = nodeType === "subgraph/input";
-  const isSubgraphOutput = nodeType === "subgraph/output";
-  const isGlobalRef = nodeType === "global/ref";
-  const isAnchorNode = isSubgraphInput || isSubgraphOutput;
-
   // Get ports - for anchor nodes and subgraph instances, use dynamic ports from data
   let inputs: Record<string, Port> = {};
   let outputs: Record<string, Port> = {};
   let nodeLabel = def?.label || "Custom Node";
 
   if (isSubgraphInstance) {
-    const subgraphDef = subgraphs[nodeType];
     const ports = subgraphDef
       ? [...(subgraphDef.inputs || []), ...(subgraphDef.outputs || [])]
       : nodeData.dynamicPorts || [];
@@ -211,7 +250,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     const namePart = nodeType.replace("custom/", "").split("-")[0];
     // Try to get dynamic name from store, fallback to parsed name from type
     nodeLabel =
-      subgraphs[nodeType]?.name ||
+      subgraphDef?.name ||
       namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, " ");
   } else if (isCodeNodeInstance && nodeData.dynamicPorts) {
     // Code node instance: dynamicPorts contains inputs (in_*) and output (out)
@@ -223,8 +262,6 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
         outputs[port.id] = { label: port.label, type: port.type as TSLType };
       }
     }
-    // Get name from codeNodes store
-    const codeNode = codeNodes[nodeType];
     if (codeNode) {
       nodeLabel = codeNode.name;
     } else {
@@ -234,8 +271,6 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
         namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, " ");
     }
   } else if (isGlobalRef) {
-    const selectedGlobalId = nodeData.values?.globalId;
-    const globalEntry = globals.find((g) => g.id === selectedGlobalId);
     const outputLabel = globalEntry?.name || "Global";
     const outputType = (globalEntry?.type as TSLType) || "any";
     outputs = {
@@ -268,10 +303,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   }
 
   const inferredOutputTypes = new Map<string, TSLType>();
-  if (
-    (nodeType === "math/multiOp" || nodeType.startsWith("math/")) &&
-    graphStructureVersion >= 0
-  ) {
+  if (shouldInferOutputTypes && outputTypeVersion >= 0) {
     const state = useEditorStore.getState();
     const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
     for (const [handleId, output] of Object.entries(outputs)) {
@@ -856,4 +888,13 @@ function isLikelyImageUrl(value: string): boolean {
   return /\.(png|jpe?g|webp|gif|bmp|svg)$/.test(clean);
 }
 
-export const TSLNode = memo(TSLNodeComponent);
+function areTSLNodePropsEqual(prev: TSLNodeProps, next: TSLNodeProps) {
+  return (
+    prev.id === next.id &&
+    prev.type === next.type &&
+    prev.selected === next.selected &&
+    prev.data === next.data
+  );
+}
+
+export const TSLNode = memo(TSLNodeComponent, areTSLNodePropsEqual);

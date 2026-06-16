@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import "./globals.css";
 import { ReactScan } from "@/components/react-scan";
@@ -47,9 +48,11 @@ export default function RootLayout({
         <ConvexClientProvider>
           <NuqsAdapter>
             <ThemeProvider>
-              {children}
-              <ReactScan />
-              <Toaster position="top-center" richColors />
+              <TooltipProvider>
+                {children}
+                <ReactScan />
+                <Toaster position="top-center" richColors />
+              </TooltipProvider>
             </ThemeProvider>
           </NuqsAdapter>
         </ConvexClientProvider>

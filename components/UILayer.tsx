@@ -95,10 +95,21 @@ const BottomBar = memo(({ children, className = '' }: SlotProps) => (
 ));
 BottomBar.displayName = 'BottomBar';
 
+const CenterPanel = memo(({ children, className = '' }: SlotProps) => (
+    <div
+        style={{ gridArea: 'center' }}
+        className={`pointer-events-none flex flex-col items-start justify-start h-full min-h-0 relative ${className}`}
+    >
+        {children}
+    </div>
+));
+CenterPanel.displayName = 'CenterPanel';
+
 // Compound component pattern
 export const UILayer = Object.assign(UILayerRoot, {
     TopBar,
     LeftPanel,
     RightPanel,
     BottomBar,
+    CenterPanel,
 });

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
@@ -49,6 +50,42 @@ export interface NumericScrubberProps
   scrubSensitivity?: number;
 }
 
+function getDecimalDigits(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+
+  const fixedText = value.toFixed(10);
+  const fraction = fixedText.split(".")[1];
+  return fraction ? fraction.replace(/0+$/, "").length : 0;
+}
+
+function getSuitableDecimalDigits(step: number | undefined, rawValue: number) {
+  return step !== undefined
+    ? getDecimalDigits(step)
+    : Math.max(getDecimalDigits(rawValue), 2);
+}
+
+function getSuitablePointerScale(step: number | undefined, rawValue: number) {
+  const base = Math.abs(step ?? rawValue);
+  return base === 0 ? 0.1 : Math.pow(10, Math.floor(Math.log10(base)) - 1);
+}
+
+function getStepForKey(step: number, e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return 0;
+
+  const scaledStep = step * (e.altKey ? 0.1 : 1) * (e.shiftKey ? 10 : 1);
+  return e.key === "ArrowUp" ? scaledStep : -scaledStep;
+}
+
+function formatNumber(value: number, decimals: number) {
+  if (!Number.isFinite(value)) return "0";
+  return value.toFixed(Math.max(Math.min(decimals, 20), 0));
+}
+
+interface GuideOrigin {
+  x: number;
+  y: number;
+}
+
 export const NumericScrubber = React.forwardRef<
   HTMLInputElement,
   NumericScrubberProps
@@ -62,7 +99,7 @@ export const NumericScrubber = React.forwardRef<
       step: stepProp,
       quantizeInput,
       className,
-      scrubSensitivity = 0.5,
+      scrubSensitivity,
       onBlur,
       onKeyDown,
       onPointerDown,
@@ -70,33 +107,33 @@ export const NumericScrubber = React.forwardRef<
     },
     ref
   ) => {
-    const step = stepProp ?? 1;
+    const keyStep = stepProp ?? 1;
     const shouldQuantizeInput =
-      quantizeInput ?? (stepProp !== undefined && Number.isInteger(step));
-    const inputStep =
-      stepProp === undefined ? undefined : (Number.isInteger(step) ? step : "any");
+      quantizeInput ?? (stepProp !== undefined && Number.isInteger(stepProp));
     const fallbackValue = React.useMemo(
       () => (Number.isFinite(min) ? min : 0),
       [min]
     );
-    const [inputValue, setInputValue] = React.useState<string>(() => String(value));
+    const decimals = React.useMemo(
+      () => getSuitableDecimalDigits(stepProp, value),
+      [stepProp, value]
+    );
+    const [inputValue, setInputValue] = React.useState<string>(() =>
+      formatNumber(value, decimals)
+    );
+    const [draggingDelta, setDraggingDelta] = React.useState<number | null>(null);
+    const [guideOrigin, setGuideOrigin] = React.useState<GuideOrigin | null>(null);
 
+    const wrapperRef = React.useRef<HTMLDivElement>(null);
     const inputRef = React.useRef<HTMLInputElement>(null);
+    const knobRef = React.useRef<HTMLDivElement>(null);
     React.useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
     const isDraggingRef = React.useRef(false);
     const isTypingRef = React.useRef(false);
-    const initialXRef = React.useRef(0);
     const initialValueRef = React.useRef(value);
     const internalValueRef = React.useRef(value);
-    const inputValueRef = React.useRef(String(value));
-
-    const decimals = React.useMemo(() => {
-      if (!Number.isFinite(step)) return 0;
-      const stepString = step.toString();
-      const decimalPart = stepString.split(".")[1];
-      return decimalPart ? decimalPart.length : 0;
-    }, [step]);
+    const inputValueRef = React.useRef(formatNumber(value, decimals));
 
     const clampValue = React.useCallback(
       (n: number) => Math.max(min, Math.min(n, max)),
@@ -105,12 +142,46 @@ export const NumericScrubber = React.forwardRef<
 
     const clampAndQuantize = React.useCallback(
       (n: number) => {
-        const quantized = step !== 0 ? Math.round(n / step) * step : n;
+        const quantized =
+          stepProp !== undefined && stepProp !== 0
+            ? Math.round(n / stepProp) * stepProp
+            : n;
         const clamped = Math.max(min, Math.min(quantized, max));
         return parseFloat(clamped.toFixed(decimals));
       },
-      [decimals, max, min, step]
+      [decimals, max, min, stepProp]
     );
+
+    const normalizeValue = React.useCallback(
+      (n: number, quantize = stepProp !== undefined) =>
+        quantize ? clampAndQuantize(n) : clampValue(n),
+      [clampAndQuantize, clampValue, stepProp]
+    );
+
+    // Refs for latest callback values – keeps document listeners stable
+    // across re-renders so they never go stale mid-scrub.
+    const onChangeRef = React.useRef(onChange);
+    const normalizeValueRef = React.useRef(normalizeValue);
+    const formatDecimalsRef = React.useRef(decimals);
+    const clampValueRef = React.useRef(clampValue);
+    const keyStepRef = React.useRef(keyStep);
+    const pointerScaleRef = React.useRef(
+      scrubSensitivity ?? getSuitablePointerScale(stepProp, value)
+    );
+
+    onChangeRef.current = onChange;
+    normalizeValueRef.current = normalizeValue;
+    formatDecimalsRef.current = decimals;
+    clampValueRef.current = clampValue;
+    keyStepRef.current = keyStep;
+    pointerScaleRef.current =
+      scrubSensitivity ?? getSuitablePointerScale(stepProp, internalValueRef.current);
+
+    const setDisplayValue = React.useCallback((nextValue: number) => {
+      const normalizedValue = formatNumber(nextValue, formatDecimalsRef.current);
+      inputValueRef.current = normalizedValue;
+      setInputValue(normalizedValue);
+    }, []);
 
     const parseInputValue = React.useCallback(
       (rawValue: string) => {
@@ -128,55 +199,60 @@ export const NumericScrubber = React.forwardRef<
           return fallbackValue;
         }
 
-        return shouldQuantizeInput ? clampAndQuantize(parsed) : clampValue(parsed);
+        return normalizeValue(parsed, shouldQuantizeInput);
       },
-      [clampAndQuantize, clampValue, fallbackValue, shouldQuantizeInput]
+      [fallbackValue, normalizeValue, shouldQuantizeInput]
     );
 
     const commitInputValue = React.useCallback(
       (rawValue: string, mode: "blur" | "enter") => {
         const nextValue = parseInputValue(rawValue);
-        const normalizedValue = String(nextValue);
         const previousValue = internalValueRef.current;
 
         isTypingRef.current = false;
         internalValueRef.current = nextValue;
-        inputValueRef.current = normalizedValue;
-        setInputValue(normalizedValue);
+        setDisplayValue(nextValue);
 
         if (!Object.is(previousValue, nextValue)) {
           onChange(nextValue, { mode });
         }
       },
-      [onChange, parseInputValue]
+      [onChange, parseInputValue, setDisplayValue]
     );
 
     const handlePointerMove = React.useCallback(
       (e: PointerEvent) => {
         if (!isDraggingRef.current) return;
 
-        const deltaX = e.clientX - initialXRef.current;
-        const nextValue = clampAndQuantize(
-          initialValueRef.current + deltaX * step * scrubSensitivity
+        e.preventDefault();
+        const knobElement = knobRef.current;
+        if (!knobElement) return;
+
+        const bounds = knobElement.getBoundingClientRect();
+        const pointerX = e.clientX - bounds.left;
+        const deltaX = pointerX - bounds.width / 2;
+        const nextValue = normalizeValueRef.current(
+          initialValueRef.current + deltaX * pointerScaleRef.current
         );
 
         if (Object.is(internalValueRef.current, nextValue)) {
           return;
         }
 
-        const normalizedValue = String(nextValue);
         isTypingRef.current = false;
         internalValueRef.current = nextValue;
-        inputValueRef.current = normalizedValue;
-        setInputValue(normalizedValue);
-        onChange(nextValue, { mode: "scrub" });
+        setDisplayValue(nextValue);
+        setDraggingDelta(nextValue - initialValueRef.current);
+        onChangeRef.current(nextValue, { mode: "scrub" });
       },
-      [clampAndQuantize, onChange, scrubSensitivity, step]
+      [setDisplayValue]
     );
 
     const handlePointerUp = React.useCallback(
       function handlePointerUpEvent() {
         isDraggingRef.current = false;
+        setDraggingDelta(null);
+        setGuideOrigin(null);
         document.removeEventListener("pointermove", handlePointerMove);
         document.removeEventListener("pointerup", handlePointerUpEvent);
       },
@@ -187,31 +263,35 @@ export const NumericScrubber = React.forwardRef<
       (e: React.PointerEvent<HTMLElement>) => {
         if (e.button !== 0) return;
 
+        e.preventDefault();
+        inputRef.current?.focus();
         isDraggingRef.current = true;
         isTypingRef.current = false;
-        initialXRef.current = e.clientX;
+        const wrapperRect = wrapperRef.current?.getBoundingClientRect();
+        if (wrapperRect) {
+          setGuideOrigin({
+            x: wrapperRect.left + 10,
+            y: wrapperRect.top + wrapperRect.height / 2,
+          });
+        }
 
         const parsedDraftValue = Number.parseFloat(inputValueRef.current);
         initialValueRef.current = Number.isNaN(parsedDraftValue)
           ? internalValueRef.current
-          : clampValue(parsedDraftValue);
+          : clampValueRef.current(parsedDraftValue);
+        setDraggingDelta(0);
 
         document.addEventListener("pointermove", handlePointerMove);
         document.addEventListener("pointerup", handlePointerUp);
       },
-      [clampValue, handlePointerMove, handlePointerUp]
+      [handlePointerMove, handlePointerUp]
     );
 
     const handleInputPointerDown = React.useCallback(
       (e: React.PointerEvent<HTMLInputElement>) => {
         onPointerDown?.(e);
-        if (e.defaultPrevented) {
-          return;
-        }
-
-        handlePointerDown(e);
       },
-      [handlePointerDown, onPointerDown]
+      [onPointerDown]
     );
 
     const handleInputChange = React.useCallback(
@@ -235,14 +315,31 @@ export const NumericScrubber = React.forwardRef<
     const handleInputKeyDown = React.useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
         onKeyDown?.(e);
-        if (e.defaultPrevented || e.key !== "Enter") {
+        if (e.defaultPrevented) {
           return;
         }
 
-        commitInputValue(inputValueRef.current, "enter");
-        e.currentTarget.blur();
+        if (e.key === "Enter") {
+          commitInputValue(inputValueRef.current, "enter");
+          e.currentTarget.blur();
+          return;
+        }
+
+        const stepDelta = getStepForKey(keyStepRef.current, e);
+        if (stepDelta === 0) {
+          return;
+        }
+
+        e.preventDefault();
+        const nextValue = normalizeValueRef.current(
+          internalValueRef.current + stepDelta
+        );
+        internalValueRef.current = nextValue;
+        isTypingRef.current = false;
+        setDisplayValue(nextValue);
+        onChangeRef.current(nextValue, { mode: "scrub" });
       },
-      [commitInputValue, onKeyDown]
+      [commitInputValue, onKeyDown, setDisplayValue]
     );
 
     React.useEffect(() => {
@@ -257,38 +354,89 @@ export const NumericScrubber = React.forwardRef<
         return;
       }
 
-      const normalizedValue = String(value);
       internalValueRef.current = value;
-      inputValueRef.current = normalizedValue;
-      setInputValue(normalizedValue);
-    }, [value]);
+      setDisplayValue(value);
+    }, [setDisplayValue, value]);
+
+    const guideOffset =
+      draggingDelta === null ? 0 : draggingDelta / pointerScaleRef.current;
+    const guideHeadOffset =
+      guideOffset + (guideOffset > 0 ? -1 : guideOffset < 0 ? 1 : 0);
+    const guideArrowOffset = Math.min(Math.max(-guideHeadOffset, -4), 4);
+    const formattedTooltip =
+      draggingDelta === null
+        ? ""
+        : formatNumber(internalValueRef.current, formatDecimalsRef.current);
+    const guideOverlay =
+      draggingDelta !== null && guideOrigin && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-50 flex items-center"
+              style={{
+                left: guideOrigin.x,
+                top: guideOrigin.y,
+                transform: "translateY(-50%)",
+              }}
+            >
+              <svg
+                className="absolute overflow-visible text-foreground/70"
+                width="1"
+                height="8"
+                viewBox="0 0 1 8"
+                style={{ transform: `translateX(${guideOffset}px)` }}
+              >
+                <path
+                  d={`M ${-guideOffset},4 L0,4`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeDasharray="1"
+                />
+                <path
+                  d={[
+                    `M ${guideHeadOffset - guideOffset + guideArrowOffset},0`,
+                    `L${guideHeadOffset - guideOffset},4`,
+                    `L${guideHeadOffset - guideOffset + guideArrowOffset},8`,
+                    `M 0,-1 L0,9`,
+                  ].join(" ")}
+                  fill="none"
+                  stroke="currentColor"
+                />
+              </svg>
+              <div
+                className="absolute left-2 rounded bg-popover px-1.5 py-0.5 text-[10px] font-mono text-popover-foreground shadow-sm"
+                style={{ transform: `translateX(${guideOffset}px)` }}
+              >
+                {formattedTooltip}
+              </div>
+            </div>,
+            document.body
+          )
+        : null;
 
     return (
-      <div className={cn("relative group w-fill")}>
+      <div ref={wrapperRef} className={cn("relative group w-fill")}>
         <div
-          className="absolute inset-y-0 left-0 flex items-center px-2 text-gray-400 cursor-ew-resize select-none"
+          ref={knobRef}
+          aria-hidden="true"
+          className={cn(
+            "absolute inset-y-0 left-1 z-10 flex w-3 cursor-ew-resize select-none items-center justify-center",
+            "before:h-[calc(100%-8px)] before:w-0.5 before:rounded-full before:bg-foreground before:opacity-15 before:transition-all",
+            "hover:before:opacity-80",
+            draggingDelta !== null &&
+              "before:h-1 before:w-1 before:rounded-full before:opacity-90"
+          )}
           onPointerDown={handlePointerDown}
-        >
-          ↔
-        </div>
+        />
+        {guideOverlay}
         <Input
           ref={inputRef}
-          type="number"
-          /**
-           * Hide the default spinners in Chrome/Edge/Safari
-           */
+          type="text"
+          inputMode="decimal"
           className={cn(
-            `[appearance:textfield]
-             [&::-webkit-inner-spin-button]:appearance-none
-             [&::-webkit-outer-spin-button]:appearance-none
-             pl-6
-             hover:cursor-ew-resize
-             active:cursor-none
-             text-right
-             `,
+            "pl-6 text-right font-mono",
+            draggingDelta !== null && "opacity-50",
             className
           )}
-          step={inputStep}
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleInputBlur}

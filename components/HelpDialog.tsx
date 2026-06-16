@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -26,7 +27,7 @@ const COLOR_GUIDE: { label: string; type: TSLType }[] = [
     { label: 'Any', type: 'any' },
 ];
 
-export function HelpDialog() {
+function HelpDialogComponent() {
     return (
         <Dialog>
             <DialogTrigger asChild>
@@ -518,3 +519,5 @@ export function HelpDialog() {
         </Dialog>
     );
 }
+
+export const HelpDialog = memo(HelpDialogComponent);
