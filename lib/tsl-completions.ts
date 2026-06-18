@@ -96,7 +96,7 @@ const tslFunctions: TSLCompletion[] = [
 
     // -- Logic / Comparison --
     { label: 'select', type: 'function', detail: 'select(cond, ifTrue, ifFalse)', info: 'Conditional select', boost: 5 },
-    { label: 'equals', type: 'function', detail: 'equals(a, b) / a.equals(b)', info: 'Equality test' },
+    { label: 'equal', type: 'function', detail: 'equal(a, b) / a.equal(b)', info: 'Equality test' },
     { label: 'lessThan', type: 'function', detail: 'lessThan(a, b) / a.lessThan(b)', info: 'Less than' },
     { label: 'lessThanEqual', type: 'function', detail: 'lessThanEqual(a, b) / a.lessThanEqual(b)', info: 'Less than or equal' },
     { label: 'greaterThan', type: 'function', detail: 'greaterThan(a, b) / a.greaterThan(b)', info: 'Greater than' },

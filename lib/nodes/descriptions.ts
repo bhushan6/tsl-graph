@@ -56,7 +56,7 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
     dFdy: 'Returns the derivative of p with respect to y.',
     faceforward: 'Orients N to face the same direction as Nref relative to I.',
     saturate: 'Clamps x to the 0..1 range.',
-    equals: 'Returns true where x equals y.',
+    equal: 'Returns true where x equals y.',
     greaterThan: 'Returns true where x is greater than y.',
     greaterThanEqual: 'Returns true where x is greater than or equal to y.',
     lessThan: 'Returns true where x is less than y.',

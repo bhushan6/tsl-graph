@@ -517,7 +517,7 @@ export const mathNodes = [
             b: { label: 'B', type: 'any', default: 0 },
         },
         outputs: { out: { label: 'Out', type: 'bool' } },
-        tsl: 'equals',
+        tsl: 'equal',
     },
     {
         type: 'math/all',

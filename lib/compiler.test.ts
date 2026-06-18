@@ -70,6 +70,14 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'any', label: 'Out' } }
     },
     {
+        type: 'math/equals',
+        label: 'Equals',
+        category: 'Math',
+        tsl: 'equal',
+        inputs: { a: { type: 'any', default: 0, label: 'A' }, b: { type: 'any', default: 0, label: 'B' } },
+        outputs: { out: { type: 'bool', label: 'Out' } }
+    },
+    {
         type: 'math/split',
         label: 'Split',
         category: 'Math',
@@ -1062,6 +1070,15 @@ describe('compileGraph', () => {
             expect(code).toContain('mix(color("#ff0000"), color("#0000ff"), _node1)');
             expect(code).toContain('material.colorNode = _node2;');
             expect(code).not.toContain('NaN');
+        });
+
+        it('should compile equals node with current TSL equal helper', () => {
+            const nodes = [createNode('eq1', 'math/equals', { values: { a: 1, b: 1 } })];
+            const code = compileGraph(nodes, []);
+
+            expect(code).toContain('equal(1, 1)');
+            expect(getRequiredImports(nodes)).toContain('equal');
+            expect(getRequiredImports(nodes)).not.toContain('equals');
         });
     });
 });
