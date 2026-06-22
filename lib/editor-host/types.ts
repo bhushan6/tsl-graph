@@ -101,6 +101,12 @@ export interface EditorAssetsAdapter<TRef = unknown> {
         nodeId: string;
         propertyName: string;
     }): Promise<void>;
+    reconcileGraphAssets?(input: {
+        ref: TRef;
+        graphData: unknown;
+        hardDeleteAfterMs?: number;
+        now?: number;
+    }): Promise<void>;
 }
 
 export interface EditorHostServices<TRef = unknown> {

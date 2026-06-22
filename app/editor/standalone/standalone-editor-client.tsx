@@ -4,12 +4,17 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { EditorHost } from '@/components/editor-host/EditorHost';
 import { compileGraph, compilePostGraph, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
+import { createEditorAssetReconcilerController } from '@/lib/editor-host/use-editor-persistence';
 import { inlineCustomTslImports } from '@/lib/editor-host/tsl-utils-inline';
 import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
 import { useEditorStore, type MaterialNodeType } from '@/store/editor';
 import {
     postEditorResponse,
 } from '@/lib/editor-host/adapters/postmessage-adapter';
+import {
+    createStandaloneIndexedDbAssetsAdapter,
+    rehydrateStandaloneIndexedDbAssetUrls,
+} from '@/lib/editor-host/adapters/standalone-indexeddb-assets';
 import {
     EDITOR_POSTMESSAGE_SOURCE,
     isHostMessage,
@@ -118,11 +123,32 @@ const createUniformsSignature = (uniforms: UniformSchemaEntry[]): string => JSON
 );
 
 type StandaloneRef = { docId: string };
+const ASSET_RECONCILE_DEBOUNCE_MS = 2000;
 
 const createNoopPersistenceAdapter = (): EditorPersistenceAdapter<StandaloneRef> => ({
     load: async () => null,
     save: async () => undefined,
 });
+
+const serializeGraphDataForLoad = async (graphData: unknown): Promise<string | null> => {
+    if (graphData === null || graphData === undefined) {
+        return null;
+    }
+
+    try {
+        if (typeof graphData === 'string') {
+            const parsedGraphData = JSON.parse(graphData) as unknown;
+            const rehydratedGraphData = await rehydrateStandaloneIndexedDbAssetUrls(parsedGraphData);
+            return JSON.stringify(rehydratedGraphData);
+        }
+
+        const rehydratedGraphData = await rehydrateStandaloneIndexedDbAssetUrls(graphData);
+        return JSON.stringify(rehydratedGraphData);
+    } catch (error) {
+        console.error('Failed to rehydrate standalone editor assets:', error);
+        return typeof graphData === 'string' ? graphData : JSON.stringify(graphData);
+    }
+};
 
 const MATERIAL_DECLARATION_LINE_PATTERN = /^const material = new ([A-Za-z0-9_]+)\(\);$/;
 const RUNTIME_UNIFORM_LINE_PATTERN = /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*__uniform\("([^"]+)",\s*(.*),\s*"[^"]+"\);$/;
@@ -220,6 +246,7 @@ export default function StandaloneEditorClient() {
     );
 
     const persistence = useMemo(() => createNoopPersistenceAdapter(), []);
+    const assets = useMemo(() => createStandaloneIndexedDbAssetsAdapter(), []);
 
     const buildCodePayload = useCallback((): GetCodeResponsePayload => {
         const { getRootGraph, subgraphs, codeNodes, globals } = useEditorStore.getState();
@@ -326,6 +353,22 @@ export default function StandaloneEditorClient() {
     }, [graphStructureVersion, targetOrigin]);
 
     useEffect(() => {
+        if (!assets.reconcileGraphAssets) {
+            return;
+        }
+
+        const controller = createEditorAssetReconcilerController({
+            ref: { docId },
+            assets,
+            debounceMs: ASSET_RECONCILE_DEBOUNCE_MS,
+        });
+
+        return () => {
+            controller.dispose();
+        };
+    }, [assets, docId]);
+
+    useEffect(() => {
         const uniforms = buildUniformSchema();
         const signature = createUniformsSignature(uniforms);
         if (signature === lastUniformsSignatureRef.current) {
@@ -374,17 +417,14 @@ export default function StandaloneEditorClient() {
                 }
 
                 const graphData = payload.graphData;
+                const graphJson = await serializeGraphDataForLoad(graphData);
                 const store = useEditorStore.getState();
-                const loaded = graphData === null || graphData === undefined
+                const loaded = graphJson === null
                     ? (() => {
                         store.clearGraph();
                         return true;
                     })()
-                    : store.loadFromJSON(
-                        typeof graphData === 'string'
-                            ? graphData
-                            : JSON.stringify(graphData)
-                    );
+                    : store.loadFromJSON(graphJson);
 
                 if (!loaded) {
                     postEditorResponse({
@@ -557,12 +597,15 @@ export default function StandaloneEditorClient() {
             capabilities: {
                 canRenameProject: false,
                 canShare: false,
-                canUploadAssets: false,
+                canUploadAssets: true,
                 canUseAI: false,
             },
             enabledGraphs,
+            services: {
+                assets,
+            },
         }),
-        [docId, enabledGraphs, persistence]
+        [assets, docId, enabledGraphs, persistence]
     );
 
     return <EditorHost config={hostConfig} projectName="" />;

@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { EditorHost } from '@/components/editor-host/EditorHost';
+import { createEditorAssetReconcilerController } from '@/lib/editor-host/use-editor-persistence';
 import type { EditorHostConfig } from '@/lib/editor-host/types';
 import { createTutorialIndexedDbAssetsAdapter } from '@/lib/editor-host/adapters/tutorial-indexeddb-assets';
 import { createTutorialPersistenceAdapter } from '@/lib/editor-host/adapters/tutorial-persistence-adapter';
 
+const ASSET_RECONCILE_DEBOUNCE_MS = 2000;
+
 export default function TutorialEditorClient() {
     const persistence = useMemo(() => createTutorialPersistenceAdapter(), []);
+    const assets = useMemo(() => createTutorialIndexedDbAssetsAdapter(), []);
 
     const hostConfig = useMemo<EditorHostConfig<{ docId: string }>>(
         () => ({
@@ -22,11 +26,27 @@ export default function TutorialEditorClient() {
             },
             enabledGraphs: ['material', 'postprocessing'], // Tutorials focus on material node shaders, post-processing needed for tutorial 14
             services: {
-                assets: createTutorialIndexedDbAssetsAdapter(),
+                assets,
             },
         }),
-        [persistence]
+        [assets, persistence]
     );
+
+    useEffect(() => {
+        if (!assets.reconcileGraphAssets) {
+            return;
+        }
+
+        const controller = createEditorAssetReconcilerController({
+            ref: { docId: 'tutorial-sandbox' },
+            assets,
+            debounceMs: ASSET_RECONCILE_DEBOUNCE_MS,
+        });
+
+        return () => {
+            controller.dispose();
+        };
+    }, [assets]);
 
     return (
         <EditorHost

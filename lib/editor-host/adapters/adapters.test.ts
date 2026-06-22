@@ -11,11 +11,196 @@ import {
     createLocalStorageAssetsAdapter,
     createLocalStorageEditorAdapter,
 } from './local-storage-adapter';
+import {
+    createIndexedDbAssetsAdapter,
+    rehydrateAssetUrls,
+    rehydrateIndexedDbAssetUrls,
+    type IndexedDbAssetsOptions,
+} from './indexeddb-assets';
 import { createPostMessageEditorAdapter } from './postmessage-adapter';
+
+type MutableIdbRequest<T> = {
+    result: T;
+    error: DOMException | null;
+    onsuccess: ((this: IDBRequest<T>, ev: Event) => unknown) | null;
+    onerror: ((this: IDBRequest<T>, ev: Event) => unknown) | null;
+    onupgradeneeded?: ((this: IDBOpenDBRequest, ev: IDBVersionChangeEvent) => unknown) | null;
+};
+
+function createMutableRequest<T>(): MutableIdbRequest<T> {
+    return {
+        result: undefined as T,
+        error: null,
+        onsuccess: null,
+        onerror: null,
+        onupgradeneeded: null,
+    };
+}
+
+function createFakeIndexedDb(): IDBFactory {
+    type DbRecord = {
+        version: number;
+        stores: Map<string, Map<string, unknown>>;
+    };
+
+    class FakeObjectStore {
+        constructor(
+            private readonly records: Map<string, unknown>,
+            private readonly transaction?: FakeTransaction
+        ) { }
+
+        createIndex() {
+            return {};
+        }
+
+        get(assetId: string): IDBRequest<unknown> {
+            return this.queue(() => this.records.get(assetId));
+        }
+
+        getAll(): IDBRequest<unknown[]> {
+            return this.queue(() => Array.from(this.records.values()));
+        }
+
+        put(value: unknown): IDBRequest<IDBValidKey> {
+            return this.queue<IDBValidKey>(() => {
+                if (!value || typeof value !== 'object' || !('assetId' in value)) {
+                    throw new DOMException('Missing assetId');
+                }
+
+                const assetId = String((value as { assetId: unknown }).assetId);
+                this.records.set(assetId, value);
+                return assetId;
+            });
+        }
+
+        delete(assetId: string): IDBRequest<undefined> {
+            return this.queue(() => {
+                this.records.delete(assetId);
+                return undefined;
+            });
+        }
+
+        private queue<T>(operation: () => T): IDBRequest<T> {
+            if (!this.transaction) {
+                throw new DOMException('Object store operation requires a transaction');
+            }
+
+            return this.transaction.queue(operation);
+        }
+    }
+
+    class FakeTransaction {
+        oncomplete: ((this: IDBTransaction, ev: Event) => unknown) | null = null;
+        onerror: ((this: IDBTransaction, ev: Event) => unknown) | null = null;
+        onabort: ((this: IDBTransaction, ev: Event) => unknown) | null = null;
+        error: DOMException | null = null;
+        private aborted = false;
+
+        constructor(private readonly records: Map<string, unknown>) { }
+
+        objectStore(): IDBObjectStore {
+            return new FakeObjectStore(this.records, this) as unknown as IDBObjectStore;
+        }
+
+        abort() {
+            this.aborted = true;
+            this.onabort?.call(this as unknown as IDBTransaction, new Event('abort'));
+        }
+
+        queue<T>(operation: () => T): IDBRequest<T> {
+            const request = createMutableRequest<T>();
+
+            queueMicrotask(() => {
+                if (this.aborted) return;
+
+                try {
+                    request.result = operation();
+                    request.onsuccess?.call(request as unknown as IDBRequest<T>, new Event('success'));
+                    if (!this.aborted) {
+                        this.oncomplete?.call(this as unknown as IDBTransaction, new Event('complete'));
+                    }
+                } catch (error) {
+                    const domError = error instanceof DOMException
+                        ? error
+                        : new DOMException(error instanceof Error ? error.message : 'IndexedDB operation failed');
+                    request.error = domError;
+                    this.error = domError;
+                    request.onerror?.call(request as unknown as IDBRequest<T>, new Event('error'));
+                    this.onerror?.call(this as unknown as IDBTransaction, new Event('error'));
+                }
+            });
+
+            return request as unknown as IDBRequest<T>;
+        }
+    }
+
+    class FakeDatabase {
+        objectStoreNames = {
+            contains: (storeName: string) => this.record.stores.has(storeName),
+        };
+
+        constructor(private readonly record: DbRecord) { }
+
+        createObjectStore(storeName: string): IDBObjectStore {
+            const records = new Map<string, unknown>();
+            this.record.stores.set(storeName, records);
+            return new FakeObjectStore(records) as unknown as IDBObjectStore;
+        }
+
+        transaction(storeName: string): IDBTransaction {
+            const records = this.record.stores.get(storeName);
+            if (!records) {
+                throw new DOMException(`Object store ${storeName} does not exist`);
+            }
+
+            return new FakeTransaction(records) as unknown as IDBTransaction;
+        }
+
+        close() { }
+    }
+
+    const databases = new Map<string, DbRecord>();
+
+    return {
+        open: vi.fn((name: string, version?: number) => {
+            const request = createMutableRequest<IDBDatabase>();
+
+            queueMicrotask(() => {
+                const requestedVersion = version ?? 1;
+                let record = databases.get(name);
+                const needsUpgrade = !record || requestedVersion > record.version;
+
+                if (!record) {
+                    record = {
+                        version: requestedVersion,
+                        stores: new Map(),
+                    };
+                    databases.set(name, record);
+                } else if (requestedVersion > record.version) {
+                    record.version = requestedVersion;
+                }
+
+                request.result = new FakeDatabase(record) as unknown as IDBDatabase;
+
+                if (needsUpgrade) {
+                    request.onupgradeneeded?.call(
+                        request as unknown as IDBOpenDBRequest,
+                        new Event('upgradeneeded') as IDBVersionChangeEvent
+                    );
+                }
+
+                request.onsuccess?.call(request as unknown as IDBRequest<IDBDatabase>, new Event('success'));
+            });
+
+            return request as unknown as IDBOpenDBRequest;
+        }),
+    } as unknown as IDBFactory;
+}
 
 describe('editor host adapters', () => {
     afterEach(() => {
         vi.unstubAllGlobals();
+        vi.restoreAllMocks();
     });
 
     it('convex adapter loads and saves graph data via projects API', async () => {
@@ -210,6 +395,118 @@ describe('editor host adapters', () => {
         });
 
         expect(localStorageMock.removeItem).toHaveBeenCalledWith('tsl-editor:asset:standalone:node-1:map');
+    });
+
+    it('rehydrates asset urls and clears stale blob urls when assets are missing', async () => {
+        const hydrated = await rehydrateAssetUrls(
+            {
+                values: [
+                    { assetId: 'asset-live', url: 'blob:stale-live' },
+                    { assetId: 'asset-missing-blob', url: 'blob:stale-missing' },
+                    { assetId: 'asset-missing-remote', url: 'https://example.com/texture.png' },
+                ],
+            },
+            async (assetId) => assetId === 'asset-live' ? 'blob:fresh-live' : null
+        );
+
+        const values = (hydrated as { values: Array<{ url: string }> }).values;
+        expect(values[0].url).toBe('blob:fresh-live');
+        expect(values[1].url).toBe('');
+        expect(values[2].url).toBe('https://example.com/texture.png');
+    });
+
+    it('indexeddb assets adapter soft deletes unused blobs and eventually hard deletes them', async () => {
+        vi.stubGlobal('indexedDB', createFakeIndexedDb());
+
+        let objectUrlCount = 0;
+        const createObjectUrl = vi
+            .spyOn(URL, 'createObjectURL')
+            .mockImplementation((blob) => `blob:${blob instanceof Blob ? blob.type : 'media'}:${objectUrlCount += 1}`);
+        const revokeObjectUrl = vi
+            .spyOn(URL, 'revokeObjectURL')
+            .mockImplementation(() => undefined);
+
+        const options: IndexedDbAssetsOptions = {
+            dbName: 'test-indexeddb-assets',
+            assetIdPrefix: 'test',
+        };
+        const adapter = createIndexedDbAssetsAdapter(options);
+        const file = new File(['image-content'], 'texture.png', { type: 'image/png' });
+
+        const result = await adapter.uploadAndLinkAsset({
+            ref: { docId: 'doc-a' },
+            nodeId: 'node-1',
+            propertyName: 'url',
+            file,
+        });
+
+        expect(result.assetId).toContain('test:doc-a:');
+        expect(result.url).toBe('blob:image/png:1');
+        expect(createObjectUrl).toHaveBeenCalledTimes(1);
+
+        const hydrated = await rehydrateIndexedDbAssetUrls(
+            { value: { assetId: result.assetId, url: 'blob:stale' } },
+            options
+        );
+
+        expect((hydrated as { value: { url: string } }).value.url).toBe(result.url);
+
+        await adapter.unlinkAsset({
+            ref: { docId: 'doc-a' },
+            nodeId: 'node-1',
+            propertyName: 'url',
+        });
+
+        expect(revokeObjectUrl).not.toHaveBeenCalled();
+
+        const softDeleted = await rehydrateIndexedDbAssetUrls(
+            { value: { assetId: result.assetId, url: 'blob:stale-after-unlink' } },
+            options
+        );
+
+        expect((softDeleted as { value: { url: string } }).value.url).toBe(result.url);
+
+        await adapter.reconcileGraphAssets?.({
+            ref: { docId: 'doc-a' },
+            graphData: {
+                version: 2,
+                nodes: [{ data: { values: { url: { assetId: result.assetId, url: result.url } } } }],
+                edges: [],
+            },
+            now: 1000,
+        });
+
+        const restored = await rehydrateIndexedDbAssetUrls(
+            { value: { assetId: result.assetId, url: 'blob:stale-after-restore' } },
+            options
+        );
+
+        expect((restored as { value: { url: string } }).value.url).toBe(result.url);
+
+        await adapter.reconcileGraphAssets?.({
+            ref: { docId: 'doc-a' },
+            graphData: { version: 2, nodes: [], edges: [] },
+            hardDeleteAfterMs: 50,
+            now: 1100,
+        });
+
+        expect(revokeObjectUrl).not.toHaveBeenCalled();
+
+        await adapter.reconcileGraphAssets?.({
+            ref: { docId: 'doc-a' },
+            graphData: { version: 2, nodes: [], edges: [] },
+            hardDeleteAfterMs: 50,
+            now: 1150,
+        });
+
+        expect(revokeObjectUrl).toHaveBeenCalledWith(result.url);
+
+        const missing = await rehydrateIndexedDbAssetUrls(
+            { value: { assetId: result.assetId, url: 'blob:stale' } },
+            options
+        );
+
+        expect((missing as { value: { url: string } }).value.url).toBe('');
     });
 
     it('postMessage adapter exchanges load/save payloads with host window', async () => {

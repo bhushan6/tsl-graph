@@ -283,7 +283,7 @@ export default function DemoEditor() {
             )}
             <iframe
                 ref={iframeRef}
-                src="/editor/standalone"
+                src="/editor/standalone?docId=landing-demo"
                 className="w-full h-full border-none transition-opacity duration-500"
                 style={{ opacity: isReady ? 1 : 0 }}
                 title="TSL Graph Standalone Editor"

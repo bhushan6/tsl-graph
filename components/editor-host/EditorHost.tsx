@@ -13,7 +13,9 @@ import {
     resolveDefaultGraphKind,
     rootGraphModeToGraphKind,
 } from '@/lib/editor-host/types';
-import { useEditorPersistence } from '@/lib/editor-host/use-editor-persistence';
+import {
+    useEditorPersistence,
+} from '@/lib/editor-host/use-editor-persistence';
 import type { Id } from '@/convex/_generated/dataModel';
 import { EditorHostProvider } from '@/lib/editor-host/context';
 import { TemplateLibraryProvider, requestTemplateLibraryRefresh } from '@/lib/editor-host/template-library';

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useEditorStore } from '@/store/editor';
-import type { EditorHostConfig, SaveReason } from './types';
+import type { EditorAssetsAdapter, EditorHostConfig, SaveReason } from './types';
 
 interface EditorPersistenceControllerOptions<TRef> {
     ref: TRef;
@@ -21,6 +21,17 @@ interface UseEditorPersistenceOptions {
     enabled?: boolean;
     maxRetries?: number;
     retryBaseMs?: number;
+}
+
+interface EditorAssetReconcilerControllerOptions<TRef> {
+    ref: TRef;
+    assets: EditorAssetsAdapter<TRef>;
+    debounceMs: number;
+    hardDeleteAfterMs?: number;
+}
+
+export interface EditorAssetReconcilerController {
+    dispose: () => void;
 }
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -157,6 +168,56 @@ export function createEditorPersistenceController<TRef>({
         dispose: () => {
             disposed = true;
             clearTimers();
+            unsubscribe();
+        },
+    };
+}
+
+export function createEditorAssetReconcilerController<TRef>({
+    ref,
+    assets,
+    debounceMs,
+    hardDeleteAfterMs,
+}: EditorAssetReconcilerControllerOptions<TRef>): EditorAssetReconcilerController {
+    let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+    let lastGraphStructureVersion = useEditorStore.getState().graphStructureVersion;
+
+    const clearReconcileTimer = () => {
+        if (!reconcileTimer) return;
+        clearTimeout(reconcileTimer);
+        reconcileTimer = null;
+    };
+
+    const scheduleReconcile = () => {
+        if (disposed) return;
+        clearReconcileTimer();
+        reconcileTimer = setTimeout(() => {
+            const graphData = parseGraphData();
+            void assets.reconcileGraphAssets?.({
+                ref,
+                graphData,
+                hardDeleteAfterMs,
+            }).catch((error) => {
+                console.error('Editor asset reconciliation failed:', error);
+            });
+        }, Math.max(0, debounceMs));
+    };
+
+    scheduleReconcile();
+
+    const unsubscribe = useEditorStore.subscribe((state) => {
+        if (disposed) return;
+        if (state.graphStructureVersion === lastGraphStructureVersion) return;
+
+        lastGraphStructureVersion = state.graphStructureVersion;
+        scheduleReconcile();
+    });
+
+    return {
+        dispose: () => {
+            disposed = true;
+            clearReconcileTimer();
             unsubscribe();
         },
     };
