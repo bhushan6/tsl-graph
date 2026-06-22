@@ -13,6 +13,10 @@ import { getAbsolutePosition } from "@/lib/utils";
 import { replaceEdgeOnTargetHandle } from "@/lib/graph-utils";
 import { useTemplateLibrary } from "@/lib/editor-host/template-library";
 import type { QuickCreateConstantIntent } from "@/lib/quick-create-constants";
+import {
+    buildQuickCreateExpressionGraph,
+    type QuickCreateExpressionIntent,
+} from "@/lib/quick-create-expressions";
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
@@ -562,6 +566,136 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
         [handleDirection, handleNodeSelect]
     );
 
+    const handleQuickCreateExpression = useCallback(
+        (intent: QuickCreateExpressionIntent) => {
+            const state = useEditorStore.getState();
+            const nodes = state.nodes;
+            const nodesById = new Map(nodes.map((node) => [node.id, node]));
+            const sourceNode = sourceNodeId ? nodesById.get(sourceNodeId) : undefined;
+
+            const isGroupNode = (node: AppNode) => node.type === 'group' || node.data.type === 'loop';
+            const isLoopBoundaryHandle = (node: AppNode, direction: 'input' | 'output', handleId?: string | null) => {
+                if (node.data.type === 'loop/count' && direction === 'input' && handleId === 'count') return true;
+                if (node.data.type === 'loop/start' && direction === 'input' && handleId === 'start') return true;
+                if (node.data.type === 'loop/end' && direction === 'input' && handleId === 'end') return true;
+                if (node.data.type === 'loop/count2' && direction === 'input' && handleId === 'count') return true;
+                if (node.data.type === 'loop/accumulator' && direction === 'input' && handleId === 'seed') return true;
+                if (node.data.type === 'loop/condition' && direction === 'input' && handleId === 'cond') return true;
+                if (node.data.type === 'loop/output' && direction === 'output' && (!handleId || handleId === 'out')) return true;
+                return false;
+            };
+
+            const getGroupAncestorId = (node: AppNode | undefined): string | null => {
+                if (!node) return null;
+                let parentId = node.parentId;
+                while (parentId) {
+                    const parent = nodesById.get(parentId);
+                    if (!parent) break;
+                    if (isGroupNode(parent)) return parent.id;
+                    parentId = parent.parentId;
+                }
+                return null;
+            };
+
+            const getGroupDepth = (node: AppNode): number => {
+                let depth = 0;
+                let parentId = node.parentId;
+                while (parentId) {
+                    depth += 1;
+                    parentId = nodesById.get(parentId)?.parentId;
+                }
+                return depth;
+            };
+
+            const getNodeDimension = (node: AppNode, key: 'width' | 'height'): number | null => {
+                const direct = (node as AppNode & { [k: string]: unknown })[key];
+                if (typeof direct === 'number') return direct;
+                const styleValue = node.style?.[key];
+                if (typeof styleValue === 'number') return styleValue;
+                if (typeof styleValue === 'string') {
+                    const parsed = Number(styleValue.replace('px', ''));
+                    return Number.isFinite(parsed) ? parsed : null;
+                }
+                return null;
+            };
+
+            const blockGroupNesting = !!sourceNode
+                && !!handleDirection
+                && isLoopBoundaryHandle(sourceNode, handleDirection, sourceHandleId);
+            let parentGroupId: string | null = blockGroupNesting || !sourceNode
+                ? null
+                : getGroupAncestorId(sourceNode);
+
+            if (!parentGroupId && !blockGroupNesting) {
+                const groupCandidates = nodes.filter(isGroupNode).flatMap((node) => {
+                    const width = getNodeDimension(node, 'width');
+                    const height = getNodeDimension(node, 'height');
+                    if (!width || !height) return [];
+                    const abs = getAbsolutePosition(node, nodes);
+                    const inside = flowPosition.x >= abs.x
+                        && flowPosition.x <= abs.x + width
+                        && flowPosition.y >= abs.y
+                        && flowPosition.y <= abs.y + height;
+                    if (!inside) return [];
+                    return [{ node, depth: getGroupDepth(node) }];
+                });
+
+                if (groupCandidates.length > 0) {
+                    groupCandidates.sort((a, b) => b.depth - a.depth);
+                    parentGroupId = groupCandidates[0].node.id;
+                }
+            }
+
+            const parentGroup = parentGroupId ? nodesById.get(parentGroupId) : undefined;
+            const parent = parentGroup
+                ? {
+                    id: parentGroup.id,
+                    absolutePosition: getAbsolutePosition(parentGroup, nodes),
+                }
+                : undefined;
+
+            const graph = buildQuickCreateExpressionGraph(intent, {
+                basePosition: flowPosition,
+                parent,
+            });
+
+            state.takeSnapshot();
+
+            setNodes((nds) => {
+                const deselectedNodes = nds.map((node) => ({
+                    ...node,
+                    selected: false,
+                }));
+                return [...deselectedNodes, ...graph.nodes];
+            });
+            state.setSelectedNodes(graph.nodes.map((node) => node.id));
+
+            setEdges((eds) => {
+                const withExpressionEdges = [...eds, ...graph.edges];
+                if (handleDirection !== 'input' || !sourceNodeId || !sourceHandleId) {
+                    return withExpressionEdges;
+                }
+
+                const newEdge: Edge = {
+                    id: `edge-${graph.outputNodeId}-${graph.outputHandleId}-${sourceNodeId}-${sourceHandleId}`,
+                    source: graph.outputNodeId,
+                    sourceHandle: graph.outputHandleId,
+                    target: sourceNodeId,
+                    targetHandle: sourceHandleId,
+                };
+                const filtered = replaceEdgeOnTargetHandle(
+                    withExpressionEdges,
+                    newEdge.target,
+                    newEdge.targetHandle
+                );
+                return addEdge(newEdge, filtered);
+            });
+
+            close();
+        },
+        [close, flowPosition, handleDirection, setEdges, setNodes, sourceHandleId, sourceNodeId]
+    );
+
     if (!isOpen) return null;
 
     return (
@@ -573,6 +707,7 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             handleDirection={handleDirection}
             onNodeSelect={handleNodeSelect}
             onQuickCreate={handleQuickCreate}
+            onQuickCreateExpression={handleQuickCreateExpression}
             onClose={close}
         />
     );

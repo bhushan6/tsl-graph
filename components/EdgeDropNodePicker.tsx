@@ -18,6 +18,7 @@ import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetNode } from '@/lib/local-utils';
 import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import { getQuickCreateConstantSuggestions, type QuickCreateConstantIntent } from '@/lib/quick-create-constants';
+import { getQuickCreateExpressionSuggestions, type QuickCreateExpressionIntent } from '@/lib/quick-create-expressions';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
@@ -61,6 +62,7 @@ interface EdgeDropNodePickerProps {
     handleDirection: 'input' | 'output' | null;
     onNodeSelect: (selection: EdgeDropSelection) => void;
     onQuickCreate: (intent: QuickCreateConstantIntent) => void;
+    onQuickCreateExpression: (intent: QuickCreateExpressionIntent) => void;
     onClose: () => void;
 }
 
@@ -119,6 +121,7 @@ export function EdgeDropNodePicker({
     handleDirection,
     onNodeSelect,
     onQuickCreate,
+    onQuickCreateExpression,
     onClose,
 }: EdgeDropNodePickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -462,6 +465,13 @@ export function EdgeDropNodePicker({
         return intents.filter((intent) => isTypeMatch(intent.outputType, sourceDataType));
     }, [handleDirection, search, sourceDataType]);
 
+    const quickCreateExpressionIntents = useMemo(() => {
+        const intents = getQuickCreateExpressionSuggestions(search);
+        if (!handleDirection) return intents;
+        if (handleDirection !== 'input') return [];
+        return intents.filter((intent) => isTypeMatch(intent.outputType, sourceDataType));
+    }, [handleDirection, search, sourceDataType]);
+
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -534,8 +544,18 @@ export function EdgeDropNodePicker({
                 />
                 <CommandList className="max-h-[300px]">
                     <CommandEmpty>{handleDirection ? 'No nodes or handles found.' : 'No nodes found.'}</CommandEmpty>
-                    {quickCreateIntents.length > 0 && (
+                    {(quickCreateExpressionIntents.length > 0 || quickCreateIntents.length > 0) && (
                         <CommandGroup heading="Quick Create">
+                            {quickCreateExpressionIntents.map((intent) => (
+                                <CommandItem
+                                    key={`expression:${intent.expression}`}
+                                    value={`${intent.label} ${search}`}
+                                    onSelect={() => onQuickCreateExpression(intent)}
+                                    className="gap-2"
+                                >
+                                    <span>{intent.label}</span>
+                                </CommandItem>
+                            ))}
                             {quickCreateIntents.map((intent) => (
                                 <CommandItem
                                     key={`${intent.nodeType}:${intent.label}`}
