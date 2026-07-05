@@ -73,6 +73,7 @@ const categoryColors: Record<string, string> = {
   Loop: "border-indigo-500 bg-indigo-100 dark:bg-indigo-900/20",
   Globals: "border-emerald-500 bg-emerald-100 dark:bg-emerald-900/20",
   Locals: "border-amber-500 bg-amber-100 dark:bg-amber-900/20",
+  "TSL Textures": "border-rose-500 bg-rose-100 dark:bg-rose-900/20",
   Default: "border-gray-500 bg-gray-100 dark:bg-gray-900/20",
 };
 

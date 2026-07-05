@@ -23,6 +23,17 @@ import { transition } from 'three/addons/tsl/display/TransitionNode.js';
 import { ensureUniform, setUniformFactory } from './uniform-store';
 import { withLocalDependencyEdges } from './local-utils';
 import * as tslEasings from './tsl-easings';
+// Explicit imports (not `import *`): tsl-textures also re-exports helpers such
+// as noise/hsl/voronoi that would shadow other scope entries.
+import {
+    marble, polkaDots, caustics, roughClay, clouds,
+    brain, camouflage, caveArt, circleDecor, circles, concrete, cork, crumpledFabric,
+    dalmatianSpots, darthMaul, dysonSphere, entangled, fordite, gasGiant, grid, halftone,
+    isolayers, isolines, karstRock, neonLights, perlinNoise, photosphere, planet,
+    processedWood, protozoa, reticularVeins, romanPaving, runnyEggs, rust, satin,
+    scepterHead, scream, stars, staticNoise, tigerFur, turbulentSmoke, voronoiCells,
+    waterDrops, watermelon, waves, wood, zebraLines, bricks,
+} from 'tsl-textures';
 import { registry } from './registry';
 
 const setTSLUniformFactory = () => {
@@ -59,6 +70,54 @@ function createTSLRuntimeScope() {
         smaa,
         sobel,
         transition,
+        marble,
+        polkaDots,
+        caustics,
+        roughClay,
+        clouds,
+        brain,
+        camouflage,
+        caveArt,
+        circleDecor,
+        circles,
+        concrete,
+        cork,
+        crumpledFabric,
+        dalmatianSpots,
+        darthMaul,
+        dysonSphere,
+        entangled,
+        fordite,
+        gasGiant,
+        grid,
+        halftone,
+        isolayers,
+        isolines,
+        karstRock,
+        neonLights,
+        perlinNoise,
+        photosphere,
+        planet,
+        processedWood,
+        protozoa,
+        reticularVeins,
+        romanPaving,
+        runnyEggs,
+        rust,
+        satin,
+        scepterHead,
+        scream,
+        stars,
+        staticNoise,
+        tigerFur,
+        turbulentSmoke,
+        voronoiCells,
+        waterDrops,
+        watermelon,
+        waves,
+        wood,
+        zebraLines,
+        bricks,
         __uniform: ensureUniform,
     };
 }

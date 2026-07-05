@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest"
+    "test": "vitest",
+    "generate:tsl-textures-inline": "node scripts/generate-tsl-textures-inline.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.41",
@@ -57,6 +58,7 @@
     "tailwind-merge": "^3.4.0",
     "three": "^0.184.0",
     "tsl-easings": "^0.0.1",
+    "tsl-textures": "^3.0.4",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
@@ -66,6 +68,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.184.1",
+    "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",

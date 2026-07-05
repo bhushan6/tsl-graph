@@ -112,8 +112,9 @@ type Envelope<T = unknown> = {
 - `material.code` is returned as an applier function: `tslGraph(material)`.
 - Material declaration (`const material = new ...`) is omitted.
 - `material.code` uses runtime uniform IDs and returns a uniform map.
-- Custom helpers from `@/lib/tsl-utils` and easing helpers from `tsl-easings` are inlined into generated code, so hosts do not need those module imports.
+- Custom helpers from `@/lib/tsl-utils`, easing helpers from `tsl-easings`, and texture helpers from `tsl-textures` are inlined into generated code, so hosts do not need those module imports.
 - Response includes imports grouped by module for material and postprocessing code.
+- Import groups may include bare `three` named imports (for example `Color`, `Vector2`, `Vector3` needed by inlined tsl-textures helpers). Hosts must resolve those from their own Three.js runtime, the same way they resolve `three/tsl` names.
 
 5. `tsl:command:get-uniform-schema`
 - Purpose: Pull current uniform schema/values on demand.

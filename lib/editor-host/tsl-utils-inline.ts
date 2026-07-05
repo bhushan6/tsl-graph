@@ -1,16 +1,19 @@
 import type { ImportGroup } from '@/lib/compiler';
+import { TSL_TEXTURES_INLINE_MODULE } from './tsl-textures-inline.generated';
 
 export const TSL_UTILS_IMPORT_SOURCE = '@/lib/tsl-utils';
 export const TSL_EASINGS_IMPORT_SOURCE = 'tsl-easings';
+export const TSL_TEXTURES_IMPORT_SOURCE = 'tsl-textures';
 
-interface InlineTslHelperDefinition {
+export interface InlineTslHelperDefinition {
     code: string;
     deps?: string[];
 }
 
-interface InlineTslModuleDefinition {
+export interface InlineTslModuleDefinition {
     label: string;
-    sharedImports: string[];
+    sharedImports: string[]; // named imports the inlined code needs from three/tsl
+    sharedImportGroups?: ImportGroup[]; // named imports needed from other host-owned modules (e.g. bare "three")
     helpers: Record<string, InlineTslHelperDefinition>;
 }
 
@@ -493,6 +496,7 @@ const INLINE_TSL_MODULES: Record<string, InlineTslModuleDefinition> = {
             },
         },
     },
+    [TSL_TEXTURES_IMPORT_SOURCE]: TSL_TEXTURES_INLINE_MODULE,
 };
 
 const uniqueSorted = (values: Iterable<string>): string[] => Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
@@ -571,6 +575,7 @@ export const inlineCustomTslImports = (imports: ImportGroup[]): InlineCustomTslI
             helperBlocks.push(resolved.helperCode);
             resolved.helperNames.forEach((name) => inlinedHelpers.push(name));
             moduleDef.sharedImports.forEach((name) => additionalThreeImports.add(name));
+            moduleDef.sharedImportGroups?.forEach((group) => remainingImports.push(group));
         }
     }
 

@@ -550,6 +550,63 @@ function emitTextureSampleNode(
 }
 
 /**
+ * Emit a node whose TSL function takes a single params object (e.g. tsl-textures).
+ * Unconnected connectionOnly inputs are omitted so library defaults apply.
+ * With def.outputMembers, emits an object literal mapping output handles to the
+ * primary call (member null) and member calls (e.g. rotator.normal), reusing a
+ * shared params const when more than one call is emitted.
+ */
+function emitParamsObjectNode(
+    node: Node<TSLNodeData>,
+    def: NodeDef,
+    inputs: Record<string, Port>,
+    edges: Edge[],
+    compiledNodes: Map<string, CompiledNode>,
+    targetLines: string[],
+    varBaseName: string,
+    argsMap?: Record<string, string>,
+    indent = ''
+): string {
+    const entries: string[] = [];
+    for (const key of Object.keys(inputs)) {
+        const port = inputs[key];
+        const connected = edges.some(e => e.target === node.id && e.targetHandle === key);
+        if (port.connectionOnly && !connected) continue;
+        entries.push(`${key}: ${getInputValue(node, key, edges, compiledNodes, port, argsMap)}`);
+    }
+    const paramsLiteral = entries.length > 0 ? `{ ${entries.join(', ')} }` : '{}';
+
+    const members = def.outputMembers;
+    if (!members) {
+        return `${def.tsl}(${paramsLiteral})`;
+    }
+
+    const connectedHandles = new Set(
+        edges.filter(e => e.source === node.id).map(e => e.sourceHandle ?? 'out')
+    );
+    const memberEntries = Object.entries(members);
+    const activeEntries = memberEntries.filter(([handle, member]) =>
+        connectedHandles.has(handle) || (member === null && connectedHandles.size === 0)
+    );
+    if (activeEntries.length === 0) {
+        activeEntries.push(...memberEntries.filter(([, member]) => member === null));
+    }
+
+    let paramsExpr = paramsLiteral;
+    if (activeEntries.length > 1) {
+        const paramsVarName = `${varBaseName}_params`;
+        targetLines.push(`${indent}const ${paramsVarName} = ${paramsLiteral};`);
+        paramsExpr = paramsVarName;
+    }
+
+    const outputEntries = activeEntries.map(([handle, member]) => {
+        const callee = member === null ? def.tsl : `${def.tsl}.${member}`;
+        return `${handle}: ${callee}(${paramsExpr})`;
+    });
+    return `{ ${outputEntries.join(', ')} }`;
+}
+
+/**
  * Get the connected variable name for a material input.
  * Handles swizzling.
  */
@@ -1012,6 +1069,18 @@ function compileSubgraphDefinition(
             code = `${def.tsl}(${viewZArg}, ${nearArg}, ${farArg})`;
         } else if (def.type === 'texture/sample') {
             code = emitTextureSampleNode(
+                node,
+                def,
+                inputs,
+                internalEdges,
+                compiledNodes,
+                targetLines,
+                displayName,
+                argsMap,
+                indent
+            );
+        } else if (def.paramsObject) {
+            code = emitParamsObjectNode(
                 node,
                 def,
                 inputs,
@@ -2274,6 +2343,16 @@ export function compileGraph(
             const normalArg = normalEdge ? getInputValue(node, 'normal', edgesForInputs, compiledNodes, inputs['normal']) : 'undefined';
 
             code = `${def.tsl}(${texArg}, null, null, ${scaleArg}, ${posArg}, ${normalArg})`;
+        } else if (def.paramsObject) {
+            code = emitParamsObjectNode(
+                node,
+                def,
+                inputs,
+                edgesForInputs,
+                compiledNodes,
+                targetLines,
+                displayName
+            );
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {

@@ -17,6 +17,7 @@ import { globalNodes } from './globals';
 import { localNodes } from './local';
 import { postNodes, POST_ANCHOR_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_INPUT_RAW_TEXTURE_OUTPUTS, POST_NODE_TYPES } from './post';
 import { postEffectNodes, POST_FX_NODE_TYPES } from './post-effects';
+import { tslTextureNodes } from './tsl-textures';
 import { withNodeDescriptions } from './descriptions';
 
 
@@ -40,8 +41,9 @@ export function initializeNodes() {
     registry.registerMany(withNodeDescriptions(localNodes));
     registry.registerMany(withNodeDescriptions(postNodes));
     registry.registerMany(withNodeDescriptions(postEffectNodes));
+    registry.registerMany(withNodeDescriptions(tslTextureNodes));
 }
 
 
 // Re-export for convenience
-export { constantNodes, mathNodes, easingNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes, logicNodes, loopNodes, assignNodes, globalNodes, localNodes, postNodes, POST_ANCHOR_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_INPUT_RAW_TEXTURE_OUTPUTS, POST_NODE_TYPES, postEffectNodes, POST_FX_NODE_TYPES };
+export { constantNodes, mathNodes, easingNodes, geometryNodes, materialNodes, subgraphNodes, MATERIAL_NODE_TYPES, textureNodes, modelNodes, advancedNodes, noiseNodes, utilsNodes, logicNodes, loopNodes, assignNodes, globalNodes, localNodes, postNodes, POST_ANCHOR_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_INPUT_RAW_TEXTURE_OUTPUTS, POST_NODE_TYPES, postEffectNodes, POST_FX_NODE_TYPES, tslTextureNodes };

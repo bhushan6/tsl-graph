@@ -56,4 +56,6 @@ export interface BaseNodeDef {
     readonly pure?: boolean;        // No inputs = source node
     readonly callable?: boolean;    // If true, pure node needs to be called as function (e.g., uv())
     readonly defaultActiveInputs?: readonly string[]; // If set, inputs that are active by default (material nodes)
+    readonly paramsObject?: boolean; // If true, tsl function takes a single params object; unconnected connectionOnly inputs are omitted so library defaults apply
+    readonly outputMembers?: Readonly<Record<string, string | null>>; // Output handle -> member function name on tsl fn (null = primary call). Handles must not be named "out".
 }

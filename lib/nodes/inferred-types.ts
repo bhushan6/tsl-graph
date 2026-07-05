@@ -17,6 +17,7 @@ import { globalNodes } from './globals';
 import { localNodes } from './local';
 import { postNodes } from './post';
 import { postEffectNodes } from './post-effects';
+import { tslTextureNodes } from './tsl-textures';
 
 
 // Aggregate all nodes
@@ -39,6 +40,7 @@ export const allNodes = [
     ...localNodes,
     ...postNodes,
     ...postEffectNodes,
+    ...tslTextureNodes,
 ] as const;
 
 // Derived types - derived from the source arrays directly to avoid widening during spread
