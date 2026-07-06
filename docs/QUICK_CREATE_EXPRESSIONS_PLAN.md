@@ -1,10 +1,12 @@
 # Quick-Create Expressions v2 — Implementation Plan
 
-> **Status (July 2026):** Phases 1–4 implemented in `lib/quick-create/`
-> (tokenizer, Pratt parser, registry catalog, inference, folding builder,
-> swizzles, method chains, ternary, `$` source refs, evaluated-constant
-> suggestion, `resolveDropParentGroup` extraction). Phase 5 (tolerant
-> mid-keystroke parsing, in-expression autocomplete, cheatsheet) remains.
+> **Status (July 2026):** All phases implemented in `lib/quick-create/`.
+> Phases 1–4: tokenizer, Pratt parser, registry catalog, inference, folding
+> builder, swizzles, method chains, ternary, `$` source refs,
+> evaluated-constant suggestion, `resolveDropParentGroup` extraction.
+> Phase 5 (`assist.ts` + picker): tolerant mid-keystroke repair
+> ("sin(time" suggests "sin(time)"), in-expression name completions,
+> type badges on suggestions, inline syntax cheatsheet in the picker footer.
 
 Extend the right-click / edge-drop quick-create feature from "literals + `+ - * /`"
 into a mini TSL expression compiler that can build meaningful node subgraphs from

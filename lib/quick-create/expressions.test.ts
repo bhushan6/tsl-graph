@@ -16,7 +16,7 @@ describe('parseQuickCreateExpression', () => {
 
         expect(intent).toMatchObject({
             expression: '2 * 1',
-            label: 'Create Expression 2 * 1 → float',
+            label: 'Create Expression 2 * 1',
             outputType: 'float',
             ast: {
                 kind: 'operator',

@@ -1,4 +1,5 @@
 import { parseQuickCreateConstant, type QuickCreateConstantIntent } from '../quick-create-constants';
+import { getQuickCreateRepairCandidates } from './assist';
 import type { QuickCreateExpressionIntent, QuickCreateExpressionNode } from './ast';
 import { inferQuickCreateExpressionType } from './infer';
 import { parseQuickCreateExpressionAst, type QuickCreateParseContext } from './parser';
@@ -11,6 +12,10 @@ export type {
     QuickCreateExpressionNode,
     QuickCreateUnaryOperator,
 } from './ast';
+export {
+    getQuickCreateNameCompletions,
+    type QuickCreateNameCompletion,
+} from './assist';
 export { buildQuickCreateExpressionGraph } from './build-graph';
 export {
     getQuickCreateCatalog,
@@ -50,23 +55,34 @@ export function parseQuickCreateExpression(
     if (!outputType) return null;
 
     const expression = normalizeExpressionLabel(trimmed);
-    const typeSuffix = outputType === 'any' ? '' : ` → ${outputType}`;
 
     return {
         ast,
         expression,
-        label: `Create Expression ${expression}${typeSuffix}`,
+        label: `Create Expression ${expression}`,
         outputHandleId: 'out',
         outputType,
     };
 }
 
+/**
+ * Suggestions for the picker: the exact input when it parses, otherwise the
+ * best repaired variant of the mid-keystroke input ("sin(time" suggests
+ * "sin(time)").
+ */
 export function getQuickCreateExpressionSuggestions(
     query: string,
     context?: QuickCreateParseContext
 ): QuickCreateExpressionIntent[] {
-    const intent = parseQuickCreateExpression(query, context);
-    return intent ? [intent] : [];
+    const exact = parseQuickCreateExpression(query, context);
+    if (exact) return [exact];
+
+    for (const candidate of getQuickCreateRepairCandidates(query)) {
+        const intent = parseQuickCreateExpression(candidate, context);
+        if (intent) return [intent];
+    }
+
+    return [];
 }
 
 /** Whether the expression references the dragged edge source via `$` */

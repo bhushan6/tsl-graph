@@ -22,6 +22,7 @@ import {
     expressionUsesSource,
     getQuickCreateEvaluatedConstantSuggestion,
     getQuickCreateExpressionSuggestions,
+    getQuickCreateNameCompletions,
     type QuickCreateExpressionIntent,
 } from '@/lib/quick-create';
 import { Code, Layers } from 'lucide-react';
@@ -131,6 +132,7 @@ export function EdgeDropNodePicker({
 }: EdgeDropNodePickerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [search, setSearch] = useState('');
+    const [showSyntaxHelp, setShowSyntaxHelp] = useState(false);
 
     const editorMode = useEditorStore((s) => s.editorMode);
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
@@ -490,6 +492,8 @@ export function EdgeDropNodePicker({
         return intents.filter((intent) => isTypeMatch(intent.outputType, sourceDataType));
     }, [handleDirection, search, sourceDataType, sourceNodeId]);
 
+    const nameCompletions = useMemo(() => getQuickCreateNameCompletions(search), [search]);
+
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -549,8 +553,11 @@ export function EdgeDropNodePicker({
             <Command
                 className="rounded-lg border shadow-md"
                 filter={(value, search) => {
-                    // Use case-insensitive substring matching instead of fuzzy matching
-                    if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                    // Use case-insensitive substring matching instead of fuzzy
+                    // matching. cmdk trims item values on registration, so the
+                    // search must be trimmed too — otherwise a trailing space
+                    // filters out every item.
+                    if (value.toLowerCase().includes(search.toLowerCase().trim())) return 1;
                     return 0;
                 }}
             >
@@ -562,7 +569,7 @@ export function EdgeDropNodePicker({
                 />
                 <CommandList className="max-h-[300px]">
                     <CommandEmpty>{handleDirection ? 'No nodes or handles found.' : 'No nodes found.'}</CommandEmpty>
-                    {(quickCreateExpressionIntents.length > 0 || quickCreateIntents.length > 0) && (
+                    {(quickCreateExpressionIntents.length > 0 || quickCreateIntents.length > 0 || nameCompletions.length > 0) && (
                         <CommandGroup heading="Quick Create">
                             {quickCreateExpressionIntents.map((intent) => (
                                 <CommandItem
@@ -571,7 +578,14 @@ export function EdgeDropNodePicker({
                                     onSelect={() => onQuickCreateExpression(intent)}
                                     className="gap-2"
                                 >
-                                    <span>{intent.label}</span>
+                                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-xs">
+                                        {intent.expression}
+                                    </span>
+                                    {intent.outputType !== 'any' && (
+                                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                            {intent.outputType}
+                                        </span>
+                                    )}
                                 </CommandItem>
                             ))}
                             {quickCreateIntents.map((intent) => (
@@ -581,7 +595,27 @@ export function EdgeDropNodePicker({
                                     onSelect={() => onQuickCreate(intent)}
                                     className="gap-2"
                                 >
-                                    <span>{intent.label}</span>
+                                    <span className="min-w-0 flex-1 truncate">{intent.label}</span>
+                                    {intent.outputType !== 'any' && (
+                                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                            {intent.outputType}
+                                        </span>
+                                    )}
+                                </CommandItem>
+                            ))}
+                            {nameCompletions.map((completion) => (
+                                <CommandItem
+                                    key={`complete:${completion.completedQuery}`}
+                                    value={`${completion.completedQuery} ${search}`}
+                                    onSelect={() => setSearch(completion.completedQuery)}
+                                    className="gap-2"
+                                >
+                                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground">
+                                        {completion.completedQuery}
+                                    </span>
+                                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                        {completion.kind === 'function' ? 'ƒ' : 'input'}
+                                    </span>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -643,6 +677,28 @@ export function EdgeDropNodePicker({
                         </CommandGroup>
                     ))}
                 </CommandList>
+                <div className="border-t border-border">
+                    <button
+                        type="button"
+                        onClick={() => setShowSyntaxHelp((visible) => !visible)}
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                        <span>ƒx Type expressions to create graphs</span>
+                        <span>{showSyntaxHelp ? 'Hide' : 'Syntax'}</span>
+                    </button>
+                    {showSyntaxHelp && (
+                        <div className="space-y-1 border-t border-border px-3 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                            <div>{'sin(time * 2) * 0.5 + 0.5'}</div>
+                            <div>{'mix(red, blue, uv.x) · clamp(x, 0, 1)'}</div>
+                            <div>{'vec3(0, 1, 0) · #ff0000 · color(1, 0, 0)'}</div>
+                            <div>{'uv.x · positionLocal.xz · uv().mul(2).sub(1)'}</div>
+                            <div>{'t > 0.5 ? red : blue · % ** == < > && !'}</div>
+                            {handleDirection === 'output' && (
+                                <div>{'$ * 2 + 0.5 — $ is the dragged output'}</div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </Command>
         </div>
     );
