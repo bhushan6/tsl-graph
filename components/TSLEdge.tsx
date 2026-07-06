@@ -97,7 +97,21 @@ const TSLEdge = ({
     return (
         <>
             <defs>
-                <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+                {/*
+                  userSpaceOnUse with the actual endpoints: the default
+                  objectBoundingBox units make the stroke invisible for
+                  perfectly horizontal/vertical edges (zero-area bbox), and
+                  this also orients the gradient along the real edge
+                  direction instead of always left-to-right.
+                */}
+                <linearGradient
+                    id={gradientId}
+                    gradientUnits="userSpaceOnUse"
+                    x1={sourceX}
+                    y1={sourceY}
+                    x2={targetX}
+                    y2={targetY}
+                >
                     <stop offset="0%" stopColor={sourceColor} />
                     <stop offset="80%" stopColor={targetColor} />
                 </linearGradient>

@@ -156,4 +156,22 @@ describe('parseQuickCreateConstant', () => {
         expect(parseQuickCreateConstant('rebeccapurple')?.values).toEqual({ value: '#663399' });
         expect(parseQuickCreateConstant('transparent')).toBeNull();
     });
+
+    it('parses color constructors', () => {
+        expect(parseQuickCreateConstant('color(1, 0, 0)')).toMatchObject({
+            nodeType: 'const/color',
+            values: { value: '#ff0000' },
+            outputType: 'color',
+        });
+        expect(parseQuickCreateConstant('color(0.5, 0.5, 0.5)')?.values).toEqual({ value: '#808080' });
+        // Components clamp to [0, 1]
+        expect(parseQuickCreateConstant('color(2, -1, 0)')?.values).toEqual({ value: '#ff0000' });
+        // Single argument: color name, hex, or grayscale
+        expect(parseQuickCreateConstant('color(red)')?.values).toEqual({ value: '#ff0000' });
+        expect(parseQuickCreateConstant('color(#00ff00)')?.values).toEqual({ value: '#00ff00' });
+        expect(parseQuickCreateConstant('color(0.5)')?.values).toEqual({ value: '#808080' });
+        // Wrong arity fails
+        expect(parseQuickCreateConstant('color(1, 0)')).toBeNull();
+        expect(parseQuickCreateConstant('color()')).toBeNull();
+    });
 });

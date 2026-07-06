@@ -18,7 +18,12 @@ import { buildGlobalPickerEntries } from '@/lib/global-picker-utils';
 import { getLocalSetReferenceLabel, getValidLocalSetNodesForGetNode, isLocalSetNode } from '@/lib/local-utils';
 import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import { getQuickCreateConstantSuggestions, type QuickCreateConstantIntent } from '@/lib/quick-create-constants';
-import { getQuickCreateExpressionSuggestions, type QuickCreateExpressionIntent } from '@/lib/quick-create-expressions';
+import {
+    expressionUsesSource,
+    getQuickCreateEvaluatedConstantSuggestion,
+    getQuickCreateExpressionSuggestions,
+    type QuickCreateExpressionIntent,
+} from '@/lib/quick-create';
 import { Code, Layers } from 'lucide-react';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
@@ -459,18 +464,31 @@ export function EdgeDropNodePicker({
     }, [allNodes, handleDirection, sourceDataType]);
 
     const quickCreateIntents = useMemo(() => {
-        const intents = getQuickCreateConstantSuggestions(search);
+        const evaluated = getQuickCreateEvaluatedConstantSuggestion(search);
+        const intents = [
+            ...getQuickCreateConstantSuggestions(search),
+            ...(evaluated ? [evaluated] : []),
+        ];
         if (!handleDirection) return intents;
         if (handleDirection !== 'input') return [];
         return intents.filter((intent) => isTypeMatch(intent.outputType, sourceDataType));
     }, [handleDirection, search, sourceDataType]);
 
     const quickCreateExpressionIntents = useMemo(() => {
+        if (handleDirection === 'output') {
+            // Dragging forward from an output: expressions may consume the
+            // source via `$`, e.g. "$ * 2 + 0.5".
+            if (!sourceNodeId) return [];
+            const intents = getQuickCreateExpressionSuggestions(search, {
+                source: { dataType: sourceDataType || 'any' },
+            });
+            return intents.filter((intent) => expressionUsesSource(intent.ast));
+        }
+
         const intents = getQuickCreateExpressionSuggestions(search);
         if (!handleDirection) return intents;
-        if (handleDirection !== 'input') return [];
         return intents.filter((intent) => isTypeMatch(intent.outputType, sourceDataType));
-    }, [handleDirection, search, sourceDataType]);
+    }, [handleDirection, search, sourceDataType, sourceNodeId]);
 
     // Handle keyboard navigation (basic)
     const handleKeyDown = (e: React.KeyboardEvent) => {

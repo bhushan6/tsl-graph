@@ -273,6 +273,55 @@ function parseColorLiteral(query: string): QuickCreateConstantIntent | null {
     };
 }
 
+function colorComponentToHex(value: number): string {
+    const clamped = Math.max(0, Math.min(1, value));
+    return Math.round(clamped * 255).toString(16).padStart(2, '0');
+}
+
+function parseColorConstructor(query: string): QuickCreateConstantIntent | null {
+    const match = /^color\s*\((.*)\)$/i.exec(query);
+    if (!match) return null;
+
+    const rawArgs = match[1].trim();
+    if (!rawArgs) return null;
+    const args = rawArgs.split(',').map((arg) => arg.trim());
+
+    if (args.length === 1) {
+        const literal = parseColorLiteral(args[0]);
+        if (literal) return literal;
+
+        const gray = parseNumberLiteral(args[0]);
+        if (gray === null) return null;
+        const component = colorComponentToHex(gray);
+        const hex = `#${component}${component}${component}`;
+        return {
+            nodeType: 'const/color',
+            values: { value: hex },
+            label: `Create Color ${hex}`,
+            outputHandleId: 'out',
+            outputType: 'color',
+        };
+    }
+
+    if (args.length !== 3) return null;
+
+    const components: string[] = [];
+    for (const arg of args) {
+        const value = parseNumberLiteral(arg);
+        if (value === null) return null;
+        components.push(colorComponentToHex(value));
+    }
+
+    const hex = `#${components.join('')}`;
+    return {
+        nodeType: 'const/color',
+        values: { value: hex },
+        label: `Create Color ${hex}`,
+        outputHandleId: 'out',
+        outputType: 'color',
+    };
+}
+
 function parseFloatLiteral(query: string): QuickCreateConstantIntent | null {
     const value = parseNumberLiteral(query);
     if (value === null) return null;
@@ -313,6 +362,7 @@ export function parseQuickCreateConstant(query: string): QuickCreateConstantInte
 
     return parseVectorLiteral(trimmed)
         ?? parseScalarConstructor(trimmed)
+        ?? parseColorConstructor(trimmed)
         ?? parseColorLiteral(trimmed)
         ?? parseFloatLiteral(trimmed);
 }
@@ -327,6 +377,7 @@ export function getQuickCreateConstantSuggestions(query: string): QuickCreateCon
 
     const exact = parseVectorLiteral(trimmed)
         ?? parseScalarConstructor(trimmed)
+        ?? parseColorConstructor(trimmed)
         ?? parseColorLiteral(trimmed);
     if (exact) return [exact];
 
