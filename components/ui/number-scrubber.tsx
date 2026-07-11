@@ -50,6 +50,13 @@ export interface NumericScrubberProps
   scrubSensitivity?: number;
 }
 
+/**
+ * Cap on fractional digits so we clean up floating-point noise (e.g. the classic
+ * 0.1 + 0.2 = 0.30000000000000004) while still showing small values the user
+ * cares about (0.01, 0.001, 0.0001, ...) exactly as they are.
+ */
+const MAX_DISPLAY_DECIMALS = 6;
+
 function getDecimalDigits(value: number): number {
   if (!Number.isFinite(value)) return 0;
 
@@ -58,10 +65,13 @@ function getDecimalDigits(value: number): number {
   return fraction ? fraction.replace(/0+$/, "").length : 0;
 }
 
-function getSuitableDecimalDigits(step: number | undefined, rawValue: number) {
+// Precision used only when quantizing scrub/arrow-key values to the step size,
+// so a multiple of the step (e.g. 0.1 * 3) is cleaned up rather than displayed
+// with float noise. Display precision is handled separately by formatNumber.
+function getQuantizeDecimals(step: number | undefined) {
   return step !== undefined
-    ? getDecimalDigits(step)
-    : Math.max(getDecimalDigits(rawValue), 2);
+    ? Math.min(getDecimalDigits(step), MAX_DISPLAY_DECIMALS)
+    : MAX_DISPLAY_DECIMALS;
 }
 
 function getSuitablePointerScale(step: number | undefined, rawValue: number) {
@@ -76,9 +86,14 @@ function getStepForKey(step: number, e: React.KeyboardEvent<HTMLInputElement>) {
   return e.key === "ArrowUp" ? scaledStep : -scaledStep;
 }
 
-function formatNumber(value: number, decimals: number) {
+// Renders the value as-is: no padding, no forced precision — just trailing
+// zeros stripped and float noise trimmed at MAX_DISPLAY_DECIMALS.
+function formatNumber(value: number, maxDecimals: number = MAX_DISPLAY_DECIMALS) {
   if (!Number.isFinite(value)) return "0";
-  return value.toFixed(Math.max(Math.min(decimals, 20), 0));
+  const fixed = value.toFixed(Math.max(Math.min(maxDecimals, 20), 0));
+  return fixed.includes(".")
+    ? fixed.replace(/0+$/, "").replace(/\.$/, "")
+    : fixed;
 }
 
 interface GuideOrigin {
@@ -114,12 +129,12 @@ export const NumericScrubber = React.forwardRef<
       () => (Number.isFinite(min) ? min : 0),
       [min]
     );
-    const decimals = React.useMemo(
-      () => getSuitableDecimalDigits(stepProp, value),
-      [stepProp, value]
+    const quantizeDecimals = React.useMemo(
+      () => getQuantizeDecimals(stepProp),
+      [stepProp]
     );
     const [inputValue, setInputValue] = React.useState<string>(() =>
-      formatNumber(value, decimals)
+      formatNumber(value)
     );
     const [draggingDelta, setDraggingDelta] = React.useState<number | null>(null);
     const [guideOrigin, setGuideOrigin] = React.useState<GuideOrigin | null>(null);
@@ -133,7 +148,7 @@ export const NumericScrubber = React.forwardRef<
     const isTypingRef = React.useRef(false);
     const initialValueRef = React.useRef(value);
     const internalValueRef = React.useRef(value);
-    const inputValueRef = React.useRef(formatNumber(value, decimals));
+    const inputValueRef = React.useRef(formatNumber(value));
 
     const clampValue = React.useCallback(
       (n: number) => Math.max(min, Math.min(n, max)),
@@ -147,9 +162,9 @@ export const NumericScrubber = React.forwardRef<
             ? Math.round(n / stepProp) * stepProp
             : n;
         const clamped = Math.max(min, Math.min(quantized, max));
-        return parseFloat(clamped.toFixed(decimals));
+        return parseFloat(clamped.toFixed(quantizeDecimals));
       },
-      [decimals, max, min, stepProp]
+      [quantizeDecimals, max, min, stepProp]
     );
 
     const normalizeValue = React.useCallback(
@@ -162,7 +177,6 @@ export const NumericScrubber = React.forwardRef<
     // across re-renders so they never go stale mid-scrub.
     const onChangeRef = React.useRef(onChange);
     const normalizeValueRef = React.useRef(normalizeValue);
-    const formatDecimalsRef = React.useRef(decimals);
     const clampValueRef = React.useRef(clampValue);
     const keyStepRef = React.useRef(keyStep);
     const pointerScaleRef = React.useRef(
@@ -171,14 +185,13 @@ export const NumericScrubber = React.forwardRef<
 
     onChangeRef.current = onChange;
     normalizeValueRef.current = normalizeValue;
-    formatDecimalsRef.current = decimals;
     clampValueRef.current = clampValue;
     keyStepRef.current = keyStep;
     pointerScaleRef.current =
       scrubSensitivity ?? getSuitablePointerScale(stepProp, internalValueRef.current);
 
     const setDisplayValue = React.useCallback((nextValue: number) => {
-      const normalizedValue = formatNumber(nextValue, formatDecimalsRef.current);
+      const normalizedValue = formatNumber(nextValue);
       inputValueRef.current = normalizedValue;
       setInputValue(normalizedValue);
     }, []);
@@ -366,7 +379,7 @@ export const NumericScrubber = React.forwardRef<
     const formattedTooltip =
       draggingDelta === null
         ? ""
-        : formatNumber(internalValueRef.current, formatDecimalsRef.current);
+        : formatNumber(internalValueRef.current);
     const guideOverlay =
       draggingDelta !== null && guideOrigin && typeof document !== "undefined"
         ? createPortal(

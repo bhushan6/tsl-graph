@@ -816,7 +816,7 @@ function ValuePreview({ inputKey, type, value }: ValuePreviewProps) {
     const arr = Array.isArray(value) ? value : [Number(value ?? 0)];
     return (
       <span className="text-[9px] text-gray-500 font-mono">
-        ({arr.map((n) => (typeof n === "number" ? n.toFixed(1) : n)).join(",")})
+        ({arr.map((n) => (typeof n === "number" ? formatPreviewNumber(n) : n)).join(",")})
       </span>
     );
   }
@@ -833,11 +833,22 @@ function ColorInputPreview({ value }: { value: string }) {
   );
 }
 
+// Show the value as-is: strip trailing zeros and trim float noise at 6 decimals
+// so small values like 0.001 stay visible instead of rounding to 0.00.
+function formatPreviewNumber(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  if (Number.isInteger(value)) return String(value);
+  const fixed = value.toFixed(6);
+  return fixed.includes(".")
+    ? fixed.replace(/0+$/, "").replace(/\.$/, "")
+    : fixed;
+}
+
 function NumberPreview({ value }: { value: number }) {
   return (
     //vertically center the text
     <span className="text-[9px] text-gray-500 font-mono tabular-nums flex items-center">
-      ({Number.isInteger(value) ? value : value.toFixed(2)})
+      ({formatPreviewNumber(value)})
     </span>
   );
 }
