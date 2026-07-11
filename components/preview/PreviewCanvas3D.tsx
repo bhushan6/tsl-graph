@@ -377,6 +377,9 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
             }
             renderer.setSize(width, height);
             renderer.setPixelRatio(window.devicePixelRatio);
+            // Tagged so the graph image export can locate and stitch in the
+            // rendered shader preview.
+            renderer.domElement.dataset.shaderPreviewCanvas = 'true';
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
             renderPipelineRef.current = new THREE.RenderPipeline(renderer);

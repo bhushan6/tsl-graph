@@ -10,6 +10,7 @@ import { useEditorStore } from '@/store/editor';
 import { registry } from '@/lib/registry';
 import { toast } from 'sonner';
 import { detectConvertibleChain } from '@/lib/multi-op-convert';
+import { ExportImageButton } from '@/components/ExportImageButton';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { useReactFlow } from '@xyflow/react';
 
@@ -295,6 +296,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             <TooltipContent>View Code</TooltipContent>
                         </Tooltip>
                     )}
+                    <ExportImageButton />
                 </div>
 
                 <div className="w-px h-4 bg-border" />
@@ -545,6 +547,10 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                     <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
                 </Tooltip>
             </div>
+
+            <div className="w-px h-4 bg-border" />
+
+            <ExportImageButton />
 
             {onOpenAiDock && (
                 <>
