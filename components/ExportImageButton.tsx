@@ -27,10 +27,37 @@ import type { AppNode } from "@/lib/types";
 // Flow-space padding around the captured nodes.
 const BOUNDS_PADDING = 32;
 
+const INCLUDE_SHADER_PREVIEW_STORAGE_KEY = "tsl-export-include-shader-preview";
+
+function readStoredIncludeShaderPreview(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage.getItem(INCLUDE_SHADER_PREVIEW_STORAGE_KEY) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function ExportImageButton() {
   const { getNodes, getNodesBounds } = useReactFlow<AppNode>();
   const selectionCount = useEditorStore((s) => s.selectedNodeIds.length);
-  const [includeShaderPreview, setIncludeShaderPreview] = useState(false);
+  const [includeShaderPreview, setIncludeShaderPreviewState] = useState(
+    readStoredIncludeShaderPreview,
+  );
+
+  const setIncludeShaderPreview = useCallback((checked: boolean) => {
+    setIncludeShaderPreviewState(checked);
+    try {
+      window.localStorage.setItem(
+        INCLUDE_SHADER_PREVIEW_STORAGE_KEY,
+        String(checked),
+      );
+    } catch {
+      // Persistence is best-effort; private mode / blocked storage is fine.
+    }
+  }, []);
   const [isExporting, setIsExporting] = useState(false);
   // State updates are async, so a ref is needed to block re-entrant calls
   // (e.g. a menu item event firing twice) within the same tick.
