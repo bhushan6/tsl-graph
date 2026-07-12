@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, /* Sparkles, */ FileCode2 } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, Split, /* Sparkles, */ FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -41,6 +41,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
     const createLoopGroup = useEditorStore((s) => s.createLoopGroup);
     const removeNodesFromGroup = useEditorStore((s) => s.removeNodesFromGroup);
     const convertChainToMultiOp = useEditorStore((s) => s.convertChainToMultiOp);
+    const convertMultiOpToChain = useEditorStore((s) => s.convertMultiOpToChain);
     const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
 
     // Ref to track subgraph name without causing re-renders
@@ -280,6 +281,21 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Tooltip>
                         );
                     })()}
+                    {selectedNodeIds.length === 1 && nodes.find((n) => n.id === selectedNodeIds[0])?.data.type === 'math/multiOp' && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => convertMultiOpToChain(selectedNodeIds[0])}
+                                    className="h-8 w-8"
+                                >
+                                    <Split className="w-4 h-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Expand to separate nodes</TooltipContent>
+                        </Tooltip>
+                    )}
                     {onOpenCodePanel && (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -509,6 +525,21 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                         </Tooltip>
                     );
                 })()}
+                {selectedNodeIds.length === 1 && nodes.find((n) => n.id === selectedNodeIds[0])?.data.type === 'math/multiOp' && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => convertMultiOpToChain(selectedNodeIds[0])}
+                                className="h-8 w-8"
+                            >
+                                <Split className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Expand to separate nodes</TooltipContent>
+                    </Tooltip>
+                )}
             </div>
 
             <div className="w-px h-4 bg-border" />

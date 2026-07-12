@@ -17,7 +17,7 @@ import { replaceEdgeOnTargetHandle } from '@/lib/graph-utils';
 import { loopNodes, MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES, POST_INPUT_DEFAULT_OUTPUTS, POST_NODE_TYPES } from '@/lib/nodes';
 import { TSLNodeData, NodeType, SubgraphDefinition, SubgraphPort, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind, TSLType } from '@/lib/types';
 import { getMultiOpInputHandleIds, type MultiOpType } from '@/lib/multi-op';
-import { buildMultiOpFromChain } from '@/lib/multi-op-convert';
+import { buildMultiOpFromChain, buildChainFromMultiOp } from '@/lib/multi-op-convert';
 import { DEFAULT_GRADIENT_STOPS, normalizeGradientStops } from '@/lib/gradient-utils';
 import { registry } from '@/lib/registry';
 import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
@@ -902,6 +902,7 @@ interface EditorState {
 
     // Chain-to-MultiOp conversion
     convertChainToMultiOp: (orderedNodeIds: string[]) => void;
+    convertMultiOpToChain: (nodeId: string) => void;
 
 
     // Subgraph actions
@@ -4381,6 +4382,118 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         posthog.capture('chain_converted_to_multiop', {
             chain_length: orderedNodeIds.length,
             operations: operations.map((op) => op.op),
+            project_id: get().projectId,
+        });
+    },
+
+    convertMultiOpToChain: (nodeId) => {
+        const { nodes, edges } = get();
+        const multiOpNode = nodes.find((n) => n.id === nodeId);
+        if (!multiOpNode || multiOpNode.data.type !== 'math/multiOp') return;
+
+        const expansion = buildChainFromMultiOp(multiOpNode, edges);
+        if (!expansion.valid) {
+            if (expansion.reason) toast.error(expansion.reason);
+            return;
+        }
+
+        get().takeSnapshot();
+
+        const { ops, incomingEdges, outgoingEdges } = expansion;
+
+        // Lay the reconstructed nodes out left → right, mirroring the code chain
+        // order, anchored at the MultiOp node's position.
+        const HORIZONTAL_STEP = 220;
+        const baseX = multiOpNode.position.x;
+        const baseY = multiOpNode.position.y;
+        const { parentId, extent } = multiOpNode;
+
+        const newNodeIds = ops.map((_, i) => `${ops[i].nodeType}-${Date.now()}-${i}`);
+
+        const newNodes: Node<TSLNodeData>[] = ops.map((op, i) => ({
+            id: newNodeIds[i],
+            type: op.nodeType,
+            position: { x: baseX + i * HORIZONTAL_STEP, y: baseY },
+            ...(parentId ? { parentId, extent } : {}),
+            data: {
+                type: op.nodeType as NodeType,
+                values: op.values as Record<string, TSLValueType>,
+                connected: {},
+            },
+        }));
+
+        // Remove the MultiOp node and all edges touching it.
+        const filteredNodes = nodes.filter((n) => n.id !== nodeId);
+        const filteredEdges = edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
+
+        const newEdges: Edge[] = [...filteredEdges];
+
+        // Internal chain edges: each node's output feeds the next node's chain input.
+        for (let i = 1; i < ops.length; i++) {
+            const chainKey = ops[i].chainKey;
+            if (!chainKey) continue;
+            const source = newNodeIds[i - 1];
+            const target = newNodeIds[i];
+            newEdges.push({
+                id: `e-${source}-out-${target}-${chainKey}`,
+                source,
+                sourceHandle: 'out',
+                target,
+                targetHandle: chainKey,
+            });
+        }
+
+        // External edges into the MultiOp node → reconnect to the owning node.
+        for (const { originalEdge, opIndex, targetHandle } of incomingEdges) {
+            const target = newNodeIds[opIndex];
+            newEdges.push({
+                id: `e-${originalEdge.source}-${originalEdge.sourceHandle}-${target}-${targetHandle}`,
+                source: originalEdge.source,
+                sourceHandle: originalEdge.sourceHandle,
+                target,
+                targetHandle,
+            });
+        }
+
+        // External edges out of the MultiOp node → reconnect from the tail node.
+        const tailId = newNodeIds[newNodeIds.length - 1];
+        for (const { originalEdge } of outgoingEdges) {
+            newEdges.push({
+                id: `e-${tailId}-out-${originalEdge.target}-${originalEdge.targetHandle}`,
+                source: tailId,
+                sourceHandle: 'out',
+                target: originalEdge.target,
+                targetHandle: originalEdge.targetHandle,
+            });
+        }
+
+        // Insert reconstructed nodes; if parented, keep them after the parent for
+        // correct React Flow ordering.
+        let finalNodes: Node<TSLNodeData>[];
+        if (parentId) {
+            const parentIndex = filteredNodes.findIndex((n) => n.id === parentId);
+            const insertIndex = parentIndex >= 0 ? parentIndex + 1 : filteredNodes.length;
+            finalNodes = [
+                ...filteredNodes.slice(0, insertIndex),
+                ...newNodes,
+                ...filteredNodes.slice(insertIndex),
+            ];
+        } else {
+            finalNodes = [...filteredNodes, ...newNodes];
+        }
+
+        set({
+            nodes: finalNodes,
+            edges: newEdges,
+            selectedNodeIds: newNodeIds,
+            selectedNodeId: newNodeIds[0] ?? null,
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+
+        posthog.capture('multiop_converted_to_chain', {
+            chain_length: ops.length,
+            operations: ops.map((op) => op.op),
             project_id: get().projectId,
         });
     },

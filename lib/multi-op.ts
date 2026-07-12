@@ -39,7 +39,7 @@ const getOutputs = (def: MathNodeDef): Record<string, Port> | null => {
     return outputs;
 };
 
-const MULTI_OP_DEFS: { tsl: string; label: string; inputs: Record<string, Port> }[] = mathNodes.flatMap(
+const MULTI_OP_DEFS: { tsl: string; type: string; label: string; inputs: Record<string, Port> }[] = mathNodes.flatMap(
     (def) => {
         if (def.type === 'math/multiOp') return [];
         const inputs = getInputs(def);
@@ -48,6 +48,7 @@ const MULTI_OP_DEFS: { tsl: string; label: string; inputs: Record<string, Port> 
         return [
             {
                 tsl: def.tsl,
+                type: def.type,
                 label: def.label,
                 inputs,
             },
@@ -124,4 +125,9 @@ export function isValidMultiOp(tsl: string): boolean {
 
 export function getMultiOpChainKey(tsl: string): string | null {
     return MULTI_OP_DEF_MAP.get(tsl)?.chainKey ?? null;
+}
+
+/** Resolve the node registry `type` (e.g. `math/add`) for a multiOp operation's tsl. */
+export function getMultiOpNodeType(tsl: string): string | null {
+    return MULTI_OP_DEF_MAP.get(tsl)?.type ?? null;
 }

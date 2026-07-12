@@ -6,6 +6,7 @@ import {
     getMultiOpChainKey,
     getMultiOpHandleId,
     getMultiOpParams,
+    getMultiOpNodeType,
     type MultiOp,
 } from './multi-op';
 
@@ -282,4 +283,104 @@ export function buildMultiOpFromChain(
     }
 
     return { operations, values, incomingEdges, outgoingEdges };
+}
+
+/** A single reconstructed node in a MultiOp expansion, in chain order (head → tail). */
+export interface ExpandedOpNode {
+    op: MultiOp['op'];
+    /** Registry node type (e.g. `math/add`) resolved from the operation's tsl. */
+    nodeType: string;
+    /** Chain input handle for this operation (the input fed by the previous node). */
+    chainKey: string | null;
+    /** Literal values for the reconstructed node, keyed by input param key. */
+    values: Record<string, unknown>;
+}
+
+export interface MultiOpExpansionResult {
+    valid: boolean;
+    reason?: string;
+    /** One node per operation, in chain order (head → tail). */
+    ops: ExpandedOpNode[];
+    /**
+     * External edges reconnected from the MultiOp node's inputs to the
+     * reconstructed nodes. `opIndex` indexes into `ops`; `targetHandle` is the
+     * param key on that node.
+     */
+    incomingEdges: { originalEdge: Edge; opIndex: number; targetHandle: string }[];
+    /** External edges from the MultiOp node's `out` handle to reconnect to the tail node. */
+    outgoingEdges: { originalEdge: Edge }[];
+}
+
+/**
+ * Expand a MultiOp node back into a chain of individual operation nodes.
+ * Inverse of {@link buildMultiOpFromChain}.
+ */
+export function buildChainFromMultiOp(
+    multiOpNode: Node<TSLNodeData>,
+    edges: Edge[]
+): MultiOpExpansionResult {
+    const fail = (reason: string): MultiOpExpansionResult => ({
+        valid: false,
+        reason,
+        ops: [],
+        incomingEdges: [],
+        outgoingEdges: [],
+    });
+
+    const operations = multiOpNode.data.operations ?? [];
+    if (operations.length === 0) {
+        return fail('Multi-op node has no operations to expand');
+    }
+
+    const values = multiOpNode.data.values ?? {};
+    const ops: ExpandedOpNode[] = [];
+
+    // Map each external input handle id → the op/param it belongs to, so external
+    // edges into the MultiOp node can be routed to the reconstructed nodes.
+    const handleToOp = new Map<string, { opIndex: number; paramKey: string }>();
+
+    for (let i = 0; i < operations.length; i++) {
+        const { id: opId, op } = operations[i];
+
+        const nodeType = getMultiOpNodeType(op);
+        if (!nodeType) {
+            return fail(`Operation "${op}" cannot be expanded to a node`);
+        }
+
+        const chainKey = getMultiOpChainKey(op);
+        const isFirst = i === 0;
+        const params = getMultiOpParams(op, isFirst);
+
+        const nodeValues: Record<string, unknown> = {};
+        for (const param of params) {
+            const handleId = getMultiOpHandleId(opId, param.key);
+            handleToOp.set(handleId, { opIndex: i, paramKey: param.key });
+
+            const stored = values[handleId];
+            nodeValues[param.key] = stored !== undefined ? stored : param.default;
+        }
+
+        ops.push({ op, nodeType, chainKey, values: nodeValues });
+    }
+
+    const incomingEdges: MultiOpExpansionResult['incomingEdges'] = [];
+    const outgoingEdges: MultiOpExpansionResult['outgoingEdges'] = [];
+
+    for (const edge of edges) {
+        if (edge.target === multiOpNode.id) {
+            const mapping = edge.targetHandle ? handleToOp.get(edge.targetHandle) : undefined;
+            if (mapping) {
+                incomingEdges.push({
+                    originalEdge: edge,
+                    opIndex: mapping.opIndex,
+                    targetHandle: mapping.paramKey,
+                });
+            }
+        }
+        if (edge.source === multiOpNode.id && edge.sourceHandle === 'out') {
+            outgoingEdges.push({ originalEdge: edge });
+        }
+    }
+
+    return { valid: true, ops, incomingEdges, outgoingEdges };
 }

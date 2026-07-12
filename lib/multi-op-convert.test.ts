@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, NodeType, NodeDef } from '@/lib/types';
 import { registry } from '@/lib/registry';
-import { detectConvertibleChain, buildMultiOpFromChain } from './multi-op-convert';
+import { detectConvertibleChain, buildMultiOpFromChain, buildChainFromMultiOp } from './multi-op-convert';
+import type { MultiOp } from './multi-op';
 
 // Register the math nodes we need for testing
 const testDefs: NodeDef[] = [
@@ -480,5 +481,138 @@ describe('buildMultiOpFromChain', () => {
         // Clamp in non-first position: chainKey 'x' excluded, 'min' and 'max' remain
         expect(result.values[`op_${op2.id}_min`]).toBe(-1);
         expect(result.values[`op_${op2.id}_max`]).toBe(1);
+    });
+});
+
+// ── buildChainFromMultiOp ────────────────────────────────────────────
+
+const createMultiOpNode = (
+    id: string,
+    operations: MultiOp[],
+    values: Record<string, unknown> = {}
+): Node<TSLNodeData> =>
+    createNode(id, 'math/multiOp', {
+        operations,
+        values: values as TSLNodeData['values'],
+    });
+
+describe('buildChainFromMultiOp', () => {
+    it('should reject a multiOp node with no operations', () => {
+        const node = createMultiOpNode('m1', []);
+        const result = buildChainFromMultiOp(node, []);
+
+        expect(result.valid).toBe(false);
+        expect(result.reason).toContain('no operations');
+    });
+
+    it('should expand a 2-op chain (add → mul) to node types', () => {
+        const operations: MultiOp[] = [
+            { id: 'a', op: 'add' },
+            { id: 'b', op: 'mul' },
+        ];
+        const node = createMultiOpNode('m1', operations, {
+            op_a_a: 10,
+            op_a_b: 20,
+            op_b_b: 5,
+        });
+
+        const result = buildChainFromMultiOp(node, []);
+
+        expect(result.valid).toBe(true);
+        expect(result.ops).toHaveLength(2);
+        expect(result.ops[0].nodeType).toBe('math/add');
+        expect(result.ops[1].nodeType).toBe('math/mul');
+        // First op keeps both params
+        expect(result.ops[0].values.a).toBe(10);
+        expect(result.ops[0].values.b).toBe(20);
+        // Second op: chainKey 'a' excluded, only 'b'
+        expect(result.ops[1].values.b).toBe(5);
+        expect(result.ops[1].chainKey).toBe('a');
+    });
+
+    it('should fall back to param defaults for missing values', () => {
+        const operations: MultiOp[] = [{ id: 'a', op: 'add' }];
+        const node = createMultiOpNode('m1', operations, {}); // no stored values
+
+        const result = buildChainFromMultiOp(node, []);
+
+        expect(result.valid).toBe(true);
+        // add defaults are 0 for both a and b
+        expect(result.ops[0].values.a).toBe(0);
+        expect(result.ops[0].values.b).toBe(0);
+    });
+
+    it('should route external incoming edges to the owning op', () => {
+        const operations: MultiOp[] = [
+            { id: 'a', op: 'add' },
+            { id: 'b', op: 'mul' },
+        ];
+        const node = createMultiOpNode('m1', operations);
+        // External source feeds the first op's 'a' input handle
+        const edges = [createEdge('ext', 'out', 'm1', 'op_a_a')];
+
+        const result = buildChainFromMultiOp(node, edges);
+
+        expect(result.incomingEdges).toHaveLength(1);
+        expect(result.incomingEdges[0].opIndex).toBe(0);
+        expect(result.incomingEdges[0].targetHandle).toBe('a');
+    });
+
+    it('should route incoming edges to a non-first op non-chain input', () => {
+        const operations: MultiOp[] = [
+            { id: 'a', op: 'add' },
+            { id: 'b', op: 'mul' },
+        ];
+        const node = createMultiOpNode('m1', operations);
+        const edges = [createEdge('ext', 'out', 'm1', 'op_b_b')];
+
+        const result = buildChainFromMultiOp(node, edges);
+
+        expect(result.incomingEdges).toHaveLength(1);
+        expect(result.incomingEdges[0].opIndex).toBe(1);
+        expect(result.incomingEdges[0].targetHandle).toBe('b');
+    });
+
+    it('should capture outgoing edges from the out handle', () => {
+        const operations: MultiOp[] = [
+            { id: 'a', op: 'add' },
+            { id: 'b', op: 'mul' },
+        ];
+        const node = createMultiOpNode('m1', operations);
+        const edges = [createEdge('m1', 'out', 'ext', 'x')];
+
+        const result = buildChainFromMultiOp(node, edges);
+
+        expect(result.outgoingEdges).toHaveLength(1);
+        expect(result.outgoingEdges[0].originalEdge.target).toBe('ext');
+    });
+
+    it('should round-trip: chain → multiOp → chain preserves types and values', () => {
+        const nodes = [
+            createNode('n1', 'math/add', { values: { a: 1, b: 2 } }),
+            createNode('n2', 'math/mul', { values: { b: 3 } }),
+            createNode('n3', 'math/clamp', { values: { min: 0, max: 1 } }),
+        ];
+        const edges = [
+            createEdge('n1', 'out', 'n2', 'a'),
+            createEdge('n2', 'out', 'n3', 'x'),
+        ];
+
+        const forward = buildMultiOpFromChain(['n1', 'n2', 'n3'], nodes, edges);
+        const multiOpNode = createMultiOpNode('m1', forward.operations, forward.values);
+
+        const back = buildChainFromMultiOp(multiOpNode, []);
+
+        expect(back.valid).toBe(true);
+        expect(back.ops.map((o) => o.nodeType)).toEqual([
+            'math/add',
+            'math/mul',
+            'math/clamp',
+        ]);
+        expect(back.ops[0].values.a).toBe(1);
+        expect(back.ops[0].values.b).toBe(2);
+        expect(back.ops[1].values.b).toBe(3);
+        expect(back.ops[2].values.min).toBe(0);
+        expect(back.ops[2].values.max).toBe(1);
     });
 });
