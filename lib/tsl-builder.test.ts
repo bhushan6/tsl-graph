@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import * as THREE from 'three/webgpu';
 import { buildNodePreviewMaterial, buildTSLPostDebugOutputNode, getPreviewOutputHandle } from './tsl-builder';
-import type { SubgraphDefinition, TSLNodeData } from '@/lib/types';
+import type { GlobalContextEntry, SubgraphDefinition, TSLNodeData } from '@/lib/types';
 import { initializeNodes } from './nodes';
 
 function createNode(
@@ -155,6 +155,30 @@ describe('buildNodePreviewMaterial', () => {
         const material = buildNodePreviewMaterial('add', nodes, edges);
 
         expect(material).toBeInstanceOf(THREE.NodeMaterial);
+        expect((material as THREE.NodeMaterial).fragmentNode).toBeTruthy();
+    });
+
+    it('builds a preview when a global name shadows a three/tsl builtin (thickness)', () => {
+        // `thickness` is a three/tsl export, so it appears as a scope key injected
+        // as a function parameter. A user global named `thickness` compiles to a
+        // top-level `const thickness = ...`, which previously collided with that
+        // parameter ("Identifier 'thickness' has already been declared") and fell
+        // back to the magenta error material (no fragmentNode).
+        const globals: GlobalContextEntry[] = [
+            { id: 'g-thick', name: 'thickness', kind: 'uniform', type: 'float', defaultValue: 0 },
+        ];
+        const nodes: Node<TSLNodeData>[] = [
+            createNode('gref', 'global/ref', { globalId: 'g-thick' }),
+            createNode('add', 'math/add', { b: 1 }),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'gref', sourceHandle: 'out', target: 'add', targetHandle: 'a' },
+        ];
+
+        const material = buildNodePreviewMaterial('add', nodes, edges, undefined, undefined, globals);
+
+        expect(material).toBeInstanceOf(THREE.NodeMaterial);
+        // A real preview sets fragmentNode; the error fallback sets .color instead.
         expect((material as THREE.NodeMaterial).fragmentNode).toBeTruthy();
     });
 

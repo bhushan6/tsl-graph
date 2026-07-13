@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Github, Linkedin, Globe } from "lucide-react";
+import { ArrowRight, Github, Linkedin } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
 import { ThemeToggle } from "@/components/ThemeToggle";

@@ -217,6 +217,21 @@ export const noiseNodes = [
         outputs: { out: { label: 'Out', type: 'float' } },
         tsl: 'triNoise3D',
     },
+    {
+        type: 'noise/voronoi',
+        label: 'Voronoi',
+        category: 'Noise',
+        description: 'Grid-based repeating Voronoi. Returns vec4: x = cell distance, y = approximate edge distance, z = exact edge distance, w = cell seed.',
+        inputs: {
+            position: { label: 'Position', type: 'vec2', default: [0, 0] },
+            subdivision: { label: 'Subdivision', type: 'float', default: 1.0 },
+            seed: { label: 'Seed', type: 'int', default: 0 },
+        },
+        // x: cell distance, y: edge distance (approx), z: edge distance (exact), w: cell seed
+        outputs: { out: { label: 'Out', type: 'vec4' } },
+        tsl: 'voronoi',
+        importFrom: '@/lib/tsl-utils',
+    },
 ] as const;
 
 // Type check

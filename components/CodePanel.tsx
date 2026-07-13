@@ -7,7 +7,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
 import { useEditorStore } from '@/store/editor';
-import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
+import { compileGlobalContext, compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
 import { SubgraphDefinition } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { inlineCustomTslImports } from '@/lib/editor-host/tsl-utils-inline';
@@ -97,11 +97,20 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
 
         const sections: string[] = [];
 
+        // Globals are shared across the material and post root graphs, so emit
+        // them once at the top and omit them from each graph's own output to
+        // avoid duplicate `const` declarations in the combined file.
+        const globalContext = compileGlobalContext(globals);
+        if (globalContext) {
+            sections.push(globalContext);
+            sections.push('');
+        }
+
         if (materialGraphEnabled) {
             const materialGraph = getRootGraph('material');
             let materialCode = '// Material graph could not be compiled.';
             try {
-                materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals });
+                materialCode = compileGraph(materialGraph.nodes, materialGraph.edges, subgraphs, codeNodes, { globals, omitGlobalContext: true });
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Material graph could not be compiled.';
                 materialCode = `// ${message}`;
@@ -118,7 +127,7 @@ export function CodePanel({ isOpen, onClose }: CodePanelProps) {
             const postOutputActiveControls = getPostOutputActiveControls(postGraph.nodes);
             let postCode = '// Post graph could not be compiled.';
             try {
-                const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals });
+                const postCompiled = compilePostGraph(postGraph.nodes, postGraph.edges, subgraphs, codeNodes, { globals, omitGlobalContext: true });
                 postCode = postCompiled.code;
                 postFn = postCompiled.functionName;
             } catch (error) {

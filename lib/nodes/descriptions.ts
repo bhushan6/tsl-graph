@@ -217,6 +217,8 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'geo/screenUV': 'Returns screen-space UV coordinates.',
     'geo/screenCoordinate': 'Returns screen-space coordinates in pixels.',
     'geo/resolution': 'Returns the screen resolution.',
+    'geo/viewportSize': 'Returns the viewport resolution in pixels.',
+    'geo/viewportCoordinate': 'Returns the fragment coordinate relative to the viewport, in pixels.',
     'geo/time': 'Returns the current time in seconds.',
 
     'global/ref': 'Reads a global value.',

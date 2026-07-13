@@ -211,6 +211,22 @@ export const geometryNodes = [
         tsl: 'screenSize',
         pure: true,
     },
+    {
+        type: 'geo/viewportSize',
+        label: 'Viewport Size',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'viewportSize',
+        pure: true,
+    },
+    {
+        type: 'geo/viewportCoordinate',
+        label: 'Viewport Coordinate',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'viewportCoordinate',
+        pure: true,
+    },
 ] as const;
 
 // Type check

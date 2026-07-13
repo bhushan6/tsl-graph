@@ -1,4 +1,4 @@
-import { Fn, float, vec2, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, length, max, min, color, atan, PI } from 'three/tsl';
+import { Fn, float, vec2, vec3, vec4, mat4, mat2, normalize, sin, cos, pow, dot, mix, step, clamp, length, max, min, color, atan, PI, distance, hash, If, Loop, uv } from 'three/tsl';
 
 type TSLLooseNode = {
     x: TSLLooseNode;
@@ -229,4 +229,87 @@ export const hslToRgb = Fn(([h, s, l]) => {
     const rgb = hue.add(vec3(0, 4, 2)).mod(6).sub(3).abs().sub(1).clamp(0, 1);
     const chromaScale = float(1).sub(l.mul(2).sub(1).abs());
     return l.add(s.mul(rgb.sub(0.5)).mul(chromaScale));
+});
+
+// Distance metric between two 2D points (Euclidean).
+//@ts-expect-error: this is valid but TSL types seems off
+const pointsDistance = Fn(([pointA, pointB]) => {
+    return distance(pointA, pointB);
+}, { pointA: 'vec2', pointB: 'vec2', return: 'float' });
+
+// Convert an integer cell seed to the [0, 1] range for a given subdivision.
+//@ts-expect-error: this is valid but TSL types seems off
+export const voronoiNormalizeSeed = Fn(([seed, subdivision]) => {
+    return seed.div(subdivision.pow(2).sub(1)).fract();
+}, { seed: 'int', subdivision: 'float', return: 'float' });
+
+// Grid-based, repeating Voronoi. Returns a vec4 packing:
+//   x: distance to the closest point (cell distance)
+//   y: approximate distance to the cell edge (|d2 - d1|)
+//   z: exact distance to the cell edge
+//   w: cell seed (relative to the input seed)
+//@ts-expect-error: this is valid but TSL types seems off
+export const voronoi = Fn(([position = uv(), subdivision = 1, seed = 0]) => {
+    const gridPosition = position.mul(subdivision);
+    const cellPosition = gridPosition.floor();
+
+    // Closest point
+    const pointPosition = vec2();
+    const pointDistance = float(1e6);
+    const pointSeed = float(0);
+
+    // Second closest point (for edge distance)
+    const secondPointPosition = vec2();
+    const secondPointDistance = float(1e6);
+
+    // Loop over the current cell and its 8 neighbours
+    //@ts-expect-error: this is valid but TSL types seems off
+    Loop({ start: float(-1), end: float(1), type: 'float', condition: '<=', name: 'iX' }, ({ iX }) => {
+        //@ts-expect-error: this is valid but TSL types seems off
+        Loop({ start: float(-1), end: float(1), type: 'float', condition: '<=', name: 'iY' }, ({ iY }) => {
+            // Cell position
+            const loopCellPosition = cellPosition.add(vec2(iX, iY));
+
+            // Seed from cell position
+            const loopPointSeed = loopCellPosition.x.mod(subdivision).mul(subdivision).add(loopCellPosition.y.mod(subdivision)).add(seed);
+
+            // Point position from seed
+            const loopPointPosition = vec2(
+                hash(loopPointSeed),
+                hash(loopPointSeed.add(123).mul(2)),
+            ).add(loopCellPosition);
+
+            // Point distance
+            //@ts-expect-error: this is valid but TSL types seems off
+            const loopPointDistance = pointsDistance(loopPointPosition, gridPosition);
+
+            // Loop point is closer than current
+            If(loopPointDistance.lessThan(pointDistance), () => {
+                // Move current closest to second closest
+                secondPointPosition.assign(pointPosition);
+                secondPointDistance.assign(pointDistance);
+
+                // Save as current closest
+                pointPosition.assign(loopPointPosition);
+                pointDistance.assign(loopPointDistance);
+                pointSeed.assign(loopPointSeed);
+            })
+            // Loop point is closer to second closest
+                .ElseIf(loopPointDistance.lessThan(secondPointDistance), () => {
+                    // Save as second closest
+                    secondPointPosition.assign(loopPointPosition);
+                    secondPointDistance.assign(loopPointDistance);
+                });
+        });
+    });
+
+    // Edge distance approximation
+    const edgeDistanceApproximation = secondPointDistance.sub(pointDistance).abs();
+
+    // Exact edge distance
+    const direction = secondPointPosition.sub(pointPosition).normalize();
+    const middlePoint = pointPosition.add(secondPointPosition).mul(0.5);
+    const edgeDistanceExact = dot(gridPosition.sub(middlePoint), direction).abs();
+
+    return vec4(pointDistance, edgeDistanceApproximation, edgeDistanceExact, pointSeed.sub(seed));
 });

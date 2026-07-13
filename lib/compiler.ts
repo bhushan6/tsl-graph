@@ -29,6 +29,10 @@ interface CompiledNode {
 export interface CompileOptions {
     uniformMode?: 'inline' | 'runtime';
     globals?: GlobalContextEntry[];
+    // When true, the shared "// Global Context" declarations are not emitted.
+    // Used when combining multiple root graphs into one file so the globals are
+    // declared once at the top (see compileGlobalContext) instead of per-graph.
+    omitGlobalContext?: boolean;
     runtimeCameraFromScope?: boolean;
     previewTarget?: {
         nodeId: string;
@@ -245,6 +249,42 @@ function buildGlobalVarMap(globals: GlobalContextEntry[]): { varMap: Map<string,
         varMap.set(entry.id, name);
     });
     return { varMap, reserved };
+}
+
+/**
+ * Emit the shared "// Global Context" declarations (uniforms, varyings,
+ * constants) for a set of globals. Var names come from buildGlobalVarMap, which
+ * is deterministic in `globals` alone, so the names match those referenced by
+ * any compiled graph using the same globals. Returns '' when there are none.
+ */
+export function compileGlobalContext(
+    globals: GlobalContextEntry[],
+    options: { uniformMode?: 'inline' | 'runtime' } = {}
+): string {
+    if (globals.length === 0) {
+        return '';
+    }
+    const uniformMode = options.uniformMode ?? 'inline';
+    const { varMap: globalVarMap } = buildGlobalVarMap(globals);
+    const lines: string[] = ['// Global Context'];
+    globals.forEach((entry, index) => {
+        const varName = globalVarMap.get(entry.id) ?? sanitizeIdentifier(entry.name, `_global${index}`);
+        const defaultExpr = getTSLDefaultForType(entry.type, entry.defaultValue);
+
+        if (entry.kind === 'uniform') {
+            if (uniformMode === 'runtime' && isUniformKindType(entry.type)) {
+                const valueExpr = formatUniformValueExpression(entry.type, entry.defaultValue);
+                lines.push(`const ${varName} = __uniform("${entry.id}", ${valueExpr}, "${entry.type}");`);
+            } else {
+                lines.push(`const ${varName} = uniform(${defaultExpr});`);
+            }
+        } else if (entry.kind === 'varying') {
+            lines.push(`const ${varName} = varying(${defaultExpr});`);
+        } else {
+            lines.push(`const ${varName} = ${defaultExpr};`);
+        }
+    });
+    return lines.join('\n');
 }
 
 /**
@@ -1396,25 +1436,8 @@ export function compileSubgraphCode(
         }
     }
 
-    if (globals.length > 0) {
-        lines.push('// Global Context');
-        globals.forEach((entry, index) => {
-            const varName = globalVarMap.get(entry.id) ?? sanitizeIdentifier(entry.name, `_global${index}`);
-            const defaultExpr = getTSLDefaultForType(entry.type, entry.defaultValue);
-
-            if (entry.kind === 'uniform') {
-                if (uniformMode === 'runtime' && isUniformKindType(entry.type)) {
-                    const valueExpr = formatUniformValueExpression(entry.type, entry.defaultValue);
-                    lines.push(`const ${varName} = __uniform("${entry.id}", ${valueExpr}, "${entry.type}");`);
-                } else {
-                    lines.push(`const ${varName} = uniform(${defaultExpr});`);
-                }
-            } else if (entry.kind === 'varying') {
-                lines.push(`const ${varName} = varying(${defaultExpr});`);
-            } else {
-                lines.push(`const ${varName} = ${defaultExpr};`);
-            }
-        });
+    if (globals.length > 0 && !options.omitGlobalContext) {
+        lines.push(compileGlobalContext(globals, { uniformMode }));
         lines.push('');
     }
 
@@ -1723,25 +1746,8 @@ export function compileGraph(
         }
     }
 
-    if (globals.length > 0) {
-        lines.push('// Global Context');
-        globals.forEach((entry, index) => {
-            const varName = globalVarMap.get(entry.id) ?? sanitizeIdentifier(entry.name, `_global${index}`);
-            const defaultExpr = getTSLDefaultForType(entry.type, entry.defaultValue);
-
-            if (entry.kind === 'uniform') {
-                if (uniformMode === 'runtime' && isUniformKindType(entry.type)) {
-                    const valueExpr = formatUniformValueExpression(entry.type, entry.defaultValue);
-                    lines.push(`const ${varName} = __uniform("${entry.id}", ${valueExpr}, "${entry.type}");`);
-                } else {
-                    lines.push(`const ${varName} = uniform(${defaultExpr});`);
-                }
-            } else if (entry.kind === 'varying') {
-                lines.push(`const ${varName} = varying(${defaultExpr});`);
-            } else {
-                lines.push(`const ${varName} = ${defaultExpr};`);
-            }
-        });
+    if (globals.length > 0 && !options.omitGlobalContext) {
+        lines.push(compileGlobalContext(globals, { uniformMode }));
         lines.push('');
     }
 

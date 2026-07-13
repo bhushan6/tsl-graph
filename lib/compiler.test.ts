@@ -1,6 +1,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports, getRequiredImportsByModule } from './compiler';
+import { compileGlobalContext, compileGraph, compilePostGraph, compileSubgraphCode, getRequiredImports, getRequiredImportsByModule } from './compiler';
 import { Node, Edge } from '@xyflow/react';
 import { TSLNodeData, GlobalContextEntry, NodeType, CodeNodeDefinition, SubgraphDefinition } from '@/lib/types';
 import { registry } from './registry';
@@ -530,6 +530,74 @@ describe('compileGraph', () => {
             ].join('\n');
             expect(code).toBe(expected);
             expect(() => new Function(code)).not.toThrow();
+        });
+
+        it('omits the global context block when omitGlobalContext is set', () => {
+            const nodes = [
+                createNode('g1', 'global/ref', { values: { globalId: 'global-1' } }),
+            ];
+            const globals: GlobalContextEntry[] = [
+                { id: 'global-1', name: 'uTime', kind: 'uniform', type: 'float', defaultValue: 1 },
+            ];
+            const code = compileGraph(nodes, [], undefined, undefined, { globals, omitGlobalContext: true });
+            expect(code).not.toContain('// Global Context');
+            expect(code).not.toContain('const uTime = uniform');
+        });
+
+        it('declares shared globals once when combining material and post graphs', () => {
+            const globals: GlobalContextEntry[] = [
+                { id: 'global-1', name: 'uTime', kind: 'uniform', type: 'float', defaultValue: 1 },
+            ];
+
+            const materialCode = compileGraph(
+                [createNode('g1', 'global/ref', { values: { globalId: 'global-1' } })],
+                [],
+                undefined,
+                undefined,
+                { globals, omitGlobalContext: true }
+            );
+
+            const postCompiled = compilePostGraph(
+                [
+                    createNode('post-input', 'post/input'),
+                    createNode('gref', 'global/ref', { values: { globalId: 'global-1' } }),
+                    createNode('post-output', 'post/output'),
+                ],
+                [
+                    { id: 'e1', source: 'gref', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+                ],
+                undefined,
+                undefined,
+                { globals, omitGlobalContext: true }
+            );
+
+            const combined = [
+                compileGlobalContext(globals),
+                '',
+                materialCode,
+                postCompiled.code,
+            ].join('\n');
+
+            // The declaration appears exactly once across the combined file.
+            expect(combined.match(/const uTime = uniform/g)).toHaveLength(1);
+            expect(combined.match(/\/\/ Global Context/g)).toHaveLength(1);
+            // Neither graph emits its own declaration.
+            expect(materialCode).not.toContain('const uTime = uniform');
+            expect(postCompiled.code).not.toContain('const uTime = uniform');
+            // The connected post graph still references the shared variable.
+            expect(postCompiled.code).toContain('uTime');
+        });
+
+        it('compileGlobalContext emits declarations for each kind', () => {
+            const globals: GlobalContextEntry[] = [
+                { id: 'u', name: 'uTime', kind: 'uniform', type: 'float', defaultValue: 1 },
+                { id: 'c', name: 'kScale', kind: 'const', type: 'float', defaultValue: 2 },
+            ];
+            const block = compileGlobalContext(globals);
+            expect(block).toContain('// Global Context');
+            expect(block).toContain('const uTime = uniform(float(1));');
+            expect(block).toContain('const kScale = float(2);');
+            expect(compileGlobalContext([])).toBe('');
         });
 
         it('should use user-defined names when available', () => {

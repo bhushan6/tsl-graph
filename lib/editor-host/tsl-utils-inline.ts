@@ -35,12 +35,16 @@ const INLINE_TSL_MODULES: Record<string, InlineTslModuleDefinition> = {
         label: 'Inline TSL Utils',
         sharedImports: [
             'Fn',
+            'If',
+            'Loop',
             'atan',
             'clamp',
             'color',
             'cos',
+            'distance',
             'dot',
             'float',
+            'hash',
             'length',
             'mat2',
             'mat4',
@@ -51,6 +55,7 @@ const INLINE_TSL_MODULES: Record<string, InlineTslModuleDefinition> = {
             'pow',
             'sin',
             'step',
+            'uv',
             'vec2',
             'vec3',
             'vec4',
@@ -272,6 +277,64 @@ const INLINE_TSL_MODULES: Record<string, InlineTslModuleDefinition> = {
     const chromaScale = float(1).sub(l.mul(2).sub(1).abs());
     return l.add(s.mul(rgb.sub(0.5)).mul(chromaScale));
 });`,
+            },
+            pointsDistance: {
+                code: `const pointsDistance = Fn(([pointA, pointB]) => {
+    return distance(pointA, pointB);
+}, { pointA: 'vec2', pointB: 'vec2', return: 'float' });`,
+            },
+            voronoi: {
+                code: `const voronoi = Fn(([position = uv(), subdivision = 1, seed = 0]) => {
+    const gridPosition = position.mul(subdivision);
+    const cellPosition = gridPosition.floor();
+
+    // Closest point
+    const pointPosition = vec2();
+    const pointDistance = float(1e6);
+    const pointSeed = float(0);
+
+    // Second closest point (for edge distance)
+    const secondPointPosition = vec2();
+    const secondPointDistance = float(1e6);
+
+    // Loop over the current cell and its 8 neighbours
+    Loop({ start: float(-1), end: float(1), type: 'float', condition: '<=', name: 'iX' }, ({ iX }) => {
+        Loop({ start: float(-1), end: float(1), type: 'float', condition: '<=', name: 'iY' }, ({ iY }) => {
+            const loopCellPosition = cellPosition.add(vec2(iX, iY));
+
+            const loopPointSeed = loopCellPosition.x.mod(subdivision).mul(subdivision).add(loopCellPosition.y.mod(subdivision)).add(seed);
+
+            const loopPointPosition = vec2(
+                hash(loopPointSeed),
+                hash(loopPointSeed.add(123).mul(2)),
+            ).add(loopCellPosition);
+
+            const loopPointDistance = pointsDistance(loopPointPosition, gridPosition);
+
+            If(loopPointDistance.lessThan(pointDistance), () => {
+                secondPointPosition.assign(pointPosition);
+                secondPointDistance.assign(pointDistance);
+
+                pointPosition.assign(loopPointPosition);
+                pointDistance.assign(loopPointDistance);
+                pointSeed.assign(loopPointSeed);
+            })
+                .ElseIf(loopPointDistance.lessThan(secondPointDistance), () => {
+                    secondPointPosition.assign(loopPointPosition);
+                    secondPointDistance.assign(loopPointDistance);
+                });
+        });
+    });
+
+    const edgeDistanceApproximation = secondPointDistance.sub(pointDistance).abs();
+
+    const direction = secondPointPosition.sub(pointPosition).normalize();
+    const middlePoint = pointPosition.add(secondPointPosition).mul(0.5);
+    const edgeDistanceExact = dot(gridPosition.sub(middlePoint), direction).abs();
+
+    return vec4(pointDistance, edgeDistanceApproximation, edgeDistanceExact, pointSeed.sub(seed));
+});`,
+                deps: ['pointsDistance'],
             },
         },
     },

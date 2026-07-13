@@ -123,6 +123,41 @@ function createTSLRuntimeScope() {
 }
 
 /**
+ * Build the ordered (keys, values) to inject into the `new Function(...)` used to
+ * evaluate generated code.
+ *
+ * The runtime scope exposes every TSL identifier (float, vec3, thickness, …) as a
+ * function parameter. Generated code may declare a top-level `const` — e.g. a user
+ * global named `thickness`, which is also a three/tsl export — that would collide
+ * with the same-named parameter ("Identifier 'thickness' has already been
+ * declared"). We drop any scope key that the code redeclares at the top level so
+ * the `const` shadows the builtin, matching how the standalone export behaves (it
+ * simply doesn't import the shadowed name).
+ */
+function getRuntimeScopeEntries(
+    scope: Record<string, unknown>,
+    code: string
+): { keys: string[]; values: unknown[] } {
+    // Top-level declarations start at column 0; nested (indented) consts inside
+    // Fn bodies are intentionally ignored.
+    const declared = new Set<string>();
+    const declRegex = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
+    let match: RegExpExecArray | null;
+    while ((match = declRegex.exec(code)) !== null) {
+        declared.add(match[1]);
+    }
+
+    const keys: string[] = [];
+    const values: unknown[] = [];
+    for (const key of Object.keys(scope)) {
+        if (declared.has(key)) continue;
+        keys.push(key);
+        values.push(scope[key]);
+    }
+    return { keys, values };
+}
+
+/**
  * Build a Three.js material from the node graph by compiling to TSL and evaluating it.
  * This ensures the preview matches the generated code exactly.
  */
@@ -143,8 +178,7 @@ export function buildTSLMaterial(
     // We need all TSL functions (float, vec3, Fn, etc.) and Material classes available
     const scope = createTSLRuntimeScope();
 
-    const scopeKeys = Object.keys(scope);
-    const scopeValues = Object.values(scope);
+    const { keys: scopeKeys, values: scopeValues } = getRuntimeScopeEntries(scope, code);
 
     // 3. Wrap code in a function that returns the material
     // The generated code ends with 'const material = ...;'
@@ -189,8 +223,7 @@ export function buildTSLPostOutputNode(
     setTSLUniformFactory();
 
     const scope = createTSLRuntimeScope();
-    const scopeKeys = Object.keys(scope);
-    const scopeValues = Object.values(scope);
+    const { keys: scopeKeys, values: scopeValues } = getRuntimeScopeEntries(scope, compiled.code);
     const functionBody = `
         ${compiled.code}
         const camera = sceneCamera;
@@ -360,8 +393,7 @@ export function buildNodePreviewMaterial(
     // Build execution scope
     const scope = createTSLRuntimeScope();
 
-    const scopeKeys = Object.keys(scope);
-    const scopeValues = Object.values(scope);
+    const { keys: scopeKeys, values: scopeValues } = getRuntimeScopeEntries(scope, code);
 
     // Create code that evaluates the partial graph and creates a preview material
     const functionBody = `
