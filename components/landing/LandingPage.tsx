@@ -143,7 +143,7 @@ export default function LandingPage() {
                       Code Nodes
                     </strong>{" "}
                     <span className="text-[#9A9898] dark:text-[#A1A1AA]">
-                      Write raw TSL or GLSL code snippets directly inside the
+                      Write raw TSL or WGSL code snippets directly inside the
                       graph for ultimate flexibility.
                     </span>
                   </div>
