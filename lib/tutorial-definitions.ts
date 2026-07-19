@@ -1,4 +1,5 @@
 import { createDefaultPreviewSettings, useEditorStore } from '@/store/editor';
+import { detectConvertibleChain } from '@/lib/multi-op-convert';
 
 export type TutorialEditorState = ReturnType<typeof useEditorStore.getState>;
 
@@ -513,6 +514,198 @@ export const tutorialDefinitions: TutorialDefinition[] = [
             (e) => e.source === mulNode.id && e.target === matNode.id && e.targetHandle === 'colorNode'
           );
           return addToMulA && (hasFloatToMulB || hasMulBValue) && mulToMat;
+        },
+      },
+    ],
+  },
+  {
+    id: 'tutorial_17',
+    title: 'Multi-op Nodes',
+    description:
+      'Long chains of math nodes eat up canvas space. A Multi-op node stacks chained operations vertically inside a single node, and you can convert back and forth at any time.',
+    setup: () => {
+      const store = useEditorStore.getState();
+      resetTutorialWorkspace(store);
+      store.addNode('material/standard', { x: 780, y: 150 });
+      store.addNode('geo/time', { x: 40, y: 150 });
+      store.addNode('math/sin', { x: 220, y: 150 });
+      store.addNode('math/mul', { x: 400, y: 150 }, { values: { b: 0.5 } });
+      store.addNode('math/add', { x: 580, y: 150 }, { values: { b: 0.5 } });
+      const currentState = useEditorStore.getState();
+      const material = currentState.nodes.find((n) => n.data?.type.startsWith('material/'));
+      const timeNode = currentState.nodes.find((n) => n.data?.type === 'geo/time');
+      const sinNode = currentState.nodes.find((n) => n.data?.type === 'math/sin');
+      const mulNode = currentState.nodes.find((n) => n.data?.type === 'math/mul');
+      const addNode = currentState.nodes.find((n) => n.data?.type === 'math/add');
+      if (material && timeNode && sinNode && mulNode && addNode) {
+        currentState.onConnect({ source: timeNode.id, sourceHandle: 'out', target: sinNode.id, targetHandle: 'x' });
+        currentState.onConnect({ source: sinNode.id, sourceHandle: 'out', target: mulNode.id, targetHandle: 'a' });
+        currentState.onConnect({ source: mulNode.id, sourceHandle: 'out', target: addNode.id, targetHandle: 'a' });
+        currentState.onConnect({ source: addNode.id, sourceHandle: 'out', target: material.id, targetHandle: 'colorNode' });
+      }
+      deselectAll();
+    },
+    tasks: [
+      {
+        id: 't17_select_chain',
+        label: 'Select the Math Chain',
+        description:
+          'This graph runs Time through Sin, Multiply, and Add to make a pulsing brightness. Select just those three math nodes: Sin, Multiply, and Add.',
+        hint: 'Hold Shift and click Sin, Multiply, and Add. Leave Time and the material unselected.',
+        validate: (s) => {
+          if (s.selectedNodeIds.length < 3) return false;
+          const selectedTypes = new Set(
+            s.nodes.filter((n) => s.selectedNodeIds.includes(n.id)).map((n) => n.data?.type)
+          );
+          if (!selectedTypes.has('math/sin') || !selectedTypes.has('math/mul') || !selectedTypes.has('math/add')) {
+            return false;
+          }
+          return detectConvertibleChain(s.selectedNodeIds, s.nodes, s.edges).valid;
+        },
+      },
+      {
+        id: 't17_convert_to_multiop',
+        label: 'Convert to Multi-op',
+        description:
+          'With the chain selected, click the Convert to Multi-op button in the bottom toolbar. The three nodes collapse into one node that stacks the operations vertically, and all outside connections stay intact.',
+        hint: 'Look for the Combine icon in the bottom toolbar. It only appears while a convertible chain is selected.',
+        validate: (s) => {
+          const multiOp = s.nodes.find((n) => n.data?.type === 'math/multiOp');
+          const ops = multiOp?.data.operations ?? [];
+          if (ops.length < 3) return false;
+          const names = ops.map((op) => op.op);
+          return names.includes('sin') && names.includes('mul') && names.includes('add');
+        },
+      },
+      {
+        id: 't17_add_operation',
+        label: 'Add an Operation',
+        description:
+          'You can grow the chain without adding nodes. Click the + Add Operation button at the bottom of the Multi-op node to append another operation.',
+        hint: 'The + Add Operation button is inside the Multi-op node itself.',
+        validate: (s) => {
+          const multiOp = s.nodes.find((n) => n.data?.type === 'math/multiOp');
+          return (multiOp?.data.operations ?? []).length >= 4;
+        },
+      },
+      {
+        id: 't17_change_operation',
+        label: 'Make It Multiply by 2',
+        description:
+          'Use the dropdown on the new operation row to change it to Multiply, then select the Multi-op node and set that Multiply B value to 2 in the Properties panel. The pulse gets twice as bright.',
+        hint: 'Pick Multiply in the operation dropdown on the node, then edit its B value in the Properties panel on the right.',
+        validate: (s) => {
+          const multiOp = s.nodes.find((n) => n.data?.type === 'math/multiOp');
+          if (!multiOp) return false;
+          const mulOps = (multiOp.data.operations ?? []).filter((op) => op.op === 'mul');
+          if (mulOps.length < 2) return false;
+          return mulOps.some((op) => multiOp.data.values?.[`op_${op.id}_b`] === 2);
+        },
+      },
+      {
+        id: 't17_expand_to_nodes',
+        label: 'Expand Back to Separate Nodes',
+        description:
+          'It works in reverse too. Select the Multi-op node and click the Expand to separate nodes button in the bottom toolbar to unpack every operation into its own node again.',
+        hint: 'Select only the Multi-op node, then click the Split icon in the bottom toolbar.',
+        validate: (s) => {
+          if (s.nodes.some((n) => n.data?.type === 'math/multiOp')) return false;
+          const chainNodes = s.nodes.filter((n) =>
+            ['math/sin', 'math/mul', 'math/add'].includes(n.data?.type)
+          );
+          return chainNodes.length >= 4;
+        },
+      },
+    ],
+  },
+  {
+    id: 'tutorial_18',
+    title: 'Quick Create with Expressions',
+    description:
+      'Instead of adding nodes one by one, you can type a math expression in the node search and the editor builds the whole node graph for you.',
+    setup: () => {
+      const store = useEditorStore.getState();
+      resetTutorialWorkspace(store);
+      store.addNode('material/standard', { x: 650, y: 150 });
+      deselectAll();
+    },
+    tasks: [
+      {
+        id: 't18_simple_expression',
+        label: 'Type 1 + 1',
+        description:
+          'Right-click on an empty spot of the canvas to open the node search, type 1 + 1, and choose the Create Expression suggestion under Quick Create. You get an Add node with A and B already set to 1.',
+        hint: 'Right-click empty canvas, type 1 + 1, and pick the Quick Create entry at the top of the list.',
+        validate: (s) =>
+          s.nodes.some(
+            (n) => n.data?.type === 'math/add' && n.data.values?.a === 1 && n.data.values?.b === 1
+          ),
+      },
+      {
+        id: 't18_full_expression',
+        label: 'Build a Whole Graph at Once',
+        description:
+          'Expressions can be as complex as you like. Right-click the canvas again and type sin(time) * 0.5 + 0.5 to create the classic pulse setup: Time, Sin, Multiply, and Add, all wired up with the constants filled in.',
+        hint: 'Functions like sin() and identifiers like time or uv are all understood. Type sin(time) * 0.5 + 0.5 and pick the Create Expression suggestion.',
+        validate: (s) => {
+          const timeNode = s.nodes.find((n) => n.data?.type === 'geo/time');
+          const sinNode = s.nodes.find((n) => n.data?.type === 'math/sin');
+          const mulNode = s.nodes.find((n) => n.data?.type === 'math/mul' && n.data.values?.b === 0.5);
+          const addNode = s.nodes.find((n) => n.data?.type === 'math/add' && n.data.values?.b === 0.5);
+          if (!timeNode || !sinNode || !mulNode || !addNode) return false;
+          return (
+            s.edges.some((e) => e.source === timeNode.id && e.target === sinNode.id) &&
+            s.edges.some((e) => e.source === sinNode.id && e.target === mulNode.id) &&
+            s.edges.some((e) => e.source === mulNode.id && e.target === addNode.id)
+          );
+        },
+      },
+      {
+        id: 't18_connect_material',
+        label: 'Connect It to the Material',
+        description:
+          'Connect the Add node output from your expression to the material Color input so you can see the pulse in the preview.',
+        hint: 'Drag from the Add node output (the one from your expression) to Material Color.',
+        validate: (s) => {
+          const matNode = s.nodes.find((n) => n.data?.type.startsWith('material/'));
+          const addNode = s.nodes.find((n) => n.data?.type === 'math/add' && n.data.values?.b === 0.5);
+          if (!matNode || !addNode) return false;
+          return s.edges.some(
+            (e) => e.source === addNode.id && e.target === matNode.id && e.targetHandle === 'colorNode'
+          );
+        },
+      },
+      {
+        id: 't18_dollar_expression',
+        label: 'Extend a Node with $',
+        description:
+          'Expressions also work when dragging wires. Drag from the Add node output into empty space, then type $ * 2. The $ stands for the output you dragged from, so this creates a Multiply node fed by the Add node.',
+        hint: 'Drag the Add output into empty space, type $ * 2, and pick the Quick Create suggestion.',
+        validate: (s) => {
+          const addNode = s.nodes.find((n) => n.data?.type === 'math/add' && n.data.values?.b === 0.5);
+          if (!addNode) return false;
+          return s.nodes.some(
+            (n) =>
+              n.data?.type === 'math/mul' &&
+              n.data.values?.b === 2 &&
+              s.edges.some((e) => e.source === addNode.id && e.target === n.id)
+          );
+        },
+      },
+      {
+        id: 't18_rewire_material',
+        label: 'Use the Doubled Result',
+        description:
+          'Connect the new Multiply output to the material Color input to swap in the brighter pulse, then finish the tutorial.',
+        hint: 'Drag from the Multiply output to Material Color. The old connection is replaced automatically.',
+        manualComplete: true,
+        validate: (s) => {
+          const matNode = s.nodes.find((n) => n.data?.type.startsWith('material/'));
+          const mulNode = s.nodes.find((n) => n.data?.type === 'math/mul' && n.data.values?.b === 2);
+          if (!matNode || !mulNode) return false;
+          return s.edges.some(
+            (e) => e.source === mulNode.id && e.target === matNode.id && e.targetHandle === 'colorNode'
+          );
         },
       },
     ],

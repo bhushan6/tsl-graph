@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useMemo, useEffect, useCallback, useState, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import {
     ReactFlow,
     Background,
@@ -89,6 +90,9 @@ const EditorChrome = memo(function EditorChrome({
 }: EditorChromeProps) {
     const editorMode = useEditorStore((s) => s.editorMode);
     const isTutorialActive = useTutorialStore((s) => s.isActive);
+    // The tutorial session lives in a global store (persisted to localStorage),
+    // so an active session must only surface its UI inside the tutorial sandbox.
+    const isTutorialRoute = usePathname() === '/editor/tutorial';
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
@@ -107,7 +111,7 @@ const EditorChrome = memo(function EditorChrome({
     return (
         <>
             <UILayer>
-                {!isReadOnly && isTutorialActive && (
+                {!isReadOnly && isTutorialActive && isTutorialRoute && (
                     <UILayer.CenterPanel>
                         <TutorialOverlay />
                     </UILayer.CenterPanel>
@@ -201,8 +205,12 @@ const EditorChrome = memo(function EditorChrome({
 
                     <StaleTemplatesNotification />
 
-                    <TutorialHighlight />
-                    <TutorialComplete />
+                    {isTutorialRoute && (
+                        <>
+                            <TutorialHighlight />
+                            <TutorialComplete />
+                        </>
+                    )}
                     <TutorialLauncher />
                 </>
             )}
