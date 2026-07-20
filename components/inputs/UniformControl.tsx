@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
-import { Slider } from '@/components/ui/slider';
+import { PreviewSlider } from '@/components/ui/preview-slider';
 import { NumericScrubber, type NumericScrubberChangeMeta } from '@/components/ui/number-scrubber';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { BooleanInput } from '@/components/inputs/BooleanInput';
@@ -81,37 +81,36 @@ function ScalarControl({
         );
     }
 
-    const slider = (
-        <Slider
-            value={[value]}
-            min={range.min}
-            max={range.max}
-            step={step}
-            onValueChange={([next]) => onLiveChange(next)}
-            onValueCommit={([next]) => onCommit(next)}
-            className={cn(
-                'flex-1 min-w-0',
-                isNode && '[&_[data-slot=slider-thumb]]:size-2.5 [&_[data-slot=slider-track]]:h-1'
-            )}
-        />
-    );
-
     if (isNode) {
-        // In the node, the slider replaces the scrubber; a compact read-only
-        // readout keeps the current value visible.
+        // In the node, the track-style slider carries its own value readout.
         return (
-            <div className="flex items-center gap-1.5 w-full min-w-0">
-                {slider}
-                <span className="text-[9px] font-mono tabular-nums text-gray-500 dark:text-white/50 shrink-0 min-w-7 text-right">
-                    {formatReadout(value)}
-                </span>
-            </div>
+            <PreviewSlider
+                value={value}
+                min={range.min ?? 0}
+                max={range.max ?? 1}
+                step={step}
+                size="sm"
+                formatValue={formatReadout}
+                onChange={onLiveChange}
+                onCommit={onCommit}
+            />
         );
     }
 
     return (
         <div className="flex items-center gap-2 w-full min-w-0">
-            {slider}
+            <PreviewSlider
+                value={value}
+                min={range.min ?? 0}
+                max={range.max ?? 1}
+                step={step}
+                size="md"
+                // The scrubber next to it is the editable readout.
+                showValue={false}
+                onChange={onLiveChange}
+                onCommit={onCommit}
+                className="flex-1"
+            />
             <NumericScrubber
                 value={value}
                 onChange={handleScrubberChange}
