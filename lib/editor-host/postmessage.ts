@@ -74,6 +74,10 @@ export interface UniformSchemaEntry {
     name: string;
     uniformType: UniformKind;
     value: TSLValueType;
+    /** Optional UI hints for host tweak panels; absent when unset. */
+    min?: number;
+    max?: number;
+    step?: number;
 }
 
 export interface GetUniformSchemaResponsePayload {

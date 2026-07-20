@@ -427,7 +427,10 @@ export const NumericScrubber = React.forwardRef<
         : null;
 
     return (
-      <div ref={wrapperRef} className={cn("relative group w-fill")}>
+      // flex keeps the wrapper exactly as tall as the input, so the absolutely
+      // positioned knob (inset-y-0) centers its stick against the real input
+      // height instead of an inline line-box with baseline gap.
+      <div ref={wrapperRef} className={cn("relative group w-fill flex")}>
         <div
           ref={knobRef}
           aria-hidden="true"

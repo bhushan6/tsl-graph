@@ -152,6 +152,89 @@ export function coerceUniformValue(kind: UniformKind, prevValue: TSLValueType | 
     }
 }
 
+export interface UniformRange {
+    min?: number;
+    max?: number;
+    step?: number;
+}
+
+export function uniformKindSupportsRange(kind: UniformKind): boolean {
+    return kind !== 'bool' && kind !== 'color';
+}
+
+const asFiniteNumber = (value: unknown): number | undefined => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return typeof num === 'number' && Number.isFinite(num) ? num : undefined;
+};
+
+export function getUniformRange(source: unknown, kind: UniformKind): UniformRange {
+    if (!uniformKindSupportsRange(kind)) return {};
+
+    const src = (source ?? {}) as { min?: unknown; max?: unknown; step?: unknown };
+    let min = asFiniteNumber(src.min);
+    let max = asFiniteNumber(src.max);
+    let step = asFiniteNumber(src.step);
+
+    if (min !== undefined && max !== undefined && min > max) {
+        min = undefined;
+        max = undefined;
+    }
+    if (step !== undefined && step <= 0) {
+        step = undefined;
+    }
+
+    if (kind === 'int') {
+        if (min !== undefined) min = Math.round(min);
+        if (max !== undefined) max = Math.round(max);
+        step = Math.max(1, Math.round(step ?? 1));
+    }
+
+    const range: UniformRange = {};
+    if (min !== undefined) range.min = min;
+    if (max !== undefined) range.max = max;
+    if (step !== undefined) range.step = step;
+    return range;
+}
+
+/** Returns a copy of the object with the range metadata keys removed. */
+export function stripRangeFields<T extends object>(source: T): T {
+    const next = { ...source } as Record<string, unknown>;
+    delete next.min;
+    delete next.max;
+    delete next.step;
+    return next as T;
+}
+
+export function hasSliderRange(range: UniformRange): boolean {
+    return range.min !== undefined && range.max !== undefined;
+}
+
+export function getEffectiveStep(kind: UniformKind, range: UniformRange): number {
+    if (kind === 'int') return Math.max(1, Math.round(range.step ?? 1));
+    return range.step ?? 0.1;
+}
+
+export function clampUniformValue(
+    kind: UniformKind,
+    rawValue: TSLValueType | undefined,
+    range: UniformRange
+): TSLValueType {
+    const value = coerceUniformValue(kind, rawValue);
+    if (!uniformKindSupportsRange(kind)) return value;
+    if (range.min === undefined && range.max === undefined) return value;
+
+    const clamp = (v: number): number => {
+        let next = v;
+        if (range.min !== undefined) next = Math.max(range.min, next);
+        if (range.max !== undefined) next = Math.min(range.max, next);
+        return kind === 'int' ? Math.round(next) : next;
+    };
+
+    if (Array.isArray(value)) return (value as number[]).map((v) => clamp(Number(v)));
+    if (typeof value === 'number') return clamp(value);
+    return value;
+}
+
 export function formatUniformValueExpression(kind: UniformKind, rawValue: TSLValueType | undefined): string {
     const value = coerceUniformValue(kind, rawValue);
 

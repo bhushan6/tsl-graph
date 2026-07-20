@@ -513,6 +513,21 @@ describe('compileGraph', () => {
             expect(code.trim()).toBe(expected.trim());
         });
 
+        it('range metadata (min/max/step) does not affect uniform codegen', () => {
+            const nodes = [
+                createNode('u1', 'const/uniform', {
+                    values: { uniformType: 'float', value: 0.25, min: 0, max: 1, step: 0.05 },
+                }),
+            ];
+            const code = compileGraph(nodes, []);
+            const expected = [
+                '// Generated TSL Code',
+                '',
+                'const _node0 = uniform(0.25);',
+            ].join('\n');
+            expect(code.trim()).toBe(expected.trim());
+        });
+
         it('should compile global context references', () => {
             const nodes = [
                 createNode('g1', 'global/ref', { values: { globalId: 'global-1' } }),

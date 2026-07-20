@@ -37,7 +37,13 @@ import {
   type MultiOpType,
 } from "@/lib/multi-op";
 import { Separator } from "./ui/separator";
-import { getUniformKindFromNode, getUniformOutputs } from "@/lib/uniform-utils";
+import {
+  getUniformKindFromNode,
+  getUniformOutputs,
+  getUniformRange,
+  hasSliderRange,
+} from "@/lib/uniform-utils";
+import { UniformControl } from "@/components/inputs/UniformControl";
 import {
   generateGradientString,
   normalizeGradientStops,
@@ -79,6 +85,10 @@ const categoryColors: Record<string, string> = {
 
 function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
+  const updateUniformNodeValueLive = useEditorStore(
+    (s) => s.updateUniformNodeValueLive,
+  );
+  const commitUniformGesture = useEditorStore((s) => s.commitUniformGesture);
   const addMultiOp = useEditorStore((s) => s.addMultiOp);
   const updateMultiOp = useEditorStore((s) => s.updateMultiOp);
   const removeMultiOp = useEditorStore((s) => s.removeMultiOp);
@@ -147,6 +157,21 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     setLocalName(storedName || "local");
   }, [storedName]);
 
+  const handleUniformLiveChange = useCallback(
+    (value: TSLValueType) => {
+      updateUniformNodeValueLive(id, value);
+    },
+    [id, updateUniformNodeValueLive],
+  );
+
+  const handleUniformCommit = useCallback(
+    (value: TSLValueType) => {
+      updateUniformNodeValueLive(id, value);
+      commitUniformGesture(`node:${id}`);
+    },
+    [commitUniformGesture, id, updateUniformNodeValueLive],
+  );
+
   const handleNameSubmit = useCallback(() => {
     const trimmedName = localName.trim();
     if (trimmedName) {
@@ -172,6 +197,12 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const isCustomInstance = isSubgraphInstance || isCodeNodeInstance;
   const isMultiOpNode = nodeType === "math/multiOp";
   const isUniformNode = nodeType === "const/uniform";
+  const uniformKind = isUniformNode
+    ? getUniformKindFromNode({ data: nodeData } as AppNode)
+    : null;
+  const uniformRange = uniformKind
+    ? getUniformRange(nodeData.values, uniformKind)
+    : undefined;
   const isMaterialNode = (MATERIAL_NODE_TYPES as readonly string[]).includes(
     nodeType,
   );
@@ -296,10 +327,9 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     inputs = def.inputs ?? {};
     outputs = def.outputs ?? {};
     nodeLabel = def.label;
-    if (isUniformNode) {
-      const kind = getUniformKindFromNode({ data: nodeData } as AppNode);
+    if (isUniformNode && uniformKind) {
       inputs = {};
-      outputs = getUniformOutputs(kind);
+      outputs = getUniformOutputs(uniformKind);
     }
   }
 
@@ -337,6 +367,13 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const colorClass = categoryColors[category] || categoryColors["Default"];
   const shellClass = cn(
     "min-w-[50px] flex flex-col rounded-xl shadow-lg overflow-hidden",
+    uniformKind === "color" && "min-w-[130px]",
+    uniformKind &&
+      uniformKind !== "bool" &&
+      uniformKind !== "color" &&
+      uniformRange &&
+      hasSliderRange(uniformRange) &&
+      "min-w-[190px]",
     "bg-white/95 shadow-gray-300/50",
     "dark:bg-card/95 dark:shadow-black/30",
     "backdrop-blur-sm transition-shadow duration-150",
@@ -640,6 +677,33 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     });
   }
 
+  // Tweak controls rendered on the empty input side of uniform nodes, one per
+  // output row so vector components line up with their handles.
+  const VECTOR_COMPONENT_INDEX: Record<string, number> = { x: 0, y: 1, z: 2, w: 3 };
+  const renderUniformRowControl = (outputHandleId: string | undefined) => {
+    if (!uniformKind || !outputHandleId) return null;
+    let componentIndex: number | undefined;
+    if (uniformKind === "vec2" || uniformKind === "vec3" || uniformKind === "vec4") {
+      componentIndex = VECTOR_COMPONENT_INDEX[outputHandleId];
+      if (componentIndex === undefined) return null;
+    } else if (outputHandleId !== "out") {
+      return null;
+    }
+    return (
+      <div className="flex-1 min-w-0 ml-2 mr-1">
+        <UniformControl
+          kind={uniformKind}
+          value={nodeData.values?.value}
+          range={uniformRange}
+          variant="node"
+          onLiveChange={handleUniformLiveChange}
+          onCommit={handleUniformCommit}
+          componentIndex={componentIndex}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className={shellClass}>
       {header}
@@ -710,7 +774,9 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
                     )}
                 </>
               ) : (
-                <div className="flex-1" />
+                (isUniformNode && renderUniformRowControl(row.output?.[0])) || (
+                  <div className="flex-1" />
+                )
               )}
             </div>
 
