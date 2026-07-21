@@ -6,7 +6,7 @@ import { EditorHost } from '@/components/editor-host/EditorHost';
 import { compileGraph, compilePostGraph, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
 import { createEditorAssetReconcilerController } from '@/lib/editor-host/use-editor-persistence';
 import { inlineCustomTslImports } from '@/lib/editor-host/tsl-utils-inline';
-import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
+import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, getUniformRange, type UniformKind } from '@/lib/uniform-utils';
 import { useEditorStore, type MaterialNodeType } from '@/store/editor';
 import {
     postEditorResponse,
@@ -88,6 +88,7 @@ const buildUniformSchema = (): UniformSchemaEntry[] => {
                 name,
                 uniformType,
                 value: coerceUniformValue(uniformType, node.data.values?.value),
+                ...getUniformRange(node.data.values, uniformType),
             };
         });
 
@@ -101,6 +102,7 @@ const buildUniformSchema = (): UniformSchemaEntry[] => {
                 name: entry.name,
                 uniformType,
                 value: coerceUniformValue(uniformType, entry.defaultValue),
+                ...getUniformRange(entry, uniformType),
             };
         });
 
@@ -119,6 +121,9 @@ const createUniformsSignature = (uniforms: UniformSchemaEntry[]): string => JSON
         id: entry.id,
         uniformType: entry.uniformType,
         value: entry.value,
+        min: entry.min,
+        max: entry.max,
+        step: entry.step,
     }))
 );
 
@@ -535,7 +540,9 @@ export default function StandaloneEditorClient() {
                         }
                         store.updateNodeValue(id, 'value', value);
                     } else {
-                        store.updateGlobal(id, { defaultValue: value });
+                        // Live path: mutates the running uniform without a recompile
+                        store.updateGlobalUniformValueLive(id, value);
+                        store.commitUniformGesture(`global:${id}`);
                     }
                 });
 

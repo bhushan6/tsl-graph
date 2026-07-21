@@ -72,6 +72,9 @@ type Envelope<T = unknown> = {
     name: string;
     uniformType: "float" | "int" | "bool" | "vec2" | "vec3" | "vec4" | "color";
     value: unknown;
+    min?: number;
+    max?: number;
+    step?: number;
   }>;
 }
 ```
@@ -211,6 +214,9 @@ Note:
     name: string;
     uniformType: "float" | "int" | "bool" | "vec2" | "vec3" | "vec4" | "color";
     value: unknown;
+    min?: number;
+    max?: number;
+    step?: number;
   }>;
 }
 ```
@@ -226,6 +232,9 @@ Note:
     name: string;
     uniformType: "float" | "int" | "bool" | "vec2" | "vec3" | "vec4" | "color";
     value: unknown;
+    min?: number;
+    max?: number;
+    step?: number;
   }>;
   rejected?: Array<{
     scope: "node" | "global";
@@ -236,6 +245,15 @@ Note:
 ```
 
 If any command fails, editor returns `error` on the envelope with the same `requestId`.
+
+### Uniform range metadata
+
+`min`, `max`, and `step` are optional range metadata configured per uniform in the editor
+(only present for numeric kinds: `float`, `int`, `vec2`, `vec3`, `vec4`; for vector kinds
+the scalar range applies per component). Hosts can use them to render sliders or steppers.
+Values sent via `tsl:command:set-uniform-values` are type-coerced and clamped to the
+configured range by the editor. Editing a range in the editor emits a fresh
+`tsl:event:uniforms-changed`.
 
 ## Lifecycle and timing
 

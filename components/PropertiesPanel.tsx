@@ -21,7 +21,18 @@ import { getMultiOpInputs, getMultiOpLabel, type MultiOp } from '@/lib/multi-op'
 import { Layers, Plus, Trash2, Upload, Code, Crosshair } from 'lucide-react';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { AssetInput } from './inputs/AssetInput';
-import { UNIFORM_KINDS, getUniformKindFromNode, getUniformDefaultValue, type UniformKind } from '@/lib/uniform-utils';
+import {
+    UNIFORM_KINDS,
+    coerceUniformValue,
+    getUniformKindFromNode,
+    getUniformDefaultValue,
+    getUniformRange,
+    uniformKindSupportsRange,
+    type UniformKind,
+    type UniformRange,
+} from '@/lib/uniform-utils';
+import { UniformControl } from './inputs/UniformControl';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -231,6 +242,126 @@ function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: TSLVa
         if (value !== undefined) return value;
         return defaultValue !== undefined ? defaultValue : 0;
     });
+}
+
+/**
+ * Hook to reactively read a uniform node's range metadata from the store.
+ */
+function useUniformNodeRange(nodeId: string, kind: UniformKind): UniformRange {
+    return useEditorStore(
+        useShallow((s) => {
+            const node = s.nodes.find((n) => n.id === nodeId);
+            return getUniformRange(node?.data.values, kind);
+        })
+    );
+}
+
+/** Number input that supports an "unset" (empty) state; commits on blur/Enter. */
+function OptionalNumberField({
+    label,
+    value,
+    onCommit,
+}: {
+    label: string;
+    value: number | undefined;
+    onCommit: (value: number | undefined) => void;
+}) {
+    const [draft, setDraft] = useState(value !== undefined ? String(value) : '');
+
+    useEffect(() => {
+        setDraft(value !== undefined ? String(value) : '');
+    }, [value]);
+
+    const commit = useCallback(() => {
+        const trimmed = draft.trim();
+        if (!trimmed) {
+            onCommit(undefined);
+            return;
+        }
+        const parsed = parseFloat(trimmed);
+        if (Number.isFinite(parsed)) {
+            onCommit(parsed);
+        }
+        // Revert to the stored value; a successful commit re-syncs via the effect.
+        setDraft(value !== undefined ? String(value) : '');
+    }, [draft, onCommit, value]);
+
+    return (
+        <div className="flex flex-col gap-1">
+            <label className="text-[9px] font-medium text-sidebar-foreground/60 uppercase tracking-wider">
+                {label}
+            </label>
+            <SidebarInput
+                type="text"
+                inputMode="decimal"
+                value={draft}
+                placeholder="—"
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') commit();
+                }}
+                className="h-7 text-xs font-mono"
+            />
+        </div>
+    );
+}
+
+/** Min / Max / Step editor row shared by node + global uniform panels. */
+function UniformRangeEditor({
+    range,
+    onChange,
+}: {
+    range: UniformRange;
+    onChange: (updates: Partial<UniformRange>) => void;
+}) {
+    return (
+        <div className="grid grid-cols-3 gap-2">
+            <OptionalNumberField label="Min" value={range.min} onCommit={(v) => onChange({ min: v })} />
+            <OptionalNumberField label="Max" value={range.max} onCommit={(v) => onChange({ max: v })} />
+            <OptionalNumberField label="Step" value={range.step} onCommit={(v) => onChange({ step: v })} />
+        </div>
+    );
+}
+
+/** Name input that commits on blur/Enter and reverts the draft if rejected. */
+function UniformNameField({
+    name,
+    placeholder,
+    onCommit,
+}: {
+    name: string;
+    placeholder?: string;
+    onCommit: (name: string) => void;
+}) {
+    const [draft, setDraft] = useState(name);
+
+    useEffect(() => {
+        setDraft(name);
+    }, [name]);
+
+    const commit = useCallback(() => {
+        const trimmed = draft.trim();
+        if (trimmed && trimmed !== name) {
+            onCommit(trimmed);
+        }
+        // Revert to the stored name; a successful commit re-syncs via the effect.
+        setDraft(name);
+    }, [draft, name, onCommit]);
+
+    return (
+        <SidebarInput
+            type="text"
+            value={draft}
+            placeholder={placeholder ?? 'Uniform name'}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') commit();
+            }}
+            className="h-7 text-xs"
+        />
+    );
 }
 
 // Panel for subgraph instances - simplified since templates auto-save
@@ -485,6 +616,12 @@ function UniformNodePanel({
 }) {
     const uniformKind = getUniformKindFromNode(node);
     const uniformValue = useNodeInputValue(node.id, 'value', getUniformDefaultValue(uniformKind));
+    const range = useUniformNodeRange(node.id, uniformKind);
+    const updateUniformNodeValueLive = useEditorStore((s) => s.updateUniformNodeValueLive);
+    const commitUniformGesture = useEditorStore((s) => s.commitUniformGesture);
+    const updateUniformRange = useEditorStore((s) => s.updateUniformRange);
+    const storedName = typeof node.data.values?.localName === 'string' ? node.data.values.localName : '';
+    const hasRange = range.min !== undefined || range.max !== undefined || range.step !== undefined;
 
     return (
         <div className="flex flex-col h-full">
@@ -497,6 +634,16 @@ function UniformNodePanel({
 
             <div className="flex-1 overflow-y-auto p-4">
                 <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Name
+                        </label>
+                        <UniformNameField
+                            name={storedName}
+                            onCommit={(name) => updateNodeValue(node.id, 'localName', name)}
+                        />
+                    </div>
+
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                             Type
@@ -518,15 +665,41 @@ function UniformNodePanel({
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                             Value
                         </label>
-                        <PropertyInput
-                            type={uniformKind}
+                        <UniformControl
+                            kind={uniformKind}
                             value={uniformValue}
-                            onChange={(v) => updateNodeValue(node.id, 'value', v)}
-                            nodeId={node.id}
-                            propertyName="value"
-                            immediate={true}
+                            range={range}
+                            variant="panel"
+                            onLiveChange={(v) => updateUniformNodeValueLive(node.id, v)}
+                            onCommit={(v) => {
+                                updateUniformNodeValueLive(node.id, v);
+                                commitUniformGesture(`node:${node.id}`);
+                            }}
                         />
                     </div>
+
+                    {uniformKindSupportsRange(uniformKind) && (
+                        <Accordion
+                            type="single"
+                            collapsible
+                            defaultValue={hasRange ? 'range' : undefined}
+                        >
+                            <AccordionItem value="range" className="border-b-0">
+                                <AccordionTrigger className="py-2 text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                    Range
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-1">
+                                    <UniformRangeEditor
+                                        range={range}
+                                        onChange={(updates) => updateUniformRange(node.id, updates)}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground mt-2">
+                                        Set min &amp; max to get sliders on the node.
+                                    </p>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    )}
                 </div>
             </div>
         </div>
@@ -621,10 +794,15 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setUniformType = useEditorStore((s) => s.setUniformType);
     const selectSingleNode = useEditorStore((s) => s.selectSingleNode);
+    const updateUniformNodeValueLive = useEditorStore((s) => s.updateUniformNodeValueLive);
+    const commitUniformGesture = useEditorStore((s) => s.commitUniformGesture);
+    const updateUniformRange = useEditorStore((s) => s.updateUniformRange);
     const { setCenter, getZoom } = useReactFlow<AppNode>();
 
     const uniformKind = getUniformKindFromNode(node);
     const uniformValue = useNodeInputValue(node.id, 'value', getUniformDefaultValue(uniformKind));
+    const range = useUniformNodeRange(node.id, uniformKind);
+    const storedName = typeof node.data.values?.localName === 'string' ? node.data.values.localName : '';
     const displayName = node.data.values.localName || node.id;
 
     const handleFocus = useCallback(
@@ -673,6 +851,16 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Name
+                        </label>
+                        <UniformNameField
+                            name={storedName}
+                            onCommit={(name) => updateNodeValue(node.id, 'localName', name)}
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                             Type
                         </label>
                         <select
@@ -692,15 +880,30 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                             Value
                         </label>
-                        <PropertyInput
-                            type={uniformKind}
+                        <UniformControl
+                            kind={uniformKind}
                             value={uniformValue}
-                            onChange={(v) => updateNodeValue(node.id, 'value', v)}
-                            nodeId={node.id}
-                            propertyName="value"
-                            immediate={true}
+                            range={range}
+                            variant="panel"
+                            onLiveChange={(v) => updateUniformNodeValueLive(node.id, v)}
+                            onCommit={(v) => {
+                                updateUniformNodeValueLive(node.id, v);
+                                commitUniformGesture(`node:${node.id}`);
+                            }}
                         />
                     </div>
+
+                    {uniformKindSupportsRange(uniformKind) && (
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Range
+                            </label>
+                            <UniformRangeEditor
+                                range={range}
+                                onChange={(updates) => updateUniformRange(node.id, updates)}
+                            />
+                        </div>
+                    )}
                 </div>
             </AccordionContent>
         </AccordionItem>
@@ -709,11 +912,15 @@ function UniformListItem({ node, value }: { node: AppNode; value?: string }) {
 
 function GlobalUniformListItem({ entry, value }: { entry: GlobalContextEntry; value?: string }) {
     const updateGlobal = useEditorStore((s) => s.updateGlobal);
+    const updateGlobalUniformValueLive = useEditorStore((s) => s.updateGlobalUniformValueLive);
+    const commitUniformGesture = useEditorStore((s) => s.commitUniformGesture);
+    const updateGlobalUniformRange = useEditorStore((s) => s.updateGlobalUniformRange);
 
     const uniformKind = UNIFORM_KINDS.includes(entry.type as UniformKind)
         ? (entry.type as UniformKind)
         : 'float';
     const uniformValue = entry.defaultValue ?? getUniformDefaultValue(uniformKind);
+    const range = getUniformRange(entry, uniformKind);
 
     return (
         <AccordionItem value={value ?? entry.id} className="w-[100%]">
@@ -738,6 +945,17 @@ function GlobalUniformListItem({ entry, value }: { entry: GlobalContextEntry; va
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                            Name
+                        </label>
+                        <UniformNameField
+                            name={entry.name}
+                            placeholder="Global name"
+                            onCommit={(name) => updateGlobal(entry.id, { name })}
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                             Type
                         </label>
                         <select
@@ -757,16 +975,146 @@ function GlobalUniformListItem({ entry, value }: { entry: GlobalContextEntry; va
                         <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
                             Value
                         </label>
-                        <PropertyInput
-                            type={uniformKind}
+                        <UniformControl
+                            kind={uniformKind}
                             value={uniformValue}
-                            onChange={(v) => updateGlobal(entry.id, { defaultValue: v })}
-                            immediate={true}
+                            range={range}
+                            variant="panel"
+                            onLiveChange={(v) => updateGlobalUniformValueLive(entry.id, v)}
+                            onCommit={(v) => {
+                                updateGlobalUniformValueLive(entry.id, v);
+                                commitUniformGesture(`global:${entry.id}`);
+                            }}
                         />
                     </div>
+
+                    {uniformKindSupportsRange(uniformKind) && (
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Range
+                            </label>
+                            <UniformRangeEditor
+                                range={range}
+                                onChange={(updates) => updateGlobalUniformRange(entry.id, updates)}
+                            />
+                        </div>
+                    )}
                 </div>
             </AccordionContent>
         </AccordionItem>
+    );
+}
+
+/** Popover form for creating a fully configured uniform node from the panel. */
+function NewUniformForm({ onCreated }: { onCreated: () => void }) {
+    const addNode = useEditorStore((s) => s.addNode);
+    const { screenToFlowPosition } = useReactFlow<AppNode>();
+
+    const [name, setName] = useState(() => {
+        const taken = new Set(
+            useEditorStore
+                .getState()
+                .nodes.filter((n) => n.data.type === 'const/uniform')
+                .map((n) => String(n.data.values?.localName ?? '').toLowerCase())
+        );
+        let i = 1;
+        while (taken.has(`u${i}`)) i += 1;
+        return `u${i}`;
+    });
+    const [kind, setKind] = useState<UniformKind>('float');
+    const [value, setValue] = useState<TSLValueType>(0);
+    const [range, setRange] = useState<UniformRange>({});
+
+    const handleKindChange = useCallback((nextKind: UniformKind) => {
+        setKind(nextKind);
+        setValue((prev) => coerceUniformValue(nextKind, prev));
+        if (!uniformKindSupportsRange(nextKind)) setRange({});
+    }, []);
+
+    const handleCreate = useCallback(() => {
+        const position = screenToFlowPosition({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+        });
+        position.x += (Math.random() - 0.5) * 100;
+        position.y += (Math.random() - 0.5) * 100;
+
+        const values: AppNode['data']['values'] = { uniformType: kind, value };
+        if (name.trim()) values.localName = name.trim();
+        if (range.min !== undefined) values.min = range.min;
+        if (range.max !== undefined) values.max = range.max;
+        if (range.step !== undefined) values.step = range.step;
+
+        const created = addNode('const/uniform', position, { values });
+        if (created) onCreated();
+    }, [addNode, kind, name, onCreated, range, screenToFlowPosition, value]);
+
+    return (
+        <div className="flex flex-col gap-3">
+            <h4 className="text-xs font-semibold">New Uniform</h4>
+
+            <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                    Name
+                </label>
+                <SidebarInput
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Uniform name"
+                    className="h-7 text-xs"
+                    autoFocus
+                />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                    Type
+                </label>
+                <select
+                    value={kind}
+                    onChange={(e) => handleKindChange(e.target.value as UniformKind)}
+                    className="h-7 px-2 text-xs bg-sidebar-accent border border-sidebar-border rounded-md text-sidebar-foreground w-full outline-none focus:ring-2 focus:ring-sidebar-ring"
+                >
+                    {UNIFORM_KINDS.map((k) => (
+                        <option key={k} value={k}>
+                            {k}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                    Default Value
+                </label>
+                <UniformControl
+                    kind={kind}
+                    value={value}
+                    range={getUniformRange(range, kind)}
+                    variant="panel"
+                    onLiveChange={setValue}
+                    onCommit={setValue}
+                />
+            </div>
+
+            {uniformKindSupportsRange(kind) && (
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                        Range
+                    </label>
+                    <UniformRangeEditor
+                        range={range}
+                        onChange={(updates) => setRange((prev) => ({ ...prev, ...updates }))}
+                    />
+                </div>
+            )}
+
+            <Button size="sm" className="h-7 text-xs" onClick={handleCreate}>
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Create Uniform
+            </Button>
+        </div>
     );
 }
 
@@ -795,12 +1143,27 @@ function UniformsPanelContent() {
         return [...globalUniforms, ...nodeUniforms].sort((a, b) => a.label.localeCompare(b.label));
     }, [globals, nodes]);
 
+    const [createOpen, setCreateOpen] = useState(false);
+
     return (
         <div className="flex flex-col h-full">
             <div className="px-4 py-3 border-b border-sidebar-border">
                 <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-sm">Uniforms</h3>
-                    <span className="text-xs text-muted-foreground">{uniforms.length}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{uniforms.length}</span>
+                        <Popover open={createOpen} onOpenChange={setCreateOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-6 px-2 text-xs">
+                                    <Plus className="w-3.5 h-3.5 mr-1" />
+                                    New
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-3" align="end">
+                                <NewUniformForm onCreated={() => setCreateOpen(false)} />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                     Edit node and global uniforms without hunting nodes
@@ -831,6 +1194,11 @@ function UniformsPanelContent() {
 function GlobalListItem({ entry }: { entry: GlobalContextEntry }) {
     const updateGlobal = useEditorStore((s) => s.updateGlobal);
     const removeGlobal = useEditorStore((s) => s.removeGlobal);
+    const updateGlobalUniformRange = useEditorStore((s) => s.updateGlobalUniformRange);
+    const entryUniformKind =
+        entry.kind === 'uniform' && UNIFORM_KINDS.includes(entry.type as UniformKind)
+            ? (entry.type as UniformKind)
+            : null;
 
     return (
         <AccordionItem value={entry.id}>
@@ -904,6 +1272,18 @@ function GlobalListItem({ entry }: { entry: GlobalContextEntry }) {
                             immediate
                         />
                     </div>
+
+                    {entryUniformKind && uniformKindSupportsRange(entryUniformKind) && (
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-medium text-sidebar-foreground/70 uppercase tracking-wider">
+                                Range
+                            </label>
+                            <UniformRangeEditor
+                                range={getUniformRange(entry, entryUniformKind)}
+                                onChange={(updates) => updateGlobalUniformRange(entry.id, updates)}
+                            />
+                        </div>
+                    )}
 
                     <Button
                         variant="ghost"

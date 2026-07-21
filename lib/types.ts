@@ -51,6 +51,9 @@ export interface GlobalContextEntry {
     type: TSLType;
     defaultValue: TSLValueType;
     description?: string;
+    min?: number;
+    max?: number;
+    step?: number;
 }
 
 // Subgraph definition - stored in project and used to create custom nodes

@@ -22,7 +22,7 @@ import { DEFAULT_GRADIENT_STOPS, normalizeGradientStops } from '@/lib/gradient-u
 import { registry } from '@/lib/registry';
 import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
-import { UNIFORM_KINDS, coerceUniformValue, getUniformKindFromNode, type UniformKind } from '@/lib/uniform-utils';
+import { UNIFORM_KINDS, clampUniformValue, coerceUniformValue, getUniformKindFromNode, getUniformRange, stripRangeFields, type UniformKind, type UniformRange } from '@/lib/uniform-utils';
 import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
 import { resolveCodeNodeScope } from '@/lib/code-node-scope';
 import {
@@ -471,6 +471,30 @@ const makeUniqueLocalName = (
     return candidate;
 };
 
+const makeUniqueUniformName = (
+    baseName: string,
+    nodes: Node<TSLNodeData>[],
+    excludeNodeId?: string
+): string => {
+    const trimmed = baseName.trim() || 'u';
+    const normalizedSet = new Set(
+        nodes
+            .filter((node) => node.data.type === 'const/uniform' && node.id !== excludeNodeId)
+            .map((node) => normalizeLocalName(String(node.data.values?.localName ?? '')))
+            .filter((name) => name.length > 0)
+    );
+
+    if (!normalizedSet.has(normalizeLocalName(trimmed))) return trimmed;
+
+    let suffix = 1;
+    let candidate = `${trimmed}_${suffix}`;
+    while (normalizedSet.has(normalizeLocalName(candidate))) {
+        suffix += 1;
+        candidate = `${trimmed}_${suffix}`;
+    }
+    return candidate;
+};
+
 const getDefaultLocalSourceId = (
     nodes: Node<TSLNodeData>[],
     position: { x: number; y: number }
@@ -860,6 +884,12 @@ interface EditorState {
     updateNodeValue: (nodeId: string, key: string, value: TSLValueType) => void;
     updateCommentNodeDraft: (nodeId: string, updates: { title?: string; markdown?: string }) => void;
     commitCommentNodeDraft: (nodeId: string) => void;
+    uniformGestureSnapshotFor: Record<string, true>;
+    updateUniformNodeValueLive: (nodeId: string, value: TSLValueType) => void;
+    updateGlobalUniformValueLive: (entryId: string, value: TSLValueType) => void;
+    commitUniformGesture: (key: string) => void;
+    updateUniformRange: (nodeId: string, updates: Partial<UniformRange>) => void;
+    updateGlobalUniformRange: (entryId: string, updates: Partial<UniformRange>) => void;
     setNodeActiveInput: (nodeId: string, inputKey: string, isActive: boolean) => void;
     setUniformType: (nodeId: string, newKind: UniformKind) => void;
     addMultiOp: (nodeId: string, op?: MultiOpType) => void;
@@ -954,6 +984,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     clipboard: null,
     graphStructureVersion: 0,
     commentDraftSnapshotTakenFor: {},
+    uniformGestureSnapshotFor: {},
     hoveredGroupId: null,
     setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
     setActiveRootGraph: (mode) => {
@@ -1099,6 +1130,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             type: nextType,
             defaultValue: nextDefaultValue,
         };
+
+        // Re-sanitize range metadata against the (possibly new) type
+        delete updatedEntry.min;
+        delete updatedEntry.max;
+        delete updatedEntry.step;
+        if (updatedEntry.kind === 'uniform' && isUniformKindType(updatedEntry.type)) {
+            Object.assign(
+                updatedEntry,
+                getUniformRange({ ...existing, ...updates }, updatedEntry.type)
+            );
+        }
 
         if (existing.kind === 'uniform' && (!isUniformKindType(updatedEntry.type) || updatedEntry.kind !== 'uniform')) {
             removeUniform(existing.id);
@@ -1540,6 +1582,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
         }
 
+        if (type === 'const/uniform') {
+            const kindRaw = data.values?.uniformType;
+            const kind: UniformKind = UNIFORM_KINDS.includes(kindRaw as UniformKind)
+                ? (kindRaw as UniformKind)
+                : 'float';
+            const range = getUniformRange(data.values, kind);
+            const value = clampUniformValue(kind, data.values?.value, range);
+            const values = stripRangeFields({ ...data.values, uniformType: kind, value });
+            if (typeof data.values?.localName === 'string' && data.values.localName.trim()) {
+                values.localName = makeUniqueUniformName(data.values.localName, get().nodes);
+            }
+            data.values = { ...values, ...range };
+        }
+
         if (isLocalSetType(type)) {
             const localNameValue = typeof data.values?.localName === 'string'
                 ? data.values.localName
@@ -1617,6 +1673,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (!targetNode) return;
 
         let nextValue = value;
+        if (key === 'localName' && targetNode.data.type === 'const/uniform') {
+            const trimmed = String(value ?? '').trim();
+            if (!trimmed) {
+                toast.error('Uniform name cannot be empty.');
+                return;
+            }
+            const conflict = prevNodes.some((node) => {
+                if (node.id === nodeId || node.data.type !== 'const/uniform') return false;
+                return normalizeLocalName(String(node.data.values?.localName ?? '')) === normalizeLocalName(trimmed);
+            });
+            if (conflict) {
+                toast.error(`Uniform name "${trimmed}" already exists.`);
+                return;
+            }
+            nextValue = trimmed;
+        }
         if (key === 'localName' && isLocalSetType(targetNode.data.type)) {
             const trimmed = String(value ?? '').trim();
             if (!trimmed) {
@@ -1638,12 +1710,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         let uniformKind: UniformKind | null = null;
         let isUniformValueUpdate = false;
 
+        let uniformNextValue = nextValue;
         const updatedNodes = prevNodes.map((node) => {
             if (node.id !== nodeId) return node;
             const nextValues = { ...node.data.values, [key]: nextValue };
             if (node.data.type === 'const/uniform' && key === 'value') {
                 isUniformValueUpdate = true;
                 uniformKind = getUniformKindFromNode({ data: { values: nextValues } } as AppNode);
+                uniformNextValue = clampUniformValue(
+                    uniformKind,
+                    nextValue,
+                    getUniformRange(nextValues, uniformKind)
+                );
+                nextValues.value = uniformNextValue;
             }
             return {
                 ...node,
@@ -1655,7 +1734,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         if (isUniformValueUpdate && uniformKind) {
-            updateUniformValue(nodeId, uniformKind, nextValue);
+            updateUniformValue(nodeId, uniformKind, uniformNextValue);
         }
 
         set({
@@ -1710,6 +1789,146 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ commentDraftSnapshotTakenFor: nextMarker });
     },
 
+    updateUniformNodeValueLive: (nodeId, value) => {
+        const state = get();
+        const targetNode = state.nodes.find((node) => node.id === nodeId);
+        if (!targetNode || targetNode.data.type !== 'const/uniform') return;
+
+        const gestureKey = `node:${nodeId}`;
+        const hasSnapshot = !!state.uniformGestureSnapshotFor[gestureKey];
+        if (!hasSnapshot) {
+            state.takeSnapshot();
+        }
+
+        const kind = getUniformKindFromNode(targetNode);
+        const range = getUniformRange(targetNode.data.values ?? {}, kind);
+        const clamped = clampUniformValue(kind, value, range);
+
+        const nextNodes = state.nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: { ...node.data.values, value: clamped },
+                },
+            };
+        });
+
+        updateUniformValue(nodeId, kind, clamped);
+
+        set({
+            nodes: nextNodes,
+            uniformGestureSnapshotFor: hasSnapshot
+                ? state.uniformGestureSnapshotFor
+                : { ...state.uniformGestureSnapshotFor, [gestureKey]: true },
+        });
+        state.markDirty();
+    },
+
+    updateGlobalUniformValueLive: (entryId, value) => {
+        const state = get();
+        const entry = state.globals.find((g) => g.id === entryId);
+        if (!entry || entry.kind !== 'uniform' || !isUniformKindType(entry.type)) return;
+
+        const gestureKey = `global:${entryId}`;
+        const hasSnapshot = !!state.uniformGestureSnapshotFor[gestureKey];
+        if (!hasSnapshot) {
+            state.takeSnapshot();
+        }
+
+        const range = getUniformRange(entry, entry.type);
+        const clamped = clampUniformValue(entry.type, value, range);
+
+        updateUniformValue(entry.id, entry.type, clamped);
+
+        set({
+            globals: state.globals.map((g) => (g.id === entryId ? { ...g, defaultValue: clamped } : g)),
+            uniformGestureSnapshotFor: hasSnapshot
+                ? state.uniformGestureSnapshotFor
+                : { ...state.uniformGestureSnapshotFor, [gestureKey]: true },
+        });
+        state.markDirty();
+    },
+
+    commitUniformGesture: (key) => {
+        const marker = get().uniformGestureSnapshotFor;
+        if (!marker[key]) return;
+
+        const nextMarker = { ...marker };
+        delete nextMarker[key];
+        set({ uniformGestureSnapshotFor: nextMarker });
+    },
+
+    updateUniformRange: (nodeId, updates) => {
+        const state = get();
+        const targetNode = state.nodes.find((node) => node.id === nodeId);
+        if (!targetNode || targetNode.data.type !== 'const/uniform') return;
+
+        state.takeSnapshot();
+
+        const kind = getUniformKindFromNode(targetNode);
+        const prevValues = (targetNode.data.values ?? {}) as Record<string, unknown>;
+        const merged = {
+            min: 'min' in updates ? updates.min : prevValues.min,
+            max: 'max' in updates ? updates.max : prevValues.max,
+            step: 'step' in updates ? updates.step : prevValues.step,
+        };
+        const range = getUniformRange(merged, kind);
+        const prevValue = targetNode.data.values?.value;
+        const clamped = clampUniformValue(kind, prevValue, range);
+        const valueChanged = JSON.stringify(clamped) !== JSON.stringify(coerceUniformValue(kind, prevValue));
+
+        const nextNodes = state.nodes.map((node) => {
+            if (node.id !== nodeId) return node;
+            const nextValues = stripRangeFields({ ...node.data.values, value: clamped });
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    values: { ...nextValues, ...range },
+                },
+            };
+        });
+
+        if (valueChanged) {
+            updateUniformValue(nodeId, kind, clamped);
+        }
+
+        set({ nodes: nextNodes });
+        state.markDirty();
+    },
+
+    updateGlobalUniformRange: (entryId, updates) => {
+        const state = get();
+        const entry = state.globals.find((g) => g.id === entryId);
+        if (!entry || entry.kind !== 'uniform' || !isUniformKindType(entry.type)) return;
+
+        state.takeSnapshot();
+
+        const merged = {
+            min: 'min' in updates ? updates.min : entry.min,
+            max: 'max' in updates ? updates.max : entry.max,
+            step: 'step' in updates ? updates.step : entry.step,
+        };
+        const range = getUniformRange(merged, entry.type);
+        const clamped = clampUniformValue(entry.type, entry.defaultValue, range);
+        const valueChanged = JSON.stringify(clamped) !== JSON.stringify(coerceUniformValue(entry.type, entry.defaultValue));
+
+        if (valueChanged) {
+            updateUniformValue(entry.id, entry.type, clamped);
+        }
+
+        set({
+            globals: state.globals.map((g) => {
+                if (g.id !== entryId) return g;
+                const next = stripRangeFields({ ...g, defaultValue: clamped });
+                return { ...next, ...range };
+            }),
+        });
+        state.markDirty();
+    },
+
     setNodeActiveInput: (nodeId, inputKey, isActive) => {
         get().takeSnapshot();
         const prevNodes = get().nodes;
@@ -1747,16 +1966,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             const prevValue = node.data.values?.value;
             const nextValue = coerceUniformValue(newKind, prevValue);
+            const nextRange = getUniformRange(node.data.values, newKind);
+
+            const nextValues = stripRangeFields({
+                ...node.data.values,
+                uniformType: newKind,
+                value: nextValue,
+            });
 
             return {
                 ...node,
                 data: {
                     ...node.data,
-                    values: {
-                        ...node.data.values,
-                        uniformType: newKind,
-                        value: nextValue,
-                    },
+                    values: { ...nextValues, ...nextRange },
                 },
             };
         });
@@ -1923,6 +2145,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ),
             commentDraftSnapshotTakenFor: Object.fromEntries(
                 Object.entries(get().commentDraftSnapshotTakenFor).filter(([key]) => !idsToRemove.has(key))
+            ),
+            uniformGestureSnapshotFor: Object.fromEntries(
+                Object.entries(get().uniformGestureSnapshotFor).filter(
+                    ([key]) => !idsToRemove.has(key.replace(/^node:/, ''))
+                )
             ),
             // Clear selection if the deleted node was selected
             selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
@@ -2442,6 +2669,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     selectedNodeIds: [],
                     clipboard: null,
                     commentDraftSnapshotTakenFor: {},
+                    uniformGestureSnapshotFor: {},
                     globals: data.globals ?? data.graph?.globals ?? [],
                     subgraphs: data.subgraphs ?? data.graph?.subgraphs ?? {},
                     codeNodes: normalizeCodeNodesRecord(data.codeNodes ?? data.graph?.codeNodes),
@@ -2511,6 +2739,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeIds: [],
             clipboard: null,
             commentDraftSnapshotTakenFor: {},
+            uniformGestureSnapshotFor: {},
             graphStructureVersion: get().graphStructureVersion + 1,
             forcedRootMaterial,
         });
@@ -3600,6 +3829,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphs: previous.subgraphs,
             globals: previous.globals,
             commentDraftSnapshotTakenFor: {},
+            uniformGestureSnapshotFor: {},
             history: {
                 past: newPast,
                 future: [currentSnapshot, ...history.future],
@@ -3637,6 +3867,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphs: next.subgraphs,
             globals: next.globals,
             commentDraftSnapshotTakenFor: {},
+            uniformGestureSnapshotFor: {},
             history: {
                 past: [...history.past, currentSnapshot],
                 future: newFuture,
@@ -4513,6 +4744,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             selectedNodeIds: [],
             clipboard: null,
             commentDraftSnapshotTakenFor: {},
+            uniformGestureSnapshotFor: {},
             graphStructureVersion: 0,
             globals: [],
             subgraphs: {},
