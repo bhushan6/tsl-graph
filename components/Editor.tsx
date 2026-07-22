@@ -51,6 +51,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { DEFAULT_EDITOR_HOST_CAPABILITIES, type EditorHostCapabilities } from '@/lib/editor-host/types';
 import { TutorialOverlay, TutorialHighlight, TutorialComplete, TutorialLauncher } from '@/components/tutorial';
 import { useTutorialStore } from '@/store/tutorial-store';
+import { EDITOR_SHORTCUTS, isEditorShortcutBlocked, matchesEditorShortcut } from '@/lib/editor-shortcuts';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -244,46 +245,35 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
     const onCloseFind = useCallback(() => setIsFindOpen(false), []);
 
-    // Keyboard shortcuts for Undo/Redo + Copy/Paste
+    // Global editing shortcuts that are not toolbar-specific.
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            // Ignore if focus is in an input or textarea
-            if (
-                event.target instanceof HTMLInputElement ||
-                event.target instanceof HTMLTextAreaElement ||
-                (event.target as HTMLElement).isContentEditable
-            ) {
-                return;
-            }
+            if (isEditorShortcutBlocked(event)) return;
 
-            const isMod = event.ctrlKey || event.metaKey;
-            const key = event.key.toLowerCase();
-
-            if (isMod && key === "f") {
+            if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.findNotes)) {
                 event.preventDefault();
                 setIsFindOpen(true);
             }
 
-            if (isMod && key === "z") {
+            if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.undo)) {
                 event.preventDefault();
-                if (event.shiftKey) {
-                    redo();
-                } else {
-                    undo();
-                }
+                undo();
             }
 
-            if (isMod && key === "y") {
+            if (
+                matchesEditorShortcut(event, EDITOR_SHORTCUTS.redo) ||
+                ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.code === 'KeyY')
+            ) {
                 event.preventDefault();
                 redo();
             }
 
-            if (isMod && key === "c") {
+            if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.copy)) {
                 event.preventDefault();
                 copySelection();
             }
 
-            if (isMod && key === "v") {
+            if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.paste)) {
                 event.preventDefault();
                 if (isReadOnly) return;
                 const screenPosition = lastPanePositionRef.current ?? {

@@ -13,6 +13,7 @@ import { HelpCircle, Layers, Code, Keyboard, Monitor, MousePointer2, Zap, FileTe
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TYPE_COLORS } from './TSLHandle';
 import { TSLType } from '@/lib/types';
+import { EDITOR_SHORTCUTS } from '@/lib/editor-shortcuts';
 
 // Guide configuration
 const COLOR_GUIDE: { label: string; type: TSLType }[] = [
@@ -429,11 +430,25 @@ function HelpDialogComponent() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {[
-                                            { key: "Ctrl + Z", label: "Undo" },
-                                            { key: "Ctrl + Y", label: "Redo" },
-                                            { key: "Ctrl + C", label: "Copy Selection" },
-                                            { key: "Ctrl + V", label: "Paste" },
-                                            { key: "Ctrl/Cmd + F", label: "Find Notes" },
+                                            { key: EDITOR_SHORTCUTS.undo.display, label: "Undo" },
+                                            { key: EDITOR_SHORTCUTS.redo.display, label: "Redo" },
+                                            { key: EDITOR_SHORTCUTS.copy.display, label: "Copy Selection" },
+                                            { key: EDITOR_SHORTCUTS.paste.display, label: "Paste" },
+                                            { key: EDITOR_SHORTCUTS.findNotes.display, label: "Find Notes" },
+                                            { key: EDITOR_SHORTCUTS.panMode.display, label: "Pan Mode" },
+                                            { key: EDITOR_SHORTCUTS.selectMode.display, label: "Selection Mode" },
+                                            { key: EDITOR_SHORTCUTS.createSubgraph.display, label: "Create Subgraph" },
+                                            { key: EDITOR_SHORTCUTS.createCodeNode.display, label: "Create Code Node" },
+                                            { key: EDITOR_SHORTCUTS.createLoop.display, label: "Create Loop" },
+                                            { key: EDITOR_SHORTCUTS.groupNodes.display, label: "Group Nodes" },
+                                            { key: EDITOR_SHORTCUTS.ungroupNodes.display, label: "Ungroup Nodes" },
+                                            { key: EDITOR_SHORTCUTS.removeFromGroup.display, label: "Remove from Group" },
+                                            { key: EDITOR_SHORTCUTS.convertToMultiOp.display, label: "Convert to Multi-op" },
+                                            { key: EDITOR_SHORTCUTS.expandMultiOp.display, label: "Expand Multi-op" },
+                                            { key: EDITOR_SHORTCUTS.exportImage.display, label: "Open Image Export" },
+                                            { key: EDITOR_SHORTCUTS.viewCode.display, label: "View Code" },
+                                            { key: EDITOR_SHORTCUTS.saveAndExitSubgraph.display, label: "Save & Exit Subgraph" },
+                                            { key: EDITOR_SHORTCUTS.cancelSubgraph.display, label: "Cancel Subgraph Editing" },
                                             { key: "Delete", label: "Delete Selection" },
                                             { key: "Shift + Click", label: "Add to Selection" },
                                             { key: "Shift + Drag", label: "Box Selection" },

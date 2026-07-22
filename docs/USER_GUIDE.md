@@ -162,8 +162,25 @@ For visual organization without creating full Subgraphs.
 
 | Shortcut | Action |
 | :--- | :--- |
-| **Ctrl + Z** / **Cmd + Z** | Undo |
-| **Ctrl + Y** / **Cmd + Y** | Redo |
+| **Ctrl/Cmd + Z** | Undo |
+| **Ctrl/Cmd + Shift + Z** / **Ctrl/Cmd + Y** | Redo |
+| **Ctrl/Cmd + C** | Copy selection |
+| **Ctrl/Cmd + V** | Paste selection |
+| **Ctrl/Cmd + F** | Find notes |
+| **H** | Pan mode |
+| **V** | Selection mode |
+| **Ctrl/Cmd + Alt + S** | Create subgraph |
+| **Ctrl/Cmd + Alt + C** | Create code node |
+| **L** | Create loop |
+| **Ctrl/Cmd + G** | Group selected nodes |
+| **Ctrl/Cmd + Shift + G** | Ungroup selected groups |
+| **Alt + G** | Remove selected nodes from their group |
+| **M** | Convert a selected chain to a Multi-op |
+| **Shift + M** | Expand a selected Multi-op |
+| **Ctrl/Cmd + Shift + E** | Open image export |
+| **Ctrl/Cmd + Alt + V** | View generated code |
+| **Ctrl/Cmd + Enter** | Save and exit subgraph editing |
+| **Esc** | Cancel subgraph editing |
 | **Delete** / **Backspace** | Delete Selected |
 | **Shift + Click** | Add to Selection |
 | **Shift + Drag** | Box Selection |

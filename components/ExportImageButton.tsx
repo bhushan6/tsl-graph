@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
 import { Clipboard, Download, ImageDown, Loader2 } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
@@ -23,6 +23,12 @@ import {
 import { exportGraphImage } from "@/lib/export-image";
 import { useEditorStore } from "@/store/editor";
 import type { AppNode } from "@/lib/types";
+import {
+  EDITOR_SHORTCUTS,
+  isEditorShortcutBlocked,
+  matchesEditorShortcut,
+  shortcutTooltip,
+} from "@/lib/editor-shortcuts";
 
 // Flow-space padding around the captured nodes.
 const BOUNDS_PADDING = 32;
@@ -59,9 +65,28 @@ export function ExportImageButton() {
     }
   }, []);
   const [isExporting, setIsExporting] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   // State updates are async, so a ref is needed to block re-entrant calls
   // (e.g. a menu item event firing twice) within the same tick.
   const exportingRef = useRef(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        isEditorShortcutBlocked(event) ||
+        !matchesEditorShortcut(event, EDITOR_SHORTCUTS.exportImage)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      setIsOpen(true);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleExport = useCallback(
     async (target: "download" | "clipboard") => {
@@ -124,7 +149,7 @@ export function ExportImageButton() {
   );
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
@@ -143,7 +168,7 @@ export function ExportImageButton() {
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Export Image</TooltipContent>
+        <TooltipContent>{shortcutTooltip("Export Image", EDITOR_SHORTCUTS.exportImage)}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent side="top" align="center">
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">

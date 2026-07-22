@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import posthog from "posthog-js";
 import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, Split, /* Sparkles, */ FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,12 @@ import { detectConvertibleChain } from '@/lib/multi-op-convert';
 import { ExportImageButton } from '@/components/ExportImageButton';
 import { MATERIAL_NODE_TYPES } from '@/lib/nodes';
 import { useReactFlow } from '@xyflow/react';
+import {
+    EDITOR_SHORTCUTS,
+    isEditorShortcutBlocked,
+    matchesEditorShortcut,
+    shortcutTooltip,
+} from '@/lib/editor-shortcuts';
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
@@ -127,11 +133,137 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
         }
     }, [exitSubgraphEditor, editingSubgraphId, subgraphs, isProcessing, setCenter, getZoom, fitView]);
 
-    // Check if any selected node is a material node
-    const isMaterialSelected = selectedNodeIds.some(id => {
-        const node = nodes.find(n => n.id === id);
-        return node && (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type);
-    });
+    const {
+        canRemoveFromGroup,
+        canUngroup,
+        convertibleChain,
+        isMaterialSelected,
+        selectedMultiOpId,
+    } = useMemo(() => {
+        const selectedIdSet = new Set(selectedNodeIds);
+        const nodeById = new Map(nodes.map((node) => [node.id, node]));
+        const selectedNodes = nodes.filter((node) => selectedIdSet.has(node.id));
+
+        return {
+            isMaterialSelected: selectedNodes.some((node) =>
+                (MATERIAL_NODE_TYPES as readonly string[]).includes(node.data.type),
+            ),
+            canRemoveFromGroup: selectedNodes.length > 0 && selectedNodes.every((node) => {
+                if (node.type === 'group' || node.data.type === 'loop') return false;
+                if (!node.parentId || node.data.type.startsWith('loop/')) return false;
+                const parent = nodeById.get(node.parentId);
+                return Boolean(parent && (parent.type === 'group' || parent.data.type === 'loop'));
+            }),
+            canUngroup: selectedNodes.length > 0 && selectedNodes.every(
+                (node) => node.type === 'group' && node.data.type !== 'loop',
+            ),
+            convertibleChain: selectedNodeIds.length >= 2
+                ? detectConvertibleChain(selectedNodeIds, nodes, edges)
+                : null,
+            selectedMultiOpId:
+                selectedNodeIds.length === 1 && selectedNodes[0]?.data.type === 'math/multiOp'
+                    ? selectedNodeIds[0]
+                    : null,
+        };
+    }, [edges, nodes, selectedNodeIds]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.repeat) return;
+
+            const run = (action: () => void) => {
+                event.preventDefault();
+                action();
+            };
+
+            const isSubgraphSaveShortcut =
+                editorMode === 'subgraph' &&
+                !event.defaultPrevented &&
+                !document.querySelector('[role="dialog"][data-state="open"]') &&
+                matchesEditorShortcut(event, EDITOR_SHORTCUTS.saveAndExitSubgraph);
+
+            // Saving should work while the subgraph name input is focused.
+            if (isSubgraphSaveShortcut && !isProcessing) {
+                run(() => { void handleExitSubgraph(true); });
+                return;
+            }
+
+            if (isEditorShortcutBlocked(event)) return;
+
+            if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.panMode)) {
+                run(() => setCanvasMode('pan'));
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.selectMode)) {
+                run(() => setCanvasMode('select'));
+            } else if (editorMode === 'subgraph') {
+                if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.cancelSubgraph) && !isProcessing) {
+                    run(() => { void handleExitSubgraph(false); });
+                } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.createLoop) && !isMaterialSelected) {
+                    run(() => {
+                        const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                        createLoopGroup(center);
+                    });
+                } else if (
+                    matchesEditorShortcut(event, EDITOR_SHORTCUTS.convertToMultiOp) &&
+                    convertibleChain?.valid
+                ) {
+                    run(() => convertChainToMultiOp(convertibleChain.orderedNodeIds));
+                } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.expandMultiOp) && selectedMultiOpId) {
+                    run(() => convertMultiOpToChain(selectedMultiOpId));
+                } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.viewCode) && onOpenCodePanel) {
+                    run(onOpenCodePanel);
+                }
+                return;
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.createSubgraph)) {
+                run(handleCreateSubgraph);
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.createCodeNode) && onCreateCodeNode) {
+                run(onCreateCodeNode);
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.removeFromGroup) && canRemoveFromGroup) {
+                run(() => removeNodesFromGroup(selectedNodeIds));
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.createLoop) && !isMaterialSelected) {
+                run(() => {
+                    const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                    createLoopGroup(center);
+                });
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.groupNodes) && selectedNodeIds.length > 0) {
+                run(groupNodes);
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.ungroupNodes) && canUngroup) {
+                run(ungroupNodes);
+            } else if (
+                matchesEditorShortcut(event, EDITOR_SHORTCUTS.convertToMultiOp) &&
+                convertibleChain?.valid
+            ) {
+                run(() => convertChainToMultiOp(convertibleChain.orderedNodeIds));
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.expandMultiOp) && selectedMultiOpId) {
+                run(() => convertMultiOpToChain(selectedMultiOpId));
+            } else if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.viewCode) && onOpenCodePanel) {
+                run(onOpenCodePanel);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [
+        canRemoveFromGroup,
+        canUngroup,
+        convertibleChain,
+        convertChainToMultiOp,
+        convertMultiOpToChain,
+        createLoopGroup,
+        editorMode,
+        groupNodes,
+        handleCreateSubgraph,
+        handleExitSubgraph,
+        isMaterialSelected,
+        isProcessing,
+        onCreateCodeNode,
+        onOpenCodePanel,
+        removeNodesFromGroup,
+        screenToFlowPosition,
+        selectedMultiOpId,
+        selectedNodeIds,
+        setCanvasMode,
+        ungroupNodes,
+    ]);
 
     // Subgraph mode toolbar
     if (editorMode === 'subgraph') {
@@ -182,7 +314,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 <Hand className="w-4 h-4" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Pan Mode</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Pan Mode', EDITOR_SHORTCUTS.panMode)}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -196,7 +328,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 <MousePointer2 className="w-4 h-4" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Selection Mode</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Selection Mode', EDITOR_SHORTCUTS.selectMode)}</TooltipContent>
                     </Tooltip>
                 </div>
 
@@ -218,7 +350,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 </Button>
                             </span>
                         </TooltipTrigger>
-                        <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Undo', EDITOR_SHORTCUTS.undo)}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -235,7 +367,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 </Button>
                             </span>
                         </TooltipTrigger>
-                        <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Redo', EDITOR_SHORTCUTS.redo)}</TooltipContent>
                     </Tooltip>
                 </div>
 
@@ -260,7 +392,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 </Button>
                             </span>
                         </TooltipTrigger>
-                        <TooltipContent>Create Loop</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Create Loop', EDITOR_SHORTCUTS.createLoop)}</TooltipContent>
                     </Tooltip>
                     {selectedNodeIds.length >= 2 && (() => {
                         const chainResult = detectConvertibleChain(selectedNodeIds, nodes, edges);
@@ -277,7 +409,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                         <Combine className="w-4 h-4" />
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Convert to Multi-op</TooltipContent>
+                                <TooltipContent>{shortcutTooltip('Convert to Multi-op', EDITOR_SHORTCUTS.convertToMultiOp)}</TooltipContent>
                             </Tooltip>
                         );
                     })()}
@@ -293,7 +425,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                     <Split className="w-4 h-4" />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Expand to separate nodes</TooltipContent>
+                            <TooltipContent>{shortcutTooltip('Expand to separate nodes', EDITOR_SHORTCUTS.expandMultiOp)}</TooltipContent>
                         </Tooltip>
                     )}
                     {onOpenCodePanel && (
@@ -309,7 +441,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                     <Code className="w-4 h-4" />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent>View Code</TooltipContent>
+                            <TooltipContent>{shortcutTooltip('View Code', EDITOR_SHORTCUTS.viewCode)}</TooltipContent>
                         </Tooltip>
                     )}
                     <ExportImageButton />
@@ -335,7 +467,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Button>
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>{isProcessing ? 'Saving...' : 'Save & Exit'}</TooltipContent>
+                    <TooltipContent>{isProcessing ? 'Saving...' : shortcutTooltip('Save & Exit', EDITOR_SHORTCUTS.saveAndExitSubgraph)}</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
@@ -350,7 +482,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             <X className="w-4 h-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Cancel</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Cancel', EDITOR_SHORTCUTS.cancelSubgraph)}</TooltipContent>
                 </Tooltip>
             </form >
         );
@@ -370,7 +502,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             <Hand className="w-4 h-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Pan Mode</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Pan Mode', EDITOR_SHORTCUTS.panMode)}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -383,7 +515,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             <MousePointer2 className="w-4 h-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Selection Mode</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Selection Mode', EDITOR_SHORTCUTS.selectMode)}</TooltipContent>
                 </Tooltip>
             </div>
 
@@ -402,7 +534,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                         </Button>
                     </span>
                 </TooltipTrigger>
-                <TooltipContent>Create Subgraph</TooltipContent>
+                <TooltipContent>{shortcutTooltip('Create Subgraph', EDITOR_SHORTCUTS.createSubgraph)}</TooltipContent>
             </Tooltip>
 
             {onCreateCodeNode && (
@@ -419,43 +551,30 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Button>
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Create Code Node</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Create Code Node', EDITOR_SHORTCUTS.createCodeNode)}</TooltipContent>
                 </Tooltip>
             )}
 
             <div className="w-px h-4 bg-border" />
 
             <div className="flex items-center gap-0.5">
-                {selectedNodeIds.length > 0 && (() => {
-                    const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
-                    const canRemoveFromGroup = selectedNodes.length > 0 && selectedNodes.every((node) => {
-                        if (node.type === 'group' || node.data.type === 'loop') return false;
-                        if (!node.parentId) return false;
-                        if (node.data.type.startsWith('loop/')) return false;
-                        const parent = nodes.find(n => n.id === node.parentId);
-                        return !!parent && (parent.type === 'group' || parent.data.type === 'loop');
-                    });
-
-                    if (!canRemoveFromGroup) return null;
-
-                    return (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="inline-flex">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => removeNodesFromGroup(selectedNodeIds)}
-                                        className="h-8 w-8"
-                                    >
-                                        <Ungroup className="w-4 h-4" />
-                                    </Button>
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent>Remove from Group</TooltipContent>
-                        </Tooltip>
-                    );
-                })()}
+                {canRemoveFromGroup && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => removeNodesFromGroup(selectedNodeIds)}
+                                    className="h-8 w-8"
+                                >
+                                    <Ungroup className="w-4 h-4" />
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{shortcutTooltip('Remove from Group', EDITOR_SHORTCUTS.removeFromGroup)}</TooltipContent>
+                    </Tooltip>
+                )}
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <span className="inline-flex">
@@ -473,7 +592,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Button>
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Create Loop</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Create Loop', EDITOR_SHORTCUTS.createLoop)}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -489,9 +608,9 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Button>
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Group Nodes</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Group Nodes', EDITOR_SHORTCUTS.groupNodes)}</TooltipContent>
                 </Tooltip>
-                {selectedNodeIds.length > 0 && nodes.filter(n => selectedNodeIds.includes(n.id)).every(n => n.type === 'group' && n.data.type !== 'loop') && (
+                {canUngroup && (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
@@ -503,7 +622,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 <Ungroup className="w-4 h-4" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Ungroup Nodes</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Ungroup Nodes', EDITOR_SHORTCUTS.ungroupNodes)}</TooltipContent>
                     </Tooltip>
                 )}
                 {selectedNodeIds.length >= 2 && (() => {
@@ -521,7 +640,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                     <Combine className="w-4 h-4" />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Convert to Multi-op</TooltipContent>
+                            <TooltipContent>{shortcutTooltip('Convert to Multi-op', EDITOR_SHORTCUTS.convertToMultiOp)}</TooltipContent>
                         </Tooltip>
                     );
                 })()}
@@ -537,7 +656,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 <Split className="w-4 h-4" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Expand to separate nodes</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('Expand to separate nodes', EDITOR_SHORTCUTS.expandMultiOp)}</TooltipContent>
                     </Tooltip>
                 )}
             </div>
@@ -559,7 +678,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Button>
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Undo', EDITOR_SHORTCUTS.undo)}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -575,7 +694,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                             </Button>
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
+                    <TooltipContent>{shortcutTooltip('Redo', EDITOR_SHORTCUTS.redo)}</TooltipContent>
                 </Tooltip>
             </div>
 
@@ -618,7 +737,7 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
                                 <Code className="w-4 h-4" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>View Code</TooltipContent>
+                        <TooltipContent>{shortcutTooltip('View Code', EDITOR_SHORTCUTS.viewCode)}</TooltipContent>
                     </Tooltip>
                 </>
             )}
