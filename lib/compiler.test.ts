@@ -311,6 +311,16 @@ const mockDefs: NodeDef[] = [
         outputs: { out: { type: 'color', label: 'Out' } },
     },
     {
+        type: 'advanced/hash',
+        label: 'Hash',
+        category: 'Advanced',
+        tsl: 'hash',
+        inputs: {
+            seed: { type: 'float', default: 0, label: 'Seed' },
+        },
+        outputs: { out: { type: 'float', label: 'Out' } },
+    },
+    {
         type: 'advanced/hashBlur',
         label: 'Hash Blur',
         category: 'Advanced',
@@ -2025,13 +2035,14 @@ describe('getRequiredImports', () => {
         const nodes = [
             createNode('sample', 'texture/sampleNode'),
             createNode('bloomFx', 'postfx/bloom'),
-            createNode('hash', 'advanced/hashBlur'),
+            createNode('hash', 'advanced/hash'),
+            createNode('hashBlur', 'advanced/hashBlur'),
         ];
 
         const groups = getRequiredImportsByModule(nodes);
         const byModule = new Map(groups.map((group) => [group.from, group.imports]));
 
-        expect(byModule.get('three/tsl')).toEqual(expect.arrayContaining(['texture', 'screenUV']));
+        expect(byModule.get('three/tsl')).toEqual(expect.arrayContaining(['texture', 'screenUV', 'hash']));
         expect(byModule.get('three/addons/tsl/display/BloomNode.js')).toEqual(['bloom']);
         expect(byModule.get('three/addons/tsl/display/hashBlur.js')).toEqual(['hashBlur']);
         expect(byModule.get('three/tsl')).not.toContain('bloom');

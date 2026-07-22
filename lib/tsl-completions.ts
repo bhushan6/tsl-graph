@@ -176,6 +176,7 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'mx_unifiednoise2d', type: 'function', detail: 'mx_unifiednoise2d(...)', info: 'Unified 2D noise' },
     { label: 'mx_unifiednoise3d', type: 'function', detail: 'mx_unifiednoise3d(...)', info: 'Unified 3D noise' },
     { label: 'triNoise3D', type: 'function', detail: 'triNoise3D(pos, ...)', info: 'Tri noise 3D' },
+    { label: 'hash', type: 'function', detail: 'hash(seed)', info: 'Deterministic pseudo-random value in [0, 1)' },
     { label: 'hashBlur', type: 'function', detail: 'hashBlur(tex, uv, blur)', info: 'Hash blur' },
     { label: 'interleavedGradientNoise', type: 'function', detail: 'interleavedGradientNoise(uv)', info: 'Interleaved gradient noise' },
 

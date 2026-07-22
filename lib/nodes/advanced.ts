@@ -109,6 +109,18 @@ export const advancedNodes = [
         pure: true,
     },
     {
+        type: 'advanced/hash',
+        label: 'Hash',
+        category: 'Advanced',
+        inputs: {
+            seed: { label: 'Seed', type: 'float', default: 0 },
+        },
+        outputs: {
+            out: { label: 'Out', type: 'float' },
+        },
+        tsl: 'hash',
+    },
+    {
         type: 'advanced/hashBlur',
         label: 'Hash Blur',
         category: 'Advanced',

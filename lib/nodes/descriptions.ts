@@ -139,6 +139,7 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
     fxaa: 'Applies fast approximate anti-aliasing.',
     gaussianBlur: 'Applies a Gaussian blur filter.',
     grayscale: 'Converts color to grayscale.',
+    hash: 'Generates a deterministic value from zero up to, but not including, one for a seed.',
     hashBlur: 'Applies a fast hash-based blur.',
     rgbShift: 'Shifts RGB channels for a glitch effect.',
     sepia: 'Applies a sepia color tone.',
@@ -209,6 +210,7 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'advanced/output': 'Outputs a vec4 fragment color.',
     'advanced/frontFacing': 'True for front-facing fragments.',
     'advanced/viewportLinearDepth': 'Returns linear depth from the viewport.',
+    'advanced/hash': 'Generates a deterministic pseudo-random float in the range [0, 1) from a seed.',
     'advanced/hashBlur': 'Applies a fast hash-based blur to a texture input.',
 
     'geo/camera': 'Returns camera near and far plane values.',
