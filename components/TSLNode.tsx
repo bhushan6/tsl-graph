@@ -12,6 +12,7 @@ import { getMaterialActiveInputsSet } from "@/lib/material-inputs";
 import { TEXTURE_PROP_INPUTS } from "@/lib/texture-props";
 import { POST_OUTPUT_COLOR_CONTROL_INPUTS } from "@/lib/post-output-settings";
 import { resolveNodeOutputTypeById } from "@/lib/type-inference";
+import { getVisibleSplitOutputKeys } from "@/lib/split-node";
 import {
   Tooltip,
   TooltipContent,
@@ -334,6 +335,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   }
 
   const inferredOutputTypes = new Map<string, TSLType>();
+  let splitInputType: TSLType | null = null;
   if (shouldInferOutputTypes && outputTypeVersion >= 0) {
     const state = useEditorStore.getState();
     const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
@@ -350,6 +352,14 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
           state.subgraphs,
         ),
       );
+    }
+    if (
+      nodeType === "math/split" &&
+      state.edges.some(
+        (edge) => edge.target === id && edge.targetHandle === "in",
+      )
+    ) {
+      splitInputType = inferredOutputTypes.get("out") ?? "any";
     }
   }
 
@@ -625,6 +635,12 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   // Filter out hidden inputs from node UI
   let visibleInputKeys = inputKeys.filter((k) => !inputs[k].hidden);
   let visibleOutputKeys = outputKeys.filter((k) => !outputs[k].hidden);
+  if (nodeType === "math/split") {
+    visibleOutputKeys = getVisibleSplitOutputKeys(
+      visibleOutputKeys,
+      splitInputType,
+    );
+  }
   if (isMaterialNode) {
     const activeInputs = getMaterialActiveInputsSet(data, def, connectedInputs);
     visibleInputKeys = visibleInputKeys.filter((key) => activeInputs.has(key));
