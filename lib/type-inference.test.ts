@@ -149,6 +149,9 @@ describe('resolveNodeOutputTypeById math inference', () => {
         const nodesById = new Map([['add', addNode]]);
 
         expect(resolveNodeOutputTypeById('add', 'out', nodesById, [], globals)).toBe('vec2');
+        expect(resolveNodeOutputTypeById('add', 'x', nodesById, [], globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('add', 'y', nodesById, [], globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('add', 'z', nodesById, [], globals)).toBe('any');
     });
 
     it('preserves left-first ties for add(color, vec3) -> color', () => {
@@ -222,6 +225,7 @@ describe('resolveNodeOutputTypeById math inference', () => {
         const nodesById = new Map([['multi', multiOpNode]]);
 
         expect(resolveNodeOutputTypeById('multi', 'out', nodesById, [], globals)).toBe('vec3');
+        expect(resolveNodeOutputTypeById('multi', 'z', nodesById, [], globals)).toBe('float');
     });
 
     it('keeps math/range unresolved as any', () => {

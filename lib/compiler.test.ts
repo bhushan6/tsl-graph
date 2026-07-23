@@ -809,6 +809,23 @@ describe('compileGraph', () => {
             expect(code).toContain('mul(_node0, 4)');
         });
 
+        it('should compile a Math component output without a split node', () => {
+            const nodes = [
+                createNode('uv1', 'geo/uv'),
+                createNode('mul1', 'math/mul', { values: { b: 2 } }),
+                createNode('add1', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'uv1', sourceHandle: 'out', target: 'mul1', targetHandle: 'a' },
+                { id: 'e2', source: 'mul1', sourceHandle: 'x', target: 'add1', targetHandle: 'a' },
+            ];
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('mul(_node0, 2)');
+            expect(code).toContain('add(_node1.x, 1)');
+            expect(nodes.some((node) => node.data.type === 'math/split')).toBe(false);
+        });
+
         it('should connect geometry node to math node', () => {
             const nodes = [
                 createNode('t1', 'geo/time'),

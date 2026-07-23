@@ -433,7 +433,7 @@ describe('buildQuickCreateExpressionGraph', () => {
         ]);
     });
 
-    it('inserts a split node when the object has no component outputs', () => {
+    it('reuses inferred Math component outputs without a split node', () => {
         const intent = parseQuickCreateExpression('(uv * 2).x');
         const graph = buildQuickCreateExpressionGraph(intent!, {
             basePosition: { x: 500, y: 300 },
@@ -443,9 +443,8 @@ describe('buildQuickCreateExpressionGraph', () => {
         expect(graph.nodes.map((node) => node.data.type)).toEqual([
             'geo/uv',
             'math/mul',
-            'math/split',
         ]);
-        expect(graph.outputNodeId).toBe(graph.nodes[2].id);
+        expect(graph.outputNodeId).toBe(graph.nodes[1].id);
         expect(graph.outputHandleId).toBe('x');
     });
 

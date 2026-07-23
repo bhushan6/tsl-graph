@@ -3,6 +3,7 @@ import { getMultiOpChainKey, getMultiOpHandleId, getMultiOpParams, type MultiOp 
 import { registry } from './registry';
 import type { GlobalContextEntry, Port, SubgraphDefinition, TSLNodeData, TSLType } from './types';
 import { inferLiteralTSLType } from './value-type-utils';
+import { getComponentOutputType } from './component-outputs';
 
 const LOCAL_SET_NODE_TYPE = 'local/set' as const;
 const LOCAL_GET_NODE_TYPE = 'local/get' as const;
@@ -303,27 +304,38 @@ function resolveMathNodeOutputType(
     handleId: string | null | undefined,
     context: ResolverContext
 ): TSLType {
-    if (node.data.type === 'math/multiOp') {
-        return resolveMultiOpOutputType(node, context);
-    }
-
-    if (node.data.type === 'math/range') {
-        return 'any';
-    }
-
     const def = registry.get(node.data.type);
     if (!def) return 'any';
 
-    if (node.data.type === 'math/split' && (handleId ?? 'out') === 'out') {
-        return resolveInputPortType(node, 'in', def.inputs?.in, context);
+    const resolvedHandle = handleId ?? 'out';
+
+    if (node.data.type === 'math/split') {
+        if (resolvedHandle === 'out') {
+            return resolveInputPortType(node, 'in', def.inputs?.in, context);
+        }
+        return def.outputs?.[resolvedHandle]?.type ?? 'any';
     }
 
-    const inputTypes = new Map<string, TSLType>();
-    for (const [inputKey, inputDef] of Object.entries(def.inputs ?? {})) {
-        inputTypes.set(inputKey, resolveInputPortType(node, inputKey, inputDef, context));
+    let outputType: TSLType;
+    if (node.data.type === 'math/multiOp') {
+        outputType = resolveMultiOpOutputType(node, context);
+    } else if (node.data.type === 'math/range') {
+        outputType = 'any';
+    } else {
+        const declaredOutputType = def.outputs?.out?.type;
+        if (declaredOutputType && declaredOutputType !== 'any') {
+            outputType = declaredOutputType;
+        } else {
+            const inputTypes = new Map<string, TSLType>();
+            for (const [inputKey, inputDef] of Object.entries(def.inputs ?? {})) {
+                inputTypes.set(inputKey, resolveInputPortType(node, inputKey, inputDef, context));
+            }
+            outputType = inferMathOutputTypeFromTsl(def.tsl, inputTypes);
+        }
     }
 
-    return inferMathOutputTypeFromTsl(def.tsl, inputTypes);
+    if (resolvedHandle === 'out') return outputType;
+    return getComponentOutputType(outputType, resolvedHandle) ?? 'any';
 }
 
 function resolveLocalSetSourceType(
@@ -388,14 +400,9 @@ export function resolveNodeOutputTypeById(
         return resolveGlobalRefType(node, globals);
     }
 
-    const declaredType = resolveDeclaredOutputType(node, handleId, subgraphs);
-    if (declaredType !== 'any') {
-        return declaredType;
-    }
-
     if (isMathNodeType(node.data.type)) {
         return resolveMathNodeOutputType(node, handleId, context);
     }
 
-    return declaredType;
+    return resolveDeclaredOutputType(node, handleId, subgraphs);
 }

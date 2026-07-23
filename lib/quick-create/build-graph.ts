@@ -7,7 +7,8 @@ import type {
     QuickCreateExpressionIntent,
     QuickCreateExpressionNode,
 } from './ast';
-import { normalizeSwizzleChar } from './infer';
+import { inferQuickCreateExpressionType, normalizeSwizzleChar } from './infer';
+import { getComponentOutputHandle } from '../component-outputs';
 
 const HORIZONTAL_GAP = 220;
 const VERTICAL_GAP = 96;
@@ -195,14 +196,22 @@ export function buildQuickCreateExpressionGraph(
         const combine = chars.length > 1;
 
         // Prefer the object's own component output handles (geo/uv exposes
-        // x/y, const/color exposes r/g/b, …) over inserting a split node.
+        // x/y, const/color exposes r/g/b, and inferred Math vectors expose
+        // virtual component handles) over inserting a split node.
         const producedType = getProducedNodeType(ast.object);
         const objectOutputs = producedType ? registry.get(producedType)?.outputs : undefined;
+        const objectOutputType = inferQuickCreateExpressionType(ast.object);
         const resolveDirectHandle = (char: string): string | null => {
             if (!objectOutputs) return null;
             if (objectOutputs[char]) return char;
             const normalized = normalizeSwizzleChar(char);
-            return objectOutputs[normalized] ? normalized : null;
+            if (objectOutputs[normalized]) return normalized;
+
+            if (producedType?.startsWith('math/') && producedType !== 'math/split' && objectOutputType) {
+                return getComponentOutputHandle(objectOutputType, char);
+            }
+
+            return null;
         };
 
         const needsSplit = chars.some((char) => resolveDirectHandle(char) === null);

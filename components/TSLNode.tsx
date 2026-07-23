@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useCallback, useEffect, useMemo } from "react";
-import { Position } from "@xyflow/react";
+import { Position, useUpdateNodeInternals } from "@xyflow/react";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { TEXTURE_PROP_INPUTS } from "@/lib/texture-props";
 import { POST_OUTPUT_COLOR_CONTROL_INPUTS } from "@/lib/post-output-settings";
 import { resolveNodeOutputTypeById } from "@/lib/type-inference";
 import { getVisibleSplitOutputKeys } from "@/lib/split-node";
+import { getComponentOutputPorts } from "@/lib/component-outputs";
 import {
   Tooltip,
   TooltipContent,
@@ -85,6 +86,7 @@ const categoryColors: Record<string, string> = {
 };
 
 function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
+  const updateNodeInternals = useUpdateNodeInternals();
   const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
   const updateUniformNodeValueLive = useEditorStore(
     (s) => s.updateUniformNodeValueLive,
@@ -247,6 +249,12 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     ),
   );
 
+  useEffect(() => {
+    if (shouldInferOutputTypes) {
+      updateNodeInternals(id);
+    }
+  }, [id, outputTypeVersion, shouldInferOutputTypes, updateNodeInternals]);
+
   // For subgraph and code node instances, we don't need a registry definition
   // We'll use the dynamicPorts from node data
   if (!def && !isCustomInstance) {
@@ -339,27 +347,30 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   if (shouldInferOutputTypes && outputTypeVersion >= 0) {
     const state = useEditorStore.getState();
     const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
-    for (const [handleId, output] of Object.entries(outputs)) {
-      if (output.type !== "any") continue;
-      inferredOutputTypes.set(
-        handleId,
-        resolveNodeOutputTypeById(
-          id,
-          handleId,
-          nodesById,
-          state.edges,
-          state.globals,
-          state.subgraphs,
-        ),
-      );
+    const outputType = resolveNodeOutputTypeById(
+      id,
+      "out",
+      nodesById,
+      state.edges,
+      state.globals,
+      state.subgraphs,
+    );
+    inferredOutputTypes.set("out", outputType);
+
+    if (nodeType !== "math/split") {
+      outputs = {
+        ...getComponentOutputPorts(outputType),
+        ...outputs,
+      };
     }
+
     if (
       nodeType === "math/split" &&
       state.edges.some(
         (edge) => edge.target === id && edge.targetHandle === "in",
       )
     ) {
-      splitInputType = inferredOutputTypes.get("out") ?? "any";
+      splitInputType = outputType;
     }
   }
 
