@@ -679,9 +679,11 @@ function compileSubgraphDefinition(
     codeNodesMap?: Record<string, CodeNodeDefinition>,
     globalVarMap?: Map<string, string>,
     globalReservedNames?: Set<string>,
-    options: CompileOptions = {}
+    options: CompileOptions = {},
+    allowUniformNodes = false
 ): string[] {
-    if (subgraph.nodes.some((n) => n.data.type === 'const/uniform')) {
+    const uniformNodes = subgraph.nodes.filter((node) => node.data.type === 'const/uniform');
+    if (uniformNodes.length > 0 && !allowUniformNodes) {
         throw new Error('Uniform nodes are not supported inside subgraphs yet.');
     }
 
@@ -743,17 +745,62 @@ function compileSubgraphDefinition(
         return argName;
     });
 
+    const compiledNodes = new Map<string, CompiledNode>();
+    const usedNames = new Set<string>([
+        ...(globalReservedNames ?? []),
+        ...usedSubgraphs.values(),
+        ...(usedCodeNodes?.values() ?? []),
+        functionName,
+    ]);
+    let nodeIndex = 0;
+
+    // Post graphs compile through the subgraph path, but their uniforms must live
+    // outside the generated Fn. Hoisting keeps one stable TSL uniform object that
+    // the function captures instead of constructing one whenever the Fn is built.
+    for (const node of uniformNodes) {
+        const localName = node.data.localName || (node.data.values?.localName as string | undefined);
+        const baseName = localName
+            ? String(localName).replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&')
+            : `_subgraph_node${nodeIndex}`;
+
+        let displayName = baseName;
+        let suffix = 1;
+        while (usedNames.has(displayName)) {
+            displayName = `${baseName}_${suffix++}`;
+        }
+        usedNames.add(displayName);
+        nodeIndex++;
+
+        const kind = getUniformKindFromNode(node);
+        const valueExpr = formatUniformValueExpression(kind, node.data.values?.value);
+        const uniformExpression = options.uniformMode === 'runtime'
+            ? `__uniform("${node.id}", ${valueExpr}, "${kind}")`
+            : `uniform(${valueExpr})`;
+
+        lines.push(`const ${displayName} = ${uniformExpression};`);
+        compiledNodes.set(node.id, {
+            id: node.id,
+            varName: displayName,
+            code: `/* uniform ${kind} */`,
+            singleOutput: true,
+        });
+    }
+    if (uniformNodes.length > 0) {
+        lines.push('');
+    }
+
     lines.push(`const ${functionName} = Fn(([${argNames.join(', ')}]) => {`);
 
     // Prepare for internal graph compilation
     // Filter out anchor nodes for topological sort
     const nodesToSort = internalNodes.filter(
-        n => n.id !== 'subgraph-input' && n.id !== 'subgraph-output' && !isLoopInternalNode(n) && n.data.type !== COMMENT_NODE_TYPE
+        n => n.id !== 'subgraph-input'
+            && n.id !== 'subgraph-output'
+            && !isLoopInternalNode(n)
+            && n.data.type !== COMMENT_NODE_TYPE
+            && n.data.type !== 'const/uniform'
     );
     const sorted = topologicalSort(nodesToSort, loopAwareEdges);
-    const compiledNodes = new Map<string, CompiledNode>();
-    const usedNames = new Set<string>(globalReservedNames ?? []);
-    let nodeIndex = 0;
 
     const compileSubgraphNode = (node: Node<TSLNodeData>, targetLines: string[], indent: string = '    ') => {
         if (node.data.type === COMMENT_NODE_TYPE) {
@@ -1382,11 +1429,12 @@ function collectSubgraphDependencies(
 /**
  * Compile a single subgraph definition (plus dependencies) into TSL code.
  */
-export function compileSubgraphCode(
+function compileSubgraphCodeInternal(
     subgraph: SubgraphDefinition,
     subgraphs?: Record<string, SubgraphDefinition>,
     codeNodes?: Record<string, CodeNodeDefinition>,
-    options: CompileOptions = {}
+    options: CompileOptions = {},
+    allowRootUniformNodes = false
 ): string {
     if (!subgraph) {
         return '// No subgraph';
@@ -1523,11 +1571,21 @@ export function compileSubgraphCode(
         codeNodes,
         globalVarMap,
         globalReservedNames,
-        options
+        options,
+        allowRootUniformNodes
     );
     lines.push(...linesForSubgraph);
 
     return lines.join('\n');
+}
+
+export function compileSubgraphCode(
+    subgraph: SubgraphDefinition,
+    subgraphs?: Record<string, SubgraphDefinition>,
+    codeNodes?: Record<string, CodeNodeDefinition>,
+    options: CompileOptions = {}
+): string {
+    return compileSubgraphCodeInternal(subgraph, subgraphs, codeNodes, options);
 }
 
 export interface CompiledPostGraph {
@@ -1660,11 +1718,12 @@ export function compilePostGraph(
         updatedAt: 0,
     };
 
-    const code = compileSubgraphCode(
+    const code = compileSubgraphCodeInternal(
         syntheticSubgraph,
         subgraphs,
         codeNodes,
-        { ...options, runtimeCameraFromScope: true }
+        { ...options, runtimeCameraFromScope: true },
+        true
     );
     const fnMatches = Array.from(code.matchAll(/const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*Fn\(\(\[/g));
     const functionName = fnMatches[fnMatches.length - 1]?.[1];

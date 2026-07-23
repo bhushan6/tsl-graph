@@ -1208,6 +1208,45 @@ describe('compilePostGraph', () => {
         expect(result.code).toContain('return arg_in_color;');
     });
 
+    it('hoists uniform nodes outside the post Fn', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-strength', 'const/uniform', {
+                values: { uniformType: 'float', value: 0.5, localName: 'strength' },
+            }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-strength', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges);
+        const uniformIndex = result.code.indexOf('const strength = uniform(0.5);');
+        const fnIndex = result.code.indexOf(`const ${result.functionName} = Fn`);
+
+        expect(uniformIndex).toBeGreaterThanOrEqual(0);
+        expect(fnIndex).toBeGreaterThan(uniformIndex);
+        expect(result.code).toContain('return strength;');
+    });
+
+    it('uses stable runtime uniform identities in post graphs', () => {
+        const nodes = [
+            createNode('post-input', 'post/input'),
+            createNode('post-tint', 'const/uniform', {
+                values: { uniformType: 'color', value: '#336699', localName: 'tint' },
+            }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'post-tint', sourceHandle: 'out', target: 'post-output', targetHandle: 'color' },
+        ];
+
+        const result = compilePostGraph(nodes, edges, undefined, undefined, { uniformMode: 'runtime' });
+
+        expect(result.code).toContain('const tint = __uniform("post-tint", new THREE.Color("#336699"), "color");');
+        expect(result.code).toContain('return tint;');
+    });
+
     it('supports local set/get portals in post graph', () => {
         const nodes = [
             createNode('post-input', 'post/input'),
@@ -1450,6 +1489,35 @@ describe('compilePostGraph', () => {
 });
 
 describe('compileSubgraphCode', () => {
+    it('keeps uniform nodes restricted in reusable subgraphs', () => {
+        const subgraph: SubgraphDefinition = {
+            id: 'custom/uniform-subgraph',
+            name: 'Uniform Subgraph',
+            inputs: [],
+            outputs: [{ id: 'out_0', label: 'out', type: 'float' }],
+            nodes: [
+                createNode('uniform-1', 'const/uniform', {
+                    values: { uniformType: 'float', value: 0.5 },
+                }),
+            ],
+            edges: [
+                {
+                    id: 'e1',
+                    source: 'uniform-1',
+                    sourceHandle: 'out',
+                    target: 'subgraph-output',
+                    targetHandle: 'out_0',
+                },
+            ],
+            createdAt: 0,
+            updatedAt: 0,
+        };
+
+        expect(() => compileSubgraphCode(subgraph)).toThrow(
+            'Uniform nodes are not supported inside subgraphs yet.'
+        );
+    });
+
     it('should compile a subgraph function with inputs/outputs', () => {
         const addNode = createNode('add1', 'math/add');
 

@@ -71,6 +71,22 @@ describe('Editor copy/paste', () => {
         expect(newNodeIds.has(newEdges[0].target)).toBe(true);
     });
 
+    it('pastes uniform nodes into the post graph with unique names', () => {
+        const store = useEditorStore.getState();
+        store.setActiveRootGraph('post');
+        store.addNode('const/uniform', { x: 100, y: 100 }, {
+            values: { uniformType: 'float', value: 0.5, localName: 'strength' },
+        });
+
+        useEditorStore.getState().copySelection();
+        useEditorStore.getState().pasteSelection({ x: 400, y: 300 });
+
+        const uniforms = useEditorStore.getState().nodes.filter((node) => node.data.type === 'const/uniform');
+        expect(uniforms).toHaveLength(2);
+        expect(uniforms.map((node) => node.data.values?.localName)).toEqual(['strength', 'strength_1']);
+        expect(toast.error).not.toHaveBeenCalled();
+    });
+
     it('preserves group hierarchy when pasting', () => {
         const group = createNode('group-1', 'group', { x: 0, y: 0 }, { type: 'group' as NodeType }, { style: { width: 200, height: 200 } });
         const child = createNode(

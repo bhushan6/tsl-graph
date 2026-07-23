@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import * as THREE from 'three/webgpu';
-import { buildNodePreviewMaterial, buildTSLPostDebugOutputNode, getPreviewOutputHandle } from './tsl-builder';
+import * as TSL from 'three/tsl';
+import { buildNodePreviewMaterial, buildTSLPostDebugOutputNode, buildTSLPostOutputNode, getPreviewOutputHandle } from './tsl-builder';
 import type { GlobalContextEntry, SubgraphDefinition, TSLNodeData } from '@/lib/types';
 import { initializeNodes } from './nodes';
 
@@ -205,5 +206,43 @@ describe('buildNodePreviewMaterial', () => {
             nodes,
             []
         )).toThrow('has no renderable output');
+    });
+
+    it('builds post output from a runtime uniform node', () => {
+        const nodes: Node<TSLNodeData>[] = [
+            createNode('post-input', 'post/input'),
+            createNode('post-tint', 'const/uniform', {
+                uniformType: 'vec4',
+                value: [0.2, 0.4, 0.6, 1],
+                localName: 'tint',
+            }),
+            createNode('post-output', 'post/output'),
+        ];
+        const edges: Edge[] = [
+            {
+                id: 'edge-1',
+                source: 'post-tint',
+                sourceHandle: 'out',
+                target: 'post-output',
+                targetHandle: 'color',
+            },
+        ];
+        const sceneTexture = new THREE.Texture();
+        const depthTexture = new THREE.Texture();
+        const normalTexture = new THREE.Texture();
+
+        const output = buildTSLPostOutputNode(
+            TSL.vec4(0),
+            sceneTexture,
+            TSL.float(1),
+            depthTexture,
+            normalTexture,
+            new THREE.PerspectiveCamera(),
+            nodes,
+            edges
+        );
+
+        expect(output).toBeTruthy();
+        expect(output?.isNode).toBe(true);
     });
 });

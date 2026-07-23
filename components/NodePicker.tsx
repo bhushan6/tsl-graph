@@ -497,10 +497,6 @@ function NodePickerComponent({ onClose }: NodePickerProps) {
                     return false;
                 }
 
-                if (editorMode === 'main' && activeRootGraph === 'post' && node.type === 'const/uniform') {
-                    return false;
-                }
-
                 if ((POST_ANCHOR_NODE_TYPES as readonly string[]).includes(node.type)) {
                     return false;
                 }

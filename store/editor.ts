@@ -1529,11 +1529,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             toast.error('Use post/input + texture sampling in post graph instead of viewport shared texture.');
             return false;
         }
-        if (activeRootGraph === 'post' && type === 'const/uniform') {
-            toast.error('Uniform nodes are not supported in the post graph yet.');
-            return false;
-        }
-
         // If trying to add a material node, check if one already exists
         if (activeRootGraph === 'material' && isMaterialNode) {
             if (forcedRootMaterial) {
@@ -2294,11 +2289,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 }
             }
 
-            if (isPostRoot && node.data.type === 'const/uniform') {
-                skippedUniform = true;
-                continue;
-            }
-
             if (isMaterialNode(node)) {
                 if (isPostRoot) {
                     skippedMaterial = true;
@@ -2334,10 +2324,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (skippedUniform && isSubgraphMode) {
             toast.error('Uniform nodes cannot be pasted inside subgraphs.');
         }
-        if (skippedUniform && isPostRoot) {
-            toast.error('Uniform nodes cannot be pasted into the post graph.');
-        }
-
         if (skippedPostFx && isMaterialRoot) {
             toast.error('Post FX nodes cannot be pasted into the material graph.');
         }
@@ -2406,6 +2392,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 .map((node) => normalizeLocalName(getLocalName(node)))
                 .filter((name) => name.length > 0)
         );
+        const takenUniformNames = new Set(
+            newNodes
+                .filter((node) => node.data.type === 'const/uniform')
+                .map((node) => normalizeLocalName(String(node.data.values?.localName ?? '')))
+                .filter((name) => name.length > 0)
+        );
 
         const pastedNodes: Node<TSLNodeData>[] = nodesToPaste.map((node) => {
             const newId = idMap.get(node.id)!;
@@ -2442,6 +2434,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                             }
                             values.localName = candidate;
                             takenLocalNames.add(normalizeLocalName(candidate));
+                        }
+                        if (mappedType === 'const/uniform' && typeof values.localName === 'string' && values.localName.trim()) {
+                            const baseName = values.localName.trim();
+                            let candidate = baseName;
+                            let suffix = 1;
+                            while (takenUniformNames.has(normalizeLocalName(candidate))) {
+                                candidate = `${baseName}_${suffix++}`;
+                            }
+                            values.localName = candidate;
+                            takenUniformNames.add(normalizeLocalName(candidate));
                         }
                         if (mappedType === 'local/get') {
                             const originalSourceId = typeof values.localSourceId === 'string' ? values.localSourceId : '';

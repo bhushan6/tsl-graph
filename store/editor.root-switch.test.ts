@@ -60,13 +60,26 @@ describe('Editor root graph switching', () => {
         expect(useEditorStore.getState().nodes.some((node) => node.data.type === 'texture/viewportShared')).toBe(false);
     });
 
-    it('blocks uniform node in post root', () => {
+    it('allows uniform nodes in post root', () => {
         const store = useEditorStore.getState();
         store.setActiveRootGraph('post');
 
-        const added = store.addNode('const/uniform', { x: 20, y: 20 });
-        expect(added).toBe(false);
-        expect(useEditorStore.getState().nodes.some((node) => node.data.type === 'const/uniform')).toBe(false);
+        const added = store.addNode('const/uniform', { x: 20, y: 20 }, {
+            values: { uniformType: 'float', value: 0.5, localName: 'strength' },
+        });
+        expect(added).toBe(true);
+        expect(useEditorStore.getState().nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    type: 'const/uniform',
+                    values: expect.objectContaining({
+                        uniformType: 'float',
+                        value: 0.5,
+                        localName: 'strength',
+                    }),
+                }),
+            }),
+        ]));
     });
 
     it('binds explicit global refs and keeps generic global fallback binding', () => {
