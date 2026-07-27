@@ -468,6 +468,7 @@ export const utilsNodes = [
         inputs: {
             uv: { label: 'UV', type: 'vec2', default: [0, 0] },
             rotation: { label: 'Angle', type: 'float', default: 0 },
+            center: { label: 'Center', type: 'vec2', default: [0.5, 0.5] },
         },
         outputs: { out: { label: 'Out', type: 'vec2' } },
         tsl: 'rotateUV',

@@ -2392,22 +2392,23 @@ export function compileGraph(
                 code = `${def.tsl}()`;
             }
         } else if (def.type === 'texture/triplanar') {
-            const texEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'texture');
-            let texArg = 'color(1.0, 0.0, 1.0)';
+            const connectedArg = (key: string) => {
+                const edge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === key);
+                return edge ? getInputValue(node, key, edgesForInputs, compiledNodes, inputs[key]) : null;
+            };
 
-            if (texEdge) {
-                texArg = getInputValue(node, 'texture', edgesForInputs, compiledNodes, inputs['texture']);
-            }
+            // Magenta placeholder so an unwired node still compiles.
+            const texXArg = connectedArg('textureX') ?? 'color(1.0, 0.0, 1.0)';
+            // null makes triplanarTexture sample textureX for that axis.
+            const texYArg = connectedArg('textureY') ?? 'null';
+            const texZArg = connectedArg('textureZ') ?? 'null';
 
             const scaleArg = getInputValue(node, 'scale', edgesForInputs, compiledNodes, inputs['scale']);
 
-            const posEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'position');
-            const posArg = posEdge ? getInputValue(node, 'position', edgesForInputs, compiledNodes, inputs['position']) : 'undefined';
+            const posArg = connectedArg('position') ?? 'undefined';
+            const normalArg = connectedArg('normal') ?? 'undefined';
 
-            const normalEdge = edgesForInputs.find(e => e.target === node.id && e.targetHandle === 'normal');
-            const normalArg = normalEdge ? getInputValue(node, 'normal', edgesForInputs, compiledNodes, inputs['normal']) : 'undefined';
-
-            code = `${def.tsl}(${texArg}, null, null, ${scaleArg}, ${posArg}, ${normalArg})`;
+            code = `${def.tsl}(${texXArg}, ${texYArg}, ${texZArg}, ${scaleArg}, ${posArg}, ${normalArg})`;
         } else if (def.paramsObject) {
             code = emitParamsObjectNode(
                 node,
