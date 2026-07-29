@@ -21,9 +21,9 @@ import '@xyflow/react/dist/style.css';
 
 import { useEditorStore } from '@/store/editor';
 import type { AppNode, TSLType } from '@/lib/types';
-import { hasCycle } from '@/lib/graph-utils';
 import { getAbsolutePosition } from '@/lib/utils';
-import { getLocalSourceId, isLocalGetNode, isLocalScopeAccessible, isLocalSetNode } from '@/lib/local-utils';
+import { isConnectionAllowed } from '@/lib/connection-rules';
+import { resolveInputHandleType } from '@/lib/graph-handles';
 import { resolveNodeOutputTypeById } from '@/lib/type-inference';
 import { TSLNode } from './TSLNode';
 import { CommentNode } from './CommentNode';
@@ -452,57 +452,7 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
     }, [subgraphs, codeNodes]);
 
     const isValidConnection = useCallback(
-        (connection: Connection | Edge) => {
-            const nodes = getNodes();
-            const edges = getEdges();
-            const target = nodes.find((node) => node.id === connection.target);
-            const source = nodes.find((node) => node.id === connection.source);
-            const nodesById = new Map(nodes.map((node) => [node.id, node]));
-
-            if (!target || !source) {
-                return false;
-            }
-
-            const getLoopParentId = (node: AppNode): string | null => {
-                if (node.type === 'loop' || node.data.type === 'loop') return node.id;
-                let parentId = node.parentId;
-                while (parentId) {
-                    const parent = nodes.find(n => n.id === parentId);
-                    if (!parent) break;
-                    if (parent.type === 'loop' || parent.data.type === 'loop') return parent.id;
-                    parentId = parent.parentId;
-                }
-                return null;
-            };
-
-            const sourceLoopId = getLoopParentId(source);
-            const targetLoopId = getLoopParentId(target);
-
-            // Disallow connections across different loops
-            if (sourceLoopId && targetLoopId && sourceLoopId !== targetLoopId) {
-                return false;
-            }
-
-            // Inside -> outside only allowed from loop/output
-            if (sourceLoopId && !targetLoopId) {
-                if (source.data.type !== 'loop/output') return false;
-            }
-
-            // Outside -> inside allowed, except into loop/output (must be internal)
-            if (!sourceLoopId && targetLoopId) {
-                if (target.data.type === 'loop/output') return false;
-            }
-
-            if (isLocalGetNode(source)) {
-                const sourceSetId = getLocalSourceId(source);
-                if (!sourceSetId) return false;
-                const sourceSetNode = nodesById.get(sourceSetId);
-                if (!isLocalSetNode(sourceSetNode)) return false;
-                if (!isLocalScopeAccessible(sourceSetNode, source, nodesById)) return false;
-            }
-
-            return !hasCycle(target, source, nodes, edges);
-        },
+        (connection: Connection | Edge) => isConnectionAllowed(connection, getNodes(), getEdges()),
         [getNodes, getEdges]
     );
 
@@ -524,9 +474,16 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
 
                 if (connectionState.fromHandle.type === 'target') {
                     direction = 'input';
-                    if (def && def.inputs) {
-                        const port = def.inputs[handleId];
-                        if (port) dataType = port.type;
+                    const state = useEditorStore.getState();
+                    const storeNode = state.nodes.find((entry) => entry.id === node.id);
+                    if (storeNode) {
+                        dataType = resolveInputHandleType(storeNode, handleId, {
+                            nodesById: new Map(state.nodes.map((entry) => [entry.id, entry])),
+                            edges: state.edges,
+                            globals: state.globals,
+                            subgraphs: state.subgraphs,
+                            codeNodes: state.codeNodes,
+                        });
                     }
                 } else {
                     direction = 'output';

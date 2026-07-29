@@ -6,8 +6,8 @@ import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useEditorStore } from '@/store/editor';
-import { registry } from '@/lib/registry';
 import { nodeMatchesNoteQuery } from '@/lib/note-search';
+import { getNodeDisplayName } from '@/lib/node-display-name';
 import type { AppNode } from '@/lib/types';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
 
@@ -35,17 +35,7 @@ export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
     const { setCenter, getZoom } = useReactFlow<AppNode>();
 
     const getDisplayName = useCallback(
-        (node: AppNode) => {
-            const def = registry.get(node.data.type);
-            if (def?.label) return def.label;
-            if (node.data.type.startsWith('custom/')) {
-                return subgraphs[node.data.type]?.name || node.data.type.replace('custom/', '');
-            }
-            if (node.data.type.startsWith('code/')) {
-                return codeNodes[node.data.type]?.name || node.data.type.replace('code/', '');
-            }
-            return node.data.type;
-        },
+        (node: AppNode) => getNodeDisplayName(node, subgraphs, codeNodes),
         [subgraphs, codeNodes]
     );
 
