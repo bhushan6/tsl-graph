@@ -763,7 +763,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     className="bg-background"
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
-                    selectionKeyCode="Shift"
+                    selectionKeyCode={null} // Box selection is mode-only; Shift here would hijack shift-clicks and leave stale selection rects
                     multiSelectionKeyCode={["Shift", "Meta", "Control"]}
                     maxZoom={4}
                     minZoom={0.05}
