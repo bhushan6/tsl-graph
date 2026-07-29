@@ -231,6 +231,30 @@ interface FlowCanvasProps {
 }
 
 /**
+ * Mirrors the viewport zoom into a --rf-zoom CSS variable on the flow
+ * container so the selection halo (globals.css) can keep a constant on-screen
+ * thickness. Subscribes to the store imperatively and writes straight to the
+ * DOM — no React re-renders on zoom/pan frames.
+ */
+function ZoomCssVariable() {
+    const store = useStoreApi();
+
+    useEffect(() => {
+        const apply = (state: { domNode: HTMLDivElement | null; transform: [number, number, number] }) => {
+            state.domNode?.style.setProperty('--rf-zoom', String(state.transform[2]));
+        };
+        apply(store.getState());
+        return store.subscribe((state, prev) => {
+            if (state.transform[2] !== prev.transform[2] || state.domNode !== prev.domNode) {
+                apply(state);
+            }
+        });
+    }, [store]);
+
+    return null;
+}
+
+/**
  * Leaf owner of the controlled React Flow state. Uniform scrubs and drag
  * frames must not reconcile the editor chrome around the canvas.
  */
@@ -774,6 +798,7 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
                     deleteKeyCode={DELETE_KEYS}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+                    <ZoomCssVariable />
                 </ReactFlow>
                 <NodeDebugPreviewOverlay />
                 {!isReadOnly && <CanvasEdgeDropPicker />}

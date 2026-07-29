@@ -16,6 +16,10 @@ interface NoteSearchBarProps {
     onClose: () => void;
 }
 
+// Jumping to a match at the current zoom can land on a node too small to read;
+// zoom in to at least this level so the result is always legible.
+const MIN_FOCUS_ZOOM = 0.85;
+
 export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
     const [query, setQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -73,7 +77,7 @@ export function NoteSearchBar({ open, onClose }: NoteSearchBarProps) {
             const absPosition = getAbsolutePosition(node, nodes);
             const { width, height } = getNodeDimensions(node);
             setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
-                zoom: getZoom(),
+                zoom: Math.max(getZoom(), MIN_FOCUS_ZOOM),
                 duration: 300,
             });
         },

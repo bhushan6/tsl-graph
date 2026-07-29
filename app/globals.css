@@ -149,6 +149,24 @@
   border: 1px solid var(--border) !important;
 }
 
+/* Selection halo with constant on-screen thickness. Nodes live inside the
+   scaled viewport, so a fixed outline shrinks with zoom; dividing by --rf-zoom
+   (kept in sync by the editor) cancels the scale out. */
+/* The :focus variants outrank xyflow's `.react-flow__node.selectable:focus
+   { outline: none }`, which otherwise wins on the node you just clicked. */
+.react-flow__node.selected,
+.react-flow__node.selectable.selected:focus,
+.react-flow__node.selectable.selected:focus-visible {
+  /* Only shown when zoomed out: past zoom 0.75 the node's own selection
+     styling is legible, so the middle clamp() term goes to 0 and hides the
+     halo (the *90px factor fades it out over the ~0.72–0.75 zoom range). */
+  outline: clamp(0px, (0.75 - var(--rf-zoom, 1)) * 90px, calc(2.5px / var(--rf-zoom, 1))) solid #3b82f6;
+  /* Slight inward pull so the outline overlaps the node's antialiased edge —
+     at 0 offset a subpixel seam shows between the two at fractional zooms. */
+  outline-offset: calc(-1px / var(--rf-zoom, 1));
+  border-radius: 12px;
+}
+
 .react-flow__edge-path {
   stroke: var(--muted-foreground);
   stroke-width: 2px;
