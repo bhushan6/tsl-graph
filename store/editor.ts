@@ -34,8 +34,14 @@ import {
     getLocalName,
     isLocalSetNode,
     isLocalSetType,
+    makeUniqueLocalName,
     normalizeLocalName,
 } from '@/lib/local-utils';
+import {
+    isEdgePortalBlocked,
+    planEdgeToLocalPortal,
+    type EdgePortalBlockReason,
+} from '@/lib/edge-portal';
 
 // Counter to keep addNode IDs unique even when many nodes are created in the same millisecond
 let addNodeIdCounter = 0;
@@ -450,30 +456,6 @@ const syncGlobalUniforms = (prev: GlobalContextEntry[], next: GlobalContextEntry
     nextUniforms.forEach((entry) => {
         updateUniformValue(entry.id, entry.type, entry.defaultValue);
     });
-};
-
-const makeUniqueLocalName = (
-    baseName: string,
-    nodes: Node<TSLNodeData>[],
-    excludeNodeId?: string
-): string => {
-    const trimmed = baseName.trim() || 'local';
-    const normalizedSet = new Set(
-        nodes
-            .filter((node) => isLocalSetNode(node) && node.id !== excludeNodeId)
-            .map((node) => normalizeLocalName(getLocalName(node)))
-            .filter((name) => name.length > 0)
-    );
-
-    if (!normalizedSet.has(normalizeLocalName(trimmed))) return trimmed;
-
-    let suffix = 1;
-    let candidate = `${trimmed}_${suffix}`;
-    while (normalizedSet.has(normalizeLocalName(candidate))) {
-        suffix += 1;
-        candidate = `${trimmed}_${suffix}`;
-    }
-    return candidate;
 };
 
 const makeUniqueUniformName = (
@@ -901,6 +883,8 @@ interface EditorState {
     updateMultiOp: (nodeId: string, opId: string, op: MultiOpType) => void;
     removeMultiOp: (nodeId: string, opId: string) => void;
     deleteNode: (nodeId: string) => void;
+    deleteEdge: (edgeId: string) => void;
+    convertEdgeToLocalPortal: (edgeId: string) => boolean;
     setSelectedNode: (nodeId: string | null) => void;
     setSelectedNodes: (nodeIds: string[]) => void;
     selectSingleNode: (nodeId: string | null) => void;
@@ -2192,6 +2176,49 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             graphStructureVersion: get().graphStructureVersion + 1,
         });
         get().markDirty();
+    },
+
+    deleteEdge: (edgeId) => {
+        const edges = get().edges;
+        if (!edges.some((edge) => edge.id === edgeId)) return;
+        get().takeSnapshot();
+        set({
+            edges: edges.filter((edge) => edge.id !== edgeId),
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+    },
+
+    convertEdgeToLocalPortal: (edgeId) => {
+        const { nodes, edges, subgraphs, codeNodes } = get();
+        const plan = planEdgeToLocalPortal({ edgeId, nodes, edges, subgraphs, codeNodes });
+        if (isEdgePortalBlocked(plan)) {
+            const messages: Record<EdgePortalBlockReason, string> = {
+                'edge-not-found': 'Edge no longer exists.',
+                'synthetic-edge': 'This edge cannot be converted.',
+                'already-portal': 'Edge already connects to a portal.',
+                'missing-endpoint': 'Edge endpoints are missing.',
+                'cross-loop': 'Cannot convert an edge between different loops.',
+            };
+            toast.error(messages[plan.blocked]);
+            return false;
+        }
+
+        get().takeSnapshot();
+
+        const deselectedNodes = get().nodes.map((node) =>
+            node.selected ? { ...node, selected: false } : node
+        );
+        set({
+            nodes: [...deselectedNodes, plan.setNode, plan.getNode],
+            edges: [
+                ...get().edges.filter((edge) => edge.id !== plan.removedEdgeId),
+                ...plan.addedEdges,
+            ],
+            graphStructureVersion: get().graphStructureVersion + 1,
+        });
+        get().markDirty();
+        return true;
     },
 
     setSelectedNode: (nodeId) => {

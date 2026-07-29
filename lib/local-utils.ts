@@ -84,6 +84,30 @@ export function getLocalSetReferenceLabel(
     return `${sourceBaseName}.${handle}`;
 }
 
+export function makeUniqueLocalName(
+    baseName: string,
+    nodes: Node<TSLNodeData>[],
+    excludeNodeId?: string
+): string {
+    const trimmed = baseName.trim() || 'local';
+    const normalizedSet = new Set(
+        nodes
+            .filter((node) => isLocalSetNode(node) && node.id !== excludeNodeId)
+            .map((node) => normalizeLocalName(getLocalName(node)))
+            .filter((name) => name.length > 0)
+    );
+
+    if (!normalizedSet.has(normalizeLocalName(trimmed))) return trimmed;
+
+    let suffix = 1;
+    let candidate = `${trimmed}_${suffix}`;
+    while (normalizedSet.has(normalizeLocalName(candidate))) {
+        suffix += 1;
+        candidate = `${trimmed}_${suffix}`;
+    }
+    return candidate;
+}
+
 export function getLoopAncestorIds(
     node: Node<TSLNodeData>,
     nodesById: Map<string, Node<TSLNodeData>>
