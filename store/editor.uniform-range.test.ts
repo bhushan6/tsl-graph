@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Node } from '@xyflow/react';
 import type { NodeType, TSLNodeData } from '@/lib/types';
 import { useEditorStore } from './editor';
+import { globalUniformKey, nodeUniformKey, useLiveUniformStore } from './live-uniforms';
 import { toast } from 'sonner';
 
 vi.mock('sonner', () => ({
@@ -31,31 +32,58 @@ describe('Uniform range + gesture store actions', () => {
         useEditorStore.getState().resetEditor();
     });
 
-    it('takes one snapshot per live gesture and never bumps graphStructureVersion', () => {
+    it('keeps live scrubs out of the graph arrays until one gesture commit', () => {
         useEditorStore.setState({ nodes: [createUniformNode('u1')] });
         const versionBefore = useEditorStore.getState().graphStructureVersion;
         const historyBefore = useEditorStore.getState().history.past.length;
+        const nodesBefore = useEditorStore.getState().nodes;
+        let graphArrayChanges = 0;
+        let editorStoreNotifications = 0;
+        let previousNodes = nodesBefore;
+        const unsubscribe = useEditorStore.subscribe((nextState) => {
+            editorStoreNotifications += 1;
+            if (nextState.nodes !== previousNodes) {
+                graphArrayChanges += 1;
+                previousNodes = nextState.nodes;
+            }
+        });
 
         const store = useEditorStore.getState();
         store.updateUniformNodeValueLive('u1', 0.2);
+        const notificationsAfterGestureStart = editorStoreNotifications;
         store.updateUniformNodeValueLive('u1', 0.4);
         store.updateUniformNodeValueLive('u1', 0.6);
 
         const state = useEditorStore.getState();
         expect(state.history.past.length).toBe(historyBefore + 1);
         expect(state.graphStructureVersion).toBe(versionBefore);
-        expect(state.nodes[0].data.values.value).toBe(0.6);
+        expect(state.nodes).toBe(nodesBefore);
+        expect(state.nodes[0].data.values.value).toBe(0);
+        expect(useLiveUniformStore.getState().values[nodeUniformKey('u1')]).toBe(0.6);
+        expect(graphArrayChanges).toBe(0);
+        expect(editorStoreNotifications).toBe(notificationsAfterGestureStart);
 
-        // Commit ends the gesture; the next live edit takes a fresh snapshot
+        // A save can finish while the pointer is still down. The final commit
+        // must dirty the graph again because that save only saw the old value.
+        state.markSaved();
+        expect(useEditorStore.getState().isDirty).toBe(false);
+
+        // Commit persists once and ends the gesture; the next edit snapshots again.
         state.commitUniformGesture('node:u1');
+        expect(useEditorStore.getState().nodes[0].data.values.value).toBe(0.6);
+        expect(useLiveUniformStore.getState().values[nodeUniformKey('u1')]).toBeUndefined();
+        expect(graphArrayChanges).toBe(1);
+        expect(useEditorStore.getState().isDirty).toBe(true);
         useEditorStore.getState().updateUniformNodeValueLive('u1', 0.8);
         expect(useEditorStore.getState().history.past.length).toBe(historyBefore + 2);
+        expect(graphArrayChanges).toBe(1);
+        unsubscribe();
     });
 
     it('clamps live values to the configured range', () => {
         useEditorStore.setState({ nodes: [createUniformNode('u1', { min: 0, max: 1 })] });
         useEditorStore.getState().updateUniformNodeValueLive('u1', 5);
-        expect(useEditorStore.getState().nodes[0].data.values.value).toBe(1);
+        expect(useLiveUniformStore.getState().values[nodeUniformKey('u1')]).toBe(1);
     });
 
     it('updateUniformRange sanitizes, clamps the value, and does not bump the version', () => {
@@ -161,8 +189,12 @@ describe('Uniform range + gesture store actions', () => {
         let state = useEditorStore.getState();
         expect(state.graphStructureVersion).toBe(versionBefore);
         expect(state.history.past.length).toBe(historyBefore + 1);
-        expect(state.globals.find((g) => g.id === id)?.defaultValue).toBe(0.7);
+        expect(state.globals.find((g) => g.id === id)?.defaultValue).toBe(0);
+        expect(useLiveUniformStore.getState().values[globalUniformKey(id!)]).toBe(0.7);
 
+        state.commitUniformGesture(globalUniformKey(id!));
+        state = useEditorStore.getState();
+        expect(state.globals.find((g) => g.id === id)?.defaultValue).toBe(0.7);
         state.updateGlobal(id!, { name: 'uSpeed2' });
         state = useEditorStore.getState();
         expect(state.graphStructureVersion).toBe(versionBefore + 1);

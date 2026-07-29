@@ -18,8 +18,7 @@ type GroupNodeProps = NodeProps<AppNode>;
 function GroupNode({ id, data, selected }: GroupNodeProps) {
     const updateNodeValue = useEditorStore((s) => s.updateNodeValue);
     const setLoopMode = useEditorStore((s) => s.setLoopMode);
-    const hoveredGroupId = useEditorStore((s) => s.hoveredGroupId);
-    const isDropTarget = hoveredGroupId === id;
+    const isDropTarget = useEditorStore((s) => s.hoveredGroupId === id);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [isEditing, setIsEditing] = useState(false);

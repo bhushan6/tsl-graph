@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { memo, useRef, useCallback, useEffect, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2, BookOpen, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,38 @@ interface NavbarProps {
     capabilities?: EditorHostCapabilities;
 }
 
-export function Navbar({
+// Save state changes independently of the navbar's menus and dialogs. Keep the
+// subscription at this leaf so an autosave cycle only reconciles the badge.
+const SaveStatusBadge = memo(function SaveStatusBadge() {
+    const status = useEditorStore((state) => (
+        state.isSaving ? 'saving' : state.isDirty ? 'unsaved' : 'saved'
+    ));
+
+    if (status === 'saving') {
+        return (
+            <Badge variant="default" className="w-[80px] justify-center bg-blue-500 hover:bg-blue-600 border-blue-600 text-white gap-1.5 transition-all">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Saving
+            </Badge>
+        );
+    }
+
+    if (status === 'unsaved') {
+        return (
+            <Badge variant="secondary" className="w-[80px] justify-center bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 transition-all">
+                Unsaved
+            </Badge>
+        );
+    }
+
+    return (
+        <Badge variant="outline" className="w-[80px] justify-center text-green-600 border-green-200 bg-green-50 hover:bg-green-100 hover:text-green-700 dark:text-green-400 dark:border-green-900/50 dark:bg-green-900/20 transition-all">
+            Saved
+        </Badge>
+    );
+});
+
+export const Navbar = memo(function Navbar({
     projectName,
     projectId,
     isReadOnly,
@@ -54,8 +85,6 @@ export function Navbar({
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
     const clearGraph = useEditorStore((s) => s.clearGraph);
     const nodeCount = useEditorStore((s) => s.nodes.length);
-    const isSaving = useEditorStore((s) => s.isSaving);
-    const isDirty = useEditorStore((s) => s.isDirty);
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
     const setActiveRootGraph = useEditorStore((s) => s.setActiveRootGraph);
     const editorMode = useEditorStore((s) => s.editorMode);
@@ -319,21 +348,7 @@ export function Navbar({
             <div className="flex items-center gap-2 group">
                 {noteSearchBar}
 
-                {/* Sync Status Badge */}
-                {isSaving ? (
-                    <Badge variant="default" className="w-[80px] justify-center bg-blue-500 hover:bg-blue-600 border-blue-600 text-white gap-1.5 transition-all">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Saving
-                    </Badge>
-                ) : isDirty ? (
-                    <Badge variant="secondary" className="w-[80px] justify-center bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 transition-all">
-                        Unsaved
-                    </Badge>
-                ) : (
-                    <Badge variant="outline" className="w-[80px] justify-center text-green-600 border-green-200 bg-green-50 hover:bg-green-100 hover:text-green-700 dark:text-green-400 dark:border-green-900/50 dark:bg-green-900/20 transition-all">
-                        Saved
-                    </Badge>
-                )}
+                <SaveStatusBadge />
 
                 {/* Share Button - Only show for project owners, not in read-only mode */}
                 {canShareProject && projectId && (
@@ -415,4 +430,4 @@ export function Navbar({
             )}
         </div>
     );
-}
+});

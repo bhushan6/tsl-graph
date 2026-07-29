@@ -24,6 +24,11 @@ import { getMaterialStoredActiveInputs } from '@/lib/material-inputs';
 import { toast } from 'sonner';
 import { UNIFORM_KINDS, clampUniformValue, coerceUniformValue, getUniformKindFromNode, getUniformRange, stripRangeFields, type UniformKind, type UniformRange } from '@/lib/uniform-utils';
 import { clearUniforms, removeUniform, updateUniformValue } from '@/lib/uniform-store';
+import {
+    globalUniformKey,
+    nodeUniformKey,
+    useLiveUniformStore,
+} from '@/store/live-uniforms';
 import { resolveCodeNodeScope } from '@/lib/code-node-scope';
 import {
     getLocalName,
@@ -986,11 +991,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     commentDraftSnapshotTakenFor: {},
     uniformGestureSnapshotFor: {},
     hoveredGroupId: null,
-    setHoveredGroupId: (groupId) => set({ hoveredGroupId: groupId }),
+    setHoveredGroupId: (groupId) => {
+        if (get().hoveredGroupId !== groupId) {
+            set({ hoveredGroupId: groupId });
+        }
+    },
     setActiveRootGraph: (mode) => {
         const state = get();
         if (state.activeRootGraph === mode) return;
         if (state.editorMode === 'subgraph') return;
+        useLiveUniformStore.getState().clearAll();
 
         const currentSnapshot = createRootGraphSnapshot({
             nodes: state.nodes,
@@ -1162,6 +1172,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const globals = get().globals;
         const existing = globals.find((g) => g.id === id);
         if (!existing) return;
+        useLiveUniformStore.getState().clearValue(globalUniformKey(id));
 
         if (existing.kind === 'uniform') {
             removeUniform(existing.id);
@@ -1789,7 +1800,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const targetNode = state.nodes.find((node) => node.id === nodeId);
         if (!targetNode || targetNode.data.type !== 'const/uniform') return;
 
-        const gestureKey = `node:${nodeId}`;
+        const gestureKey = nodeUniformKey(nodeId);
         const hasSnapshot = !!state.uniformGestureSnapshotFor[gestureKey];
         if (!hasSnapshot) {
             state.takeSnapshot();
@@ -1799,25 +1810,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const range = getUniformRange(targetNode.data.values ?? {}, kind);
         const clamped = clampUniformValue(kind, value, range);
 
-        const nextNodes = state.nodes.map((node) => {
-            if (node.id !== nodeId) return node;
-            return {
-                ...node,
-                data: {
-                    ...node.data,
-                    values: { ...node.data.values, value: clamped },
-                },
-            };
-        });
-
         updateUniformValue(nodeId, kind, clamped);
+        useLiveUniformStore.getState().setValue(gestureKey, clamped);
 
-        set({
-            nodes: nextNodes,
-            uniformGestureSnapshotFor: hasSnapshot
-                ? state.uniformGestureSnapshotFor
-                : { ...state.uniformGestureSnapshotFor, [gestureKey]: true },
-        });
+        if (!hasSnapshot) {
+            set({
+                uniformGestureSnapshotFor: {
+                    ...state.uniformGestureSnapshotFor,
+                    [gestureKey]: true,
+                },
+            });
+        }
         state.markDirty();
     },
 
@@ -1826,7 +1829,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const entry = state.globals.find((g) => g.id === entryId);
         if (!entry || entry.kind !== 'uniform' || !isUniformKindType(entry.type)) return;
 
-        const gestureKey = `global:${entryId}`;
+        const gestureKey = globalUniformKey(entryId);
         const hasSnapshot = !!state.uniformGestureSnapshotFor[gestureKey];
         if (!hasSnapshot) {
             state.takeSnapshot();
@@ -1836,23 +1839,60 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const clamped = clampUniformValue(entry.type, value, range);
 
         updateUniformValue(entry.id, entry.type, clamped);
+        useLiveUniformStore.getState().setValue(gestureKey, clamped);
 
-        set({
-            globals: state.globals.map((g) => (g.id === entryId ? { ...g, defaultValue: clamped } : g)),
-            uniformGestureSnapshotFor: hasSnapshot
-                ? state.uniformGestureSnapshotFor
-                : { ...state.uniformGestureSnapshotFor, [gestureKey]: true },
-        });
+        if (!hasSnapshot) {
+            set({
+                uniformGestureSnapshotFor: {
+                    ...state.uniformGestureSnapshotFor,
+                    [gestureKey]: true,
+                },
+            });
+        }
         state.markDirty();
     },
 
     commitUniformGesture: (key) => {
-        const marker = get().uniformGestureSnapshotFor;
-        if (!marker[key]) return;
+        const state = get();
+        const marker = state.uniformGestureSnapshotFor;
+        const liveValues = useLiveUniformStore.getState().values;
+        if (!marker[key] && !(key in liveValues)) return;
 
         const nextMarker = { ...marker };
         delete nextMarker[key];
-        set({ uniformGestureSnapshotFor: nextMarker });
+        const liveValue = liveValues[key];
+        let nodes = state.nodes;
+        let globals = state.globals;
+
+        if (key.startsWith('node:') && liveValue !== undefined) {
+            const nodeId = key.slice('node:'.length);
+            nodes = state.nodes.map((node) => (
+                node.id === nodeId
+                    ? {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            values: { ...node.data.values, value: liveValue },
+                        },
+                    }
+                    : node
+            ));
+        } else if (key.startsWith('global:') && liveValue !== undefined) {
+            const entryId = key.slice('global:'.length);
+            globals = state.globals.map((entry) => (
+                entry.id === entryId ? { ...entry, defaultValue: liveValue } : entry
+            ));
+        }
+
+        set({
+            ...(nodes !== state.nodes ? { nodes } : {}),
+            ...(globals !== state.globals ? { globals } : {}),
+            uniformGestureSnapshotFor: nextMarker,
+        });
+        useLiveUniformStore.getState().clearValue(key);
+        if (nodes !== state.nodes || globals !== state.globals) {
+            state.markDirty();
+        }
     },
 
     updateUniformRange: (nodeId, updates) => {
@@ -2130,6 +2170,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             const removedNode = nodes.find(n => n.id === id);
             if (removedNode?.data.type === 'const/uniform') {
                 removeUniform(id);
+                useLiveUniformStore.getState().clearValue(nodeUniformKey(id));
             }
         }
 
@@ -2154,7 +2195,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     setSelectedNode: (nodeId) => {
-        set({ selectedNodeId: nodeId });
+        if (get().selectedNodeId !== nodeId) {
+            set({ selectedNodeId: nodeId });
+        }
     },
 
     getSelectedNode: () => {
@@ -2163,10 +2206,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     setSelectedNodes: (nodeIds: string[]) => {
+        const current = get().selectedNodeIds;
+        const nextSelection = new Set(nodeIds);
+        const isSameSelection =
+            current.length === nodeIds.length &&
+            current.every((id) => nextSelection.has(id));
+        const nextSelectedNodeId =
+            nodeIds.length === 1
+                ? nodeIds[0]
+                : (nodeIds.length > 1 ? null : get().selectedNodeId);
+        if (isSameSelection && get().selectedNodeId === nextSelectedNodeId) {
+            return;
+        }
         set({
-            selectedNodeIds: nodeIds,
+            selectedNodeIds: isSameSelection ? current : nodeIds,
             // Also update single selection to first node if any
-            selectedNodeId: nodeIds.length === 1 ? nodeIds[0] : (nodeIds.length > 1 ? null : get().selectedNodeId),
+            selectedNodeId: nextSelectedNodeId,
         });
     },
 
@@ -2614,6 +2669,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             if (nodes && edges) {
                 clearUniforms();
+                useLiveUniformStore.getState().clearAll();
                 const forcedRootMaterial = get().forcedRootMaterial;
                 const defaultPreviewSettings = createDefaultPreviewSettings();
 
@@ -2724,6 +2780,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     clearGraph: () => {
         get().takeSnapshot();
         clearUniforms();
+        useLiveUniformStore.getState().clearAll();
         const forcedRootMaterial = get().forcedRootMaterial;
         const postGraph = normalizePostGraph(undefined, undefined);
         const materialGraph = { nodes: [] as Node<TSLNodeData>[], edges: [] as Edge[] };
@@ -3811,6 +3868,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     undo: () => {
         const { history, nodes, edges, subgraphs, globals } = get();
         if (history.past.length === 0) return;
+        useLiveUniformStore.getState().clearAll();
 
         const previous = history.past[history.past.length - 1];
         const newPast = history.past.slice(0, -1);
@@ -3850,6 +3908,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     redo: () => {
         const { history, nodes, edges, subgraphs, globals } = get();
         if (history.future.length === 0) return;
+        useLiveUniformStore.getState().clearAll();
 
         const next = history.future[0];
         const newFuture = history.future.slice(1);
@@ -4734,6 +4793,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     resetEditor: () => {
         addNodeIdCounter = 0;
         clearUniforms();
+        useLiveUniformStore.getState().clearAll();
         const postGraph = normalizePostGraph(undefined, undefined);
         set({
             nodes: [],

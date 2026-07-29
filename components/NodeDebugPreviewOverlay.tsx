@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three/webgpu';
 import { buildNodePreviewMaterial } from '@/lib/tsl-builder';
 import { getCanvasRelativeDebugPreviewRect } from '@/lib/debug-preview';
@@ -43,7 +43,7 @@ function applyRendererOutputSettings(
     renderer.outputColorSpace = OUTPUT_COLOR_SPACE_CONSTANTS[settings.outputColorSpace];
 }
 
-export function NodeDebugPreviewOverlay() {
+export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay() {
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -376,4 +376,4 @@ export function NodeDebugPreviewOverlay() {
             aria-hidden="true"
         />
     );
-}
+});

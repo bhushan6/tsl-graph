@@ -75,7 +75,11 @@ export function CodeNodeDialog({
     const [inputTypes, setInputTypes] = useState<Record<string, TSLType>>({});
     const [language, setLanguage] = useState<CodeNodeLanguage>(initialLanguage);
     const [scope, setScope] = useState<CodeNodeScope>(initialScope);
-    const { createCodeNode, updateCodeNode, setCodeNodeScope, subgraphs, getCodeNode } = useEditorStore();
+    const createCodeNode = useEditorStore((s) => s.createCodeNode);
+    const updateCodeNode = useEditorStore((s) => s.updateCodeNode);
+    const setCodeNodeScope = useEditorStore((s) => s.setCodeNodeScope);
+    const subgraphs = useEditorStore((s) => s.subgraphs);
+    const getCodeNode = useEditorStore((s) => s.getCodeNode);
 
     const { resolvedTheme } = useTheme();
     const extensions = useMemo(() => [javascript(), tslAutocompletion], []);

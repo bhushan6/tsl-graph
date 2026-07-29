@@ -10,9 +10,12 @@ import {
     type NodeTypes,
     type OnSelectionChangeParams,
     useReactFlow,
+    useStoreApi,
     type Connection,
     type Edge,
     type OnConnectEnd,
+    type NodeMouseHandler,
+    applyNodeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -59,6 +62,9 @@ initializeNodes();
 const edgeTypes = {
     default: TSLEdge,
 }
+
+const MULTI_SELECTION_KEYS = ["Shift", "Meta", "Control"];
+const DELETE_KEYS = ["Backspace", "Delete"];
 
 interface NavbarProps {
     projectName?: string;
@@ -219,7 +225,16 @@ const EditorChrome = memo(function EditorChrome({
     );
 });
 
-function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { navbarProps?: NavbarProps; projectId?: Id<"projects">; hasThumbnail?: boolean; isReadOnly?: boolean }) {
+interface FlowCanvasProps {
+    isReadOnly?: boolean;
+    onOpenFind: () => void;
+}
+
+/**
+ * Leaf owner of the controlled React Flow state. Uniform scrubs and drag
+ * frames must not reconcile the editor chrome around the canvas.
+ */
+const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanvasProps) {
     const nodes = useEditorStore((s) => s.nodes);
     const edges = useEditorStore((s) => s.edges);
     const onNodesChange = useEditorStore((s) => s.onNodesChange);
@@ -237,13 +252,11 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     const activeRootGraph = useEditorStore((s) => s.activeRootGraph);
 
     const openEdgeDropPicker = useEdgeDropPickerStore(state => state.open);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition } = useReactFlow<AppNode>();
+    const flowStore = useStoreApi<AppNode>();
 
     // const isInitialized = useRef(false);
-    const [isFindOpen, setIsFindOpen] = useState(false);
     const lastPanePositionRef = useRef<{ x: number; y: number } | null>(null);
-
-    const onCloseFind = useCallback(() => setIsFindOpen(false), []);
 
     // Global editing shortcuts that are not toolbar-specific.
     useEffect(() => {
@@ -252,7 +265,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
             if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.findNotes)) {
                 event.preventDefault();
-                setIsFindOpen(true);
+                onOpenFind();
             }
 
             if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.undo)) {
@@ -287,7 +300,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [undo, redo, copySelection, pasteSelection, screenToFlowPosition, isReadOnly]);
+    }, [undo, redo, copySelection, pasteSelection, screenToFlowPosition, isReadOnly, onOpenFind]);
 
     // Snapshot triggers for ReactFlow events
 
@@ -325,6 +338,20 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
 
     // 2. Nodes Change: Snapshot only on Add/Remove
     const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+        const isLiveDragFrame =
+            changes.length > 0 &&
+            changes.every((change) => change.type === 'position' && change.dragging === true);
+
+        if (isLiveDragFrame) {
+            // React Flow already owns the transient drag interaction. Keep
+            // per-frame positions in its internal store so the controlled app
+            // tree does not render just to feed those positions back. The final
+            // `dragging: false` change falls through and persists once.
+            const flowState = flowStore.getState();
+            flowState.setNodes(applyNodeChanges(changes, flowState.nodes));
+            return;
+        }
+
         const hasStructuralChange = changes.some(
             (c) => c.type === 'add' || c.type === 'remove'
         );
@@ -332,7 +359,7 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
             takeSnapshot();
         }
         onNodesChange(changes);
-    }, [onNodesChange, takeSnapshot]);
+    }, [flowStore, onNodesChange, takeSnapshot]);
 
     // 3. Edges Change: Snapshot only on Add/Remove
     const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
@@ -679,6 +706,38 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
         [getNodes, setHoveredGroupId]
     );
 
+    const openCanvasNodePicker = useCallback(
+        (event: React.MouseEvent | MouseEvent) => {
+            event.preventDefault();
+            const { clientX, clientY } = event;
+            const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
+            openEdgeDropPicker({
+                screenPosition: { x: clientX, y: clientY },
+                flowPosition,
+                sourceDataType: '',
+                sourceNodeId: null,
+                sourceHandleId: null,
+                handleDirection: null,
+            });
+        },
+        [openEdgeDropPicker, screenToFlowPosition]
+    );
+
+    const handleNodeContextMenu = useCallback<NodeMouseHandler<AppNode>>(
+        (event, node) => {
+            useEditorStore.getState().selectSingleNode(node.id);
+            openCanvasNodePicker(event);
+        },
+        [openCanvasNodePicker]
+    );
+
+    const handlePaneContextMenu = useCallback(
+        (event: React.MouseEvent | MouseEvent) => {
+            openCanvasNodePicker(event);
+        },
+        [openCanvasNodePicker]
+    );
+
     return (
         <>
             {/* Canvas Layer */}
@@ -694,36 +753,8 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     onNodeDrag={onNodeDrag}
                     onNodeDragStop={onNodeDragStop}
                     onSelectionChange={onSelectionChange}
-                    onNodeContextMenu={(event, node) => {
-                        event.preventDefault();
-                        // Select the right-clicked node
-                        const { selectSingleNode } = useEditorStore.getState();
-                        selectSingleNode(node.id);
-                        // Open the node picker at the right-click position
-                        const { clientX, clientY } = event;
-                        const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
-                        openEdgeDropPicker({
-                            screenPosition: { x: clientX, y: clientY },
-                            flowPosition,
-                            sourceDataType: '',
-                            sourceNodeId: null,
-                            sourceHandleId: null,
-                            handleDirection: null,
-                        });
-                    }}
-                    onPaneContextMenu={(event) => {
-                        event.preventDefault();
-                        const { clientX, clientY } = event;
-                        const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
-                        openEdgeDropPicker({
-                            screenPosition: { x: clientX, y: clientY },
-                            flowPosition,
-                            sourceDataType: '',
-                            sourceNodeId: null,
-                            sourceHandleId: null,
-                            handleDirection: null,
-                        });
-                    }}
+                    onNodeContextMenu={handleNodeContextMenu}
+                    onPaneContextMenu={handlePaneContextMenu}
                     onPaneMouseMove={handlePaneMouseMove}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
@@ -733,14 +764,14 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
                     selectionKeyCode={null} // Box selection is mode-only; Shift here would hijack shift-clicks and leave stale selection rects
-                    multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+                    multiSelectionKeyCode={MULTI_SELECTION_KEYS}
                     maxZoom={4}
                     minZoom={0.05}
                     nodesDraggable={!isReadOnly}
                     nodesConnectable={!isReadOnly}
                     elementsSelectable={!isReadOnly}
                     panOnScroll={isReadOnly}
-                    deleteKeyCode={["Backspace", "Delete"]}
+                    deleteKeyCode={DELETE_KEYS}
                 >
                     <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                 </ReactFlow>
@@ -748,11 +779,26 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
                 {!isReadOnly && <CanvasEdgeDropPicker />}
             </div >
 
+        </>
+    );
+});
+
+function EditorContent(props: EditorProps) {
+    const [isFindOpen, setIsFindOpen] = useState(false);
+    const onOpenFind = useCallback(() => setIsFindOpen(true), []);
+    const onCloseFind = useCallback(() => setIsFindOpen(false), []);
+
+    return (
+        <>
+            <FlowCanvas
+                isReadOnly={props.isReadOnly}
+                onOpenFind={onOpenFind}
+            />
             <EditorChrome
-                navbarProps={navbarProps}
-                projectId={projectId}
-                hasThumbnail={hasThumbnail}
-                isReadOnly={isReadOnly}
+                navbarProps={props}
+                projectId={props.projectId}
+                hasThumbnail={props.hasThumbnail}
+                isReadOnly={props.isReadOnly}
                 isFindOpen={isFindOpen}
                 onCloseFind={onCloseFind}
             />
@@ -760,12 +806,12 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     );
 }
 
-export function Editor(props: EditorProps) {
+export const Editor = memo(function Editor(props: EditorProps) {
     return (
         <div className="w-full h-full relative">
             <ReactFlowProvider>
-                <EditorCanvas navbarProps={props} projectId={props.projectId} hasThumbnail={props.hasThumbnail} isReadOnly={props.isReadOnly} />
+                <EditorContent {...props} />
             </ReactFlowProvider>
         </div>
     );
-}
+});

@@ -2,6 +2,11 @@
 
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditorStore } from '@/store/editor';
+import {
+    globalUniformKey,
+    nodeUniformKey,
+    useLiveUniformStore,
+} from '@/store/live-uniforms';
 import { useShallow } from 'zustand/react/shallow';
 import { registry } from '@/lib/registry';
 import { cn, getAbsolutePosition, getNodeDimensions } from '@/lib/utils';
@@ -112,7 +117,10 @@ function useGraphEdgesSnapshot() {
 
 function useGraphNodesSnapshot() {
     const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
-    return useMemo(() => useEditorStore.getState().nodes, [graphStructureVersion]);
+    return useMemo(() => {
+        void graphStructureVersion;
+        return useEditorStore.getState().nodes;
+    }, [graphStructureVersion]);
 }
 
 interface AnchorNodePortEditorProps {
@@ -236,12 +244,16 @@ function AnchorNodePortEditor({
  * Hook to reactively get a node's input value from the store.
  */
 function useNodeInputValue(nodeId: string, inputKey: string, defaultValue: TSLValueType | undefined): TSLValueType {
-    return useEditorStore((s) => {
+    const liveUniformValue = useLiveUniformStore((s) => (
+        inputKey === 'value' ? s.values[nodeUniformKey(nodeId)] : undefined
+    ));
+    const storedValue = useEditorStore((s) => {
         const node = s.nodes.find((n) => n.id === nodeId);
         const value = node?.data.values?.[inputKey];
         if (value !== undefined) return value;
         return defaultValue !== undefined ? defaultValue : 0;
     });
+    return liveUniformValue ?? storedValue;
 }
 
 /**
@@ -266,11 +278,13 @@ function OptionalNumberField({
     value: number | undefined;
     onCommit: (value: number | undefined) => void;
 }) {
-    const [draft, setDraft] = useState(value !== undefined ? String(value) : '');
-
-    useEffect(() => {
-        setDraft(value !== undefined ? String(value) : '');
-    }, [value]);
+    const valueText = value !== undefined ? String(value) : '';
+    const [draft, setDraft] = useState(valueText);
+    const [previousValueText, setPreviousValueText] = useState(valueText);
+    if (previousValueText !== valueText) {
+        setPreviousValueText(valueText);
+        setDraft(valueText);
+    }
 
     const commit = useCallback(() => {
         const trimmed = draft.trim();
@@ -919,7 +933,8 @@ function GlobalUniformListItem({ entry, value }: { entry: GlobalContextEntry; va
     const uniformKind = UNIFORM_KINDS.includes(entry.type as UniformKind)
         ? (entry.type as UniformKind)
         : 'float';
-    const uniformValue = entry.defaultValue ?? getUniformDefaultValue(uniformKind);
+    const liveUniformValue = useLiveUniformStore((s) => s.values[globalUniformKey(entry.id)]);
+    const uniformValue = liveUniformValue ?? entry.defaultValue ?? getUniformDefaultValue(uniformKind);
     const range = getUniformRange(entry, uniformKind);
 
     return (

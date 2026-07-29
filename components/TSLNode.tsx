@@ -4,6 +4,7 @@ import { memo, useState, useCallback, useEffect, useMemo } from "react";
 import { Position, useUpdateNodeInternals } from "@xyflow/react";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
+import { nodeUniformKey, useLiveUniformStore } from "@/store/live-uniforms";
 import { cn } from "@/lib/utils";
 import { TSLHandle } from "./TSLHandle";
 import { useTheme } from "next-themes";
@@ -112,6 +113,9 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       (state) => state.nodes.find((node) => node.id === id)?.data,
       [id],
     ),
+  );
+  const liveUniformValue = useLiveUniformStore(
+    useCallback((state) => state.values[nodeUniformKey(id)], [id]),
   );
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
@@ -720,7 +724,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       <div className="flex-1 min-w-0 ml-2 mr-1">
         <UniformControl
           kind={uniformKind}
-          value={nodeData.values?.value}
+          value={liveUniformValue ?? nodeData.values?.value}
           range={uniformRange}
           variant="node"
           onLiveChange={handleUniformLiveChange}
