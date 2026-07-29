@@ -13,6 +13,7 @@ import {
     type Connection,
     type Edge,
     type OnConnectEnd,
+    useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -292,6 +293,36 @@ function EditorCanvas({ navbarProps, projectId, hasThumbnail, isReadOnly }: { na
     // Snapshot triggers for ReactFlow events
 
     const { getNodes, getEdges, fitView } = useReactFlow<AppNode>();
+    const rfStoreApi = useStoreApi();
+
+    // React Flow only clears its selection rect in the pane's own pointerup handler.
+    // If that event never arrives (pointercancel from a trackpad gesture, Cmd+Tab or
+    // window blur mid-drag, button released outside the pane), the stale rect resumes
+    // on the next hover move and balloons from the old anchor, selecting nodes the
+    // user never boxed. Clear it whenever a selection rect exists without the primary
+    // button held.
+    useEffect(() => {
+        const clearStaleSelection = () => {
+            const { userSelectionActive, userSelectionRect } = rfStoreApi.getState();
+            if (userSelectionActive || userSelectionRect) {
+                rfStoreApi.setState({ userSelectionActive: false, userSelectionRect: null });
+            }
+        };
+
+        const onPointerMove = (event: PointerEvent) => {
+            if (event.buttons === 0) clearStaleSelection();
+        };
+
+        // Capture phase so the stale rect is gone before the pane's move handler reads it
+        window.addEventListener('pointermove', onPointerMove, true);
+        window.addEventListener('pointercancel', clearStaleSelection, true);
+        window.addEventListener('blur', clearStaleSelection);
+        return () => {
+            window.removeEventListener('pointermove', onPointerMove, true);
+            window.removeEventListener('pointercancel', clearStaleSelection, true);
+            window.removeEventListener('blur', clearStaleSelection);
+        };
+    }, [rfStoreApi]);
     const dropNodesIntoGroup = useEditorStore((s) => s.dropNodesIntoGroup);
     const setHoveredGroupId = useEditorStore((s) => s.setHoveredGroupId);
 
