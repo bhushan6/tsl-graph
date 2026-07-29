@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useCallback } from "react";
-import { addEdge, useReactFlow, Edge } from "@xyflow/react";
+import { addEdge, useReactFlow, Edge, type Connection } from "@xyflow/react";
 import { EdgeDropNodePicker, MULTI_OP_INPUT_HANDLE_PREFIX, type EdgeDropSelection } from "./EdgeDropNodePicker";
 import { registry } from "@/lib/registry";
 import { getMultiOpHandleId, getMultiOpParams } from "@/lib/multi-op";
@@ -10,6 +10,8 @@ import { useEdgeDropPickerStore } from "@/store/edge-drop-picker";
 import { useEditorStore } from "@/store/editor";
 import { CodeNodeDefinition, CodeNodeLanguage, NodeType, AppNode, TSLNodeData, TSLValueType, SubgraphPort } from "@/lib/types";
 import { replaceEdgeOnTargetHandle, resolveDropParentGroup } from "@/lib/graph-utils";
+import { isConnectionAllowed } from "@/lib/connection-rules";
+import { getAbsolutePosition, getNodeDimensions } from "@/lib/utils";
 import { useTemplateLibrary } from "@/lib/editor-host/template-library";
 import type { QuickCreateConstantIntent } from "@/lib/quick-create-constants";
 import {
@@ -19,7 +21,7 @@ import {
 
 export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
 
-    const { setNodes, setEdges } = useReactFlow<AppNode>();
+    const { setNodes, setEdges, setCenter, getViewport } = useReactFlow<AppNode>();
 
     const isOpen = useEdgeDropPickerStore(state => state.isOpen);
     const screenPosition = useEdgeDropPickerStore(state => state.screenPosition);
@@ -481,6 +483,69 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
         [flowPosition, sourceNodeId, sourceHandleId, sourceDataType, handleDirection, setEdges, close, setNodes, userCodeNodeTemplates, userSubgraphTemplates, activeRootGraph]
     );
 
+    // After connecting to an existing node, bring it into view if it's
+    // fully offscreen (same jump behavior as the note search).
+    const focusNodeIfOffscreen = useCallback((nodeId: string) => {
+        const state = useEditorStore.getState();
+        const node = state.nodes.find((entry) => entry.id === nodeId);
+        if (!node) return;
+
+        const absPosition = getAbsolutePosition(node, state.nodes);
+        const { width, height } = getNodeDimensions(node);
+        const { x: viewportX, y: viewportY, zoom } = getViewport();
+        const viewLeft = -viewportX / zoom;
+        const viewTop = -viewportY / zoom;
+        const viewRight = viewLeft + window.innerWidth / zoom;
+        const viewBottom = viewTop + window.innerHeight / zoom;
+
+        const intersectsViewport =
+            absPosition.x + width > viewLeft &&
+            absPosition.x < viewRight &&
+            absPosition.y + height > viewTop &&
+            absPosition.y < viewBottom;
+        if (intersectsViewport) return;
+
+        setCenter(absPosition.x + width / 2, absPosition.y + height / 2, {
+            zoom: Math.max(zoom, 0.85),
+            duration: 400,
+        });
+    }, [getViewport, setCenter]);
+
+    const handleExistingNodeSelect = useCallback(
+        (selection: { nodeId: string; handleId: string }) => {
+            if (!sourceNodeId || sourceHandleId === null || !handleDirection) return;
+
+            const connection: Connection =
+                handleDirection === 'output'
+                    ? {
+                        source: sourceNodeId,
+                        sourceHandle: sourceHandleId,
+                        target: selection.nodeId,
+                        targetHandle: selection.handleId,
+                    }
+                    : {
+                        source: selection.nodeId,
+                        sourceHandle: selection.handleId,
+                        target: sourceNodeId,
+                        targetHandle: sourceHandleId,
+                    };
+
+            const state = useEditorStore.getState();
+            if (!isConnectionAllowed(connection, state.nodes, state.edges)) {
+                close();
+                return;
+            }
+
+            // onConnect handles snapshot, target-handle replacement, and
+            // material activeInputs activation — same path as drag-connect.
+            state.onConnect(connection);
+            state.selectSingleNode(selection.nodeId);
+            focusNodeIfOffscreen(selection.nodeId);
+            close();
+        },
+        [sourceNodeId, sourceHandleId, handleDirection, close, focusNodeIfOffscreen]
+    );
+
     const handleQuickCreate = useCallback(
         (intent: QuickCreateConstantIntent) => {
             handleNodeSelect(
@@ -562,8 +627,10 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
             flowPosition={flowPosition}
             sourceDataType={sourceDataType}
             sourceNodeId={sourceNodeId}
+            sourceHandleId={sourceHandleId}
             handleDirection={handleDirection}
             onNodeSelect={handleNodeSelect}
+            onExistingNodeSelect={handleExistingNodeSelect}
             onQuickCreate={handleQuickCreate}
             onQuickCreateExpression={handleQuickCreateExpression}
             onClose={close}

@@ -25,7 +25,8 @@ import {
     getQuickCreateNameCompletions,
     type QuickCreateExpressionIntent,
 } from '@/lib/quick-create';
-import { Code, Layers } from 'lucide-react';
+import { Code, Layers, Link2 } from 'lucide-react';
+import { getExistingNodeCandidates } from '@/lib/existing-node-candidates';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import { resolveCodeNodeScope } from '@/lib/code-node-scope';
@@ -65,8 +66,10 @@ interface EdgeDropNodePickerProps {
     flowPosition: { x: number; y: number };
     sourceDataType: TSLType | '';
     sourceNodeId: string | null;
+    sourceHandleId: string | null;
     handleDirection: 'input' | 'output' | null;
     onNodeSelect: (selection: EdgeDropSelection) => void;
+    onExistingNodeSelect: (selection: { nodeId: string; handleId: string }) => void;
     onQuickCreate: (intent: QuickCreateConstantIntent) => void;
     onQuickCreateExpression: (intent: QuickCreateExpressionIntent) => void;
     onClose: () => void;
@@ -124,8 +127,10 @@ export function EdgeDropNodePicker({
     flowPosition,
     sourceDataType,
     sourceNodeId,
+    sourceHandleId,
     handleDirection,
     onNodeSelect,
+    onExistingNodeSelect,
     onQuickCreate,
     onQuickCreateExpression,
     onClose,
@@ -392,6 +397,28 @@ export function EdgeDropNodePicker({
         }));
     }, [edges, globals, handleDirection, nodes, sourceNodeId, subgraphs]);
 
+    const existingCandidates = useMemo(() => {
+        if (!handleDirection || !sourceNodeId || sourceHandleId === null) return [];
+        return getExistingNodeCandidates({
+            nodes,
+            edges,
+            globals,
+            subgraphs,
+            codeNodes,
+            sourceNodeId,
+            sourceHandleId,
+            handleDirection,
+            sourceDataType,
+        });
+    }, [handleDirection, sourceNodeId, sourceHandleId, nodes, edges, globals, subgraphs, codeNodes, sourceDataType]);
+
+    // Without a query, keep the section short; once the user types, hand the
+    // full list to cmdk so any node in the graph is findable by name.
+    const visibleExistingCandidates = useMemo(
+        () => (search.trim() ? existingCandidates : existingCandidates.slice(0, 12)),
+        [existingCandidates, search]
+    );
+
     const allNodes = useMemo((): EdgeDropPickerNode[] => {
         return [
             ...localGetQuickNodes,
@@ -631,6 +658,29 @@ export function EdgeDropNodePicker({
                             >
                                 <span>Paste</span>
                             </CommandItem>
+                        </CommandGroup>
+                    )}
+                    {!!handleDirection && visibleExistingCandidates.length > 0 && (
+                        <CommandGroup heading="Existing nodes">
+                            {visibleExistingCandidates.map((candidate) => (
+                                <CommandItem
+                                    key={candidate.key}
+                                    value={`${candidate.displayLabel} ${candidate.searchText} ${candidate.nodeId}`}
+                                    onSelect={() => onExistingNodeSelect({
+                                        nodeId: candidate.nodeId,
+                                        handleId: candidate.handleId,
+                                    })}
+                                    className="gap-2"
+                                >
+                                    <Link2 className="w-3 h-3 text-primary" />
+                                    <span className="min-w-0 flex-1 truncate">{candidate.displayLabel}</span>
+                                    {candidate.type !== 'any' && (
+                                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                            {candidate.type}
+                                        </span>
+                                    )}
+                                </CommandItem>
+                            ))}
                         </CommandGroup>
                     )}
                     {!handleDirection && Object.entries(groupedNodes).map(([category, nodes]) => (

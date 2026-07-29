@@ -1,0 +1,116 @@
+import type { Edge } from '@xyflow/react';
+import type {
+    AppNode,
+    CodeNodeDefinition,
+    GlobalContextEntry,
+    SubgraphDefinition,
+    TSLType,
+} from './types';
+import {
+    getConnectableInputHandles,
+    getConnectableOutputHandles,
+    type GraphHandleContext,
+} from './graph-handles';
+import { isConnectionAllowed } from './connection-rules';
+import { getHandleDisplayLabel, getTypeMatchRank } from './node-picker-utils';
+import { getNodeDisplayName } from './node-display-name';
+import { getNodeSearchFields } from './note-search';
+
+export interface ExistingNodeCandidate {
+    key: string;
+    nodeId: string;
+    handleId: string;
+    nodeLabel: string;
+    handleLabel: string;
+    displayLabel: string;
+    type: TSLType;
+    matchRank: number;
+    searchText: string;
+}
+
+export interface ExistingNodeCandidateParams {
+    nodes: AppNode[];
+    edges: Edge[];
+    globals: GlobalContextEntry[];
+    subgraphs: Record<string, SubgraphDefinition>;
+    codeNodes: Record<string, CodeNodeDefinition>;
+    sourceNodeId: string;
+    sourceHandleId: string;
+    /** Direction of the DRAGGED handle: 'output' = wire needs a target input. */
+    handleDirection: 'input' | 'output';
+    sourceDataType: TSLType | '';
+}
+
+/**
+ * Existing graph nodes (and their compatible handles) a dangling connection
+ * can be attached to. Excludes the drag source itself and anything the
+ * connection rules reject (cycles, loop scope, unbound local gets).
+ *
+ * Walks the whole graph with type resolution, so call once per picker open,
+ * not per keystroke.
+ */
+export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): ExistingNodeCandidate[] {
+    const {
+        nodes,
+        edges,
+        globals,
+        subgraphs,
+        codeNodes,
+        sourceNodeId,
+        handleDirection,
+        sourceDataType,
+    } = params;
+
+    const ctx: GraphHandleContext = {
+        nodesById: new Map(nodes.map((node) => [node.id, node])),
+        edges,
+        globals,
+        subgraphs,
+        codeNodes,
+    };
+
+    const candidates: ExistingNodeCandidate[] = [];
+
+    for (const node of nodes) {
+        if (node.id === sourceNodeId) continue;
+
+        // Connection rules ignore handles, so one check covers every handle.
+        const connection =
+            handleDirection === 'output'
+                ? { source: sourceNodeId, target: node.id }
+                : { source: node.id, target: sourceNodeId };
+        if (!isConnectionAllowed(connection, nodes, edges)) continue;
+
+        const handles =
+            handleDirection === 'output'
+                ? getConnectableInputHandles(node, ctx)
+                : getConnectableOutputHandles(node, ctx);
+        if (handles.length === 0) continue;
+
+        const displayName = getNodeDisplayName(node, subgraphs, codeNodes);
+        const localName =
+            typeof node.data.values?.localName === 'string' ? node.data.values.localName : '';
+        const nodeLabel = localName ? `${displayName} (${localName})` : displayName;
+        const searchBase = getNodeSearchFields(node, displayName).join(' ');
+
+        for (const handle of handles) {
+            candidates.push({
+                key: `existing:${node.id}:${handle.id}`,
+                nodeId: node.id,
+                handleId: handle.id,
+                nodeLabel,
+                handleLabel: handle.label,
+                displayLabel: getHandleDisplayLabel(nodeLabel, handle.label, handles.length),
+                type: handle.type,
+                matchRank: getTypeMatchRank(handle.type, sourceDataType),
+                searchText: `${searchBase} ${handle.label}`,
+            });
+        }
+    }
+
+    candidates.sort(
+        (a, b) => a.matchRank - b.matchRank || a.displayLabel.localeCompare(b.displayLabel)
+    );
+
+    return candidates;
+}
