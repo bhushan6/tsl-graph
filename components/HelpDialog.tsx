@@ -445,6 +445,7 @@ function HelpDialogComponent() {
                                             { key: EDITOR_SHORTCUTS.removeFromGroup.display, label: "Remove from Group" },
                                             { key: EDITOR_SHORTCUTS.convertToMultiOp.display, label: "Convert to Multi-op" },
                                             { key: EDITOR_SHORTCUTS.expandMultiOp.display, label: "Expand Multi-op" },
+                                            { key: EDITOR_SHORTCUTS.convertEdgeToPortal.display, label: "Convert Edge to Portal" },
                                             { key: EDITOR_SHORTCUTS.exportImage.display, label: "Open Image Export" },
                                             { key: EDITOR_SHORTCUTS.viewCode.display, label: "View Code" },
                                             { key: EDITOR_SHORTCUTS.saveAndExitSubgraph.display, label: "Save & Exit Subgraph" },

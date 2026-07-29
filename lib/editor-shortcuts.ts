@@ -21,6 +21,7 @@ export const EDITOR_SHORTCUTS = {
     ungroupNodes: { code: 'KeyG', display: 'Ctrl/Cmd + Shift + G', mod: true, shift: true },
     removeFromGroup: { code: 'KeyG', display: 'Alt + G', alt: true },
     convertToMultiOp: { code: 'KeyM', display: 'M' },
+    convertEdgeToPortal: { code: 'KeyP', display: 'P' },
     expandMultiOp: { code: 'KeyM', display: 'Shift + M', shift: true },
     exportImage: { code: 'KeyE', display: 'Ctrl/Cmd + Shift + E', mod: true, shift: true },
     viewCode: { code: 'KeyV', display: 'Ctrl/Cmd + Alt + V', mod: true, alt: true },

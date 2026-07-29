@@ -47,6 +47,8 @@ import { Button } from '@/components/ui/button';
 import { PanelLeft } from 'lucide-react';
 import TSLEdge from './TSLEdge';
 import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
+import { EdgeContextMenu } from './EdgeContextMenu';
+import { useEdgeContextMenuStore } from '@/store/edge-context-menu';
 import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
@@ -319,6 +321,17 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
                 };
                 const flowPosition = screenToFlowPosition(screenPosition);
                 pasteSelection(flowPosition);
+            }
+
+            if (matchesEditorShortcut(event, EDITOR_SHORTCUTS.convertEdgeToPortal)) {
+                if (isReadOnly) return;
+                const state = useEditorStore.getState();
+                const selectedEdges = state.edges.filter((edge) => edge.selected);
+                if (selectedEdges.length === 0) return;
+                event.preventDefault();
+                for (const edge of selectedEdges) {
+                    state.convertEdgeToLocalPortal(edge.id);
+                }
             }
         };
 
@@ -719,6 +732,19 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
         [openCanvasNodePicker]
     );
 
+    const openEdgeContextMenu = useEdgeContextMenuStore((s) => s.open);
+    const handleEdgeContextMenu = useCallback(
+        (event: React.MouseEvent, edge: Edge) => {
+            event.preventDefault();
+            if (isReadOnly) return;
+            openEdgeContextMenu({
+                edgeId: edge.id,
+                screenPosition: { x: event.clientX, y: event.clientY },
+            });
+        },
+        [openEdgeContextMenu, isReadOnly]
+    );
+
     return (
         <>
             {/* Canvas Layer */}
@@ -736,6 +762,7 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
                     onSelectionChange={onSelectionChange}
                     onNodeContextMenu={handleNodeContextMenu}
                     onPaneContextMenu={handlePaneContextMenu}
+                    onEdgeContextMenu={handleEdgeContextMenu}
                     onPaneMouseMove={handlePaneMouseMove}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
@@ -759,6 +786,7 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
                 </ReactFlow>
                 <NodeDebugPreviewOverlay />
                 {!isReadOnly && <CanvasEdgeDropPicker />}
+                {!isReadOnly && <EdgeContextMenu />}
             </div >
 
         </>
