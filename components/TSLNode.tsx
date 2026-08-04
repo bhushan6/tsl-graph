@@ -401,7 +401,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       "min-w-[190px]",
     "bg-white/95 shadow-gray-300/50",
     "dark:bg-card/95 dark:shadow-black/30",
-    "backdrop-blur-sm transition-shadow duration-150",
+    "transition-shadow duration-150",
     selected && "shadow-xl dark:shadow-black/50 shadow-gray-400/50",
   );
   const contentClass = "";
@@ -855,7 +855,7 @@ function DebugPreviewSlot({
         className={cn(
           "relative h-28 min-w-[120px] overflow-hidden border",
           "border-gray-200/80 dark:border-white/10",
-          message ? "bg-white/95 dark:bg-card/95 backdrop-blur-sm" : "bg-transparent",
+          message ? "bg-white/95 dark:bg-card/95" : "bg-transparent",
         )}
       >
         {message && (

@@ -113,7 +113,7 @@ function LocalPortalNodeComponent({ id, data, selected }: LocalPortalNodeProps) 
                 'min-w-[50px] flex flex-col rounded-xl shadow-lg overflow-hidden',
                 'bg-white/95 shadow-gray-300/50',
                 'dark:bg-card/95 dark:shadow-black/30',
-                'backdrop-blur-sm transition-shadow duration-150',
+                'transition-shadow duration-150',
                 selected && 'shadow-xl dark:shadow-black/50 shadow-gray-400/50',
                 isLinkedToSelection && 'ring-2 ring-amber-400/80'
             )}

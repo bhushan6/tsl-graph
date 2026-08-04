@@ -83,7 +83,7 @@ function LoopInternalNode({ id, data, selected }: NodeProps<AppNode>) {
         <div
             className={cn(
                 'relative flex items-center gap-2 rounded-md border px-2 py-1 text-[10px] font-medium',
-                'bg-background/90 backdrop-blur-sm',
+                'bg-background/90',
                 selected ? 'border-primary' : 'border-border'
             )}
         >
