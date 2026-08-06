@@ -157,6 +157,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
 
   const storedNameValue = nodeData.values?.localName;
   const storedName = typeof storedNameValue === "string" ? storedNameValue : "";
+  const hasStoredName = Boolean(storedName);
   const [isEditingName, setIsEditingName] = useState(false);
   const [localName, setLocalName] = useState(storedName || "local");
   const isNameEditActiveRef = useRef(false);
@@ -428,13 +429,10 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       )}
     >
       <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90 truncate">
-          {nodeLabel}
-        </span>
         {isEditingName ? (
           <input
             type="text"
-            className="bg-transparent border-0 border-b border-gray-300 dark:border-white/30 outline-none text-[9px] text-gray-500 dark:text-white/50 tracking-wider py-0 focus:border-blue-500 max-w-[50px]"
+            className="w-full min-w-0 bg-transparent border-0 border-b border-gray-300 dark:border-white/30 outline-none text-[10px] font-semibold text-gray-800 dark:text-white/90 py-0 focus:border-blue-500"
             value={localName}
             onChange={(e) => setLocalName(e.target.value)}
             onKeyDown={handleNameKeyDown}
@@ -444,25 +442,37 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
             onMouseDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <div className="w-0 min-w-full overflow-hidden">
-            <Tooltip delayDuration={500}>
-              <TooltipTrigger asChild>
-                <span
-                  className="text-[9px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate block"
-                  onDoubleClick={() => {
-                    isNameEditActiveRef.current = true;
-                    setLocalName(storedName);
-                    setIsEditingName(true);
-                  }}
-                >
-                  {storedName || "(variable name)"}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-[10px]">
-                Double click to set variable name
-              </TooltipContent>
-            </Tooltip>
-          </div>
+          <Tooltip delayDuration={500}>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  "block min-w-0 truncate cursor-pointer transition-colors",
+                  hasStoredName
+                    ? "text-[10px] font-semibold text-gray-800 dark:text-white/90"
+                    : "text-[10px] font-semibold uppercase tracking-widest text-gray-800 dark:text-white/90",
+                  "hover:text-gray-600 dark:hover:text-white/60",
+                )}
+                title={hasStoredName ? storedName : nodeLabel}
+                onDoubleClick={() => {
+                  isNameEditActiveRef.current = true;
+                  setLocalName(storedName);
+                  setIsEditingName(true);
+                }}
+              >
+                {hasStoredName ? storedName : nodeLabel}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-[10px]">
+              {hasStoredName
+                ? "Double click to edit variable name"
+                : "Double click to set variable name"}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {!isEditingName && hasStoredName && (
+          <span className="block min-w-0 truncate text-[9px] text-gray-400 dark:text-white/40 tracking-wider">
+            {nodeLabel}
+          </span>
         )}
       </div>
       <Tooltip delayDuration={300}>
