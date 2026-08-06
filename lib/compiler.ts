@@ -63,6 +63,7 @@ const COMPONENT_SWIZZLES: Record<string, string> = {
     'r': 'x',
     'g': 'y',
     'b': 'z',
+    'a': 'w',
     'near': 'x',
     'far': 'y',
 };

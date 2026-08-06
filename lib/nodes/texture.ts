@@ -1,5 +1,12 @@
 import { BaseNodeDef } from './definitions';
 
+const RGBA_OUTPUTS = {
+    r: { label: 'R', type: 'float' },
+    g: { label: 'G', type: 'float' },
+    b: { label: 'B', type: 'float' },
+    a: { label: 'A', type: 'float' },
+} as const;
+
 export const textureNodes = [
     {
         type: 'texture/sampleNode',
@@ -10,7 +17,10 @@ export const textureNodes = [
             texture: { label: 'Texture', type: 'texture', connectionOnly: true },
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
         },
-        outputs: { out: { label: 'Out', type: 'vec4' } },
+        outputs: {
+            out: { label: 'Out', type: 'vec4' },
+            ...RGBA_OUTPUTS,
+        },
         tsl: 'texture',
     },
     {
@@ -85,7 +95,10 @@ export const textureNodes = [
                 propertyOnly: true,
             },
         },
-        outputs: { out: { label: 'Out', type: 'vec4' } },
+        outputs: {
+            out: { label: 'Out', type: 'vec4' },
+            ...RGBA_OUTPUTS,
+        },
         tsl: 'texture',
     },
     {
@@ -112,7 +125,10 @@ export const textureNodes = [
             position: { label: 'Position', type: 'vec3', connectionOnly: true },
             normal: { label: 'Normal', type: 'vec3', connectionOnly: true },
         },
-        outputs: { out: { label: 'Out', type: 'vec4' } },
+        outputs: {
+            out: { label: 'Out', type: 'vec4' },
+            ...RGBA_OUTPUTS,
+        },
         tsl: 'triplanarTexture',
     },
     {
