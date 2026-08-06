@@ -234,6 +234,13 @@ export const spriteNodeMaterial = {
             propertyOnly: true,
             isMaterialProp: true
         },
+        depthTest: {
+            label: 'Depth Test',
+            type: 'bool',
+            default: true,
+            propertyOnly: true,
+            isMaterialProp: true
+        },
         blending: {
             label: 'Blending',
             type: 'int',

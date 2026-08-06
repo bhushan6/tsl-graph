@@ -106,6 +106,7 @@ const TSL_WIKI_DESCRIPTIONS: Record<string, string> = {
 
     // Screen / Viewport
     screenUV: 'Returns the screen-space UV coordinates.',
+    viewportUV: 'Returns UV coordinates normalized to the current viewport.',
     screenCoordinate: 'Returns the screen-space coordinate in pixels.',
     screenSize: 'Returns the screen resolution.',
     viewportSharedTexture: 'Samples the already-rendered viewport color.',
@@ -217,6 +218,7 @@ const NODE_TYPE_DESCRIPTIONS: Record<string, string> = {
     'geo/cameraPosition': 'Returns the camera position in world space.',
     'geo/cameraViewMatrix': 'Returns the camera view matrix.',
     'geo/screenUV': 'Returns screen-space UV coordinates.',
+    'geo/viewportUV': 'Returns UV coordinates normalized to the current viewport.',
     'geo/screenCoordinate': 'Returns screen-space coordinates in pixels.',
     'geo/resolution': 'Returns the screen resolution.',
     'geo/viewportSize': 'Returns the viewport resolution in pixels.',

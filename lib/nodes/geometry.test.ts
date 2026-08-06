@@ -4,6 +4,7 @@ import { Node } from '@xyflow/react';
 import { NodeType, TSLNodeData } from '@/lib/types';
 import { registry } from '../registry';
 import { geometryNodes } from './geometry';
+import { getRequiredImports } from '../compiler';
 
 const createNode = (id: string, type: string, data: Partial<TSLNodeData> = {}): Node<TSLNodeData> => ({
     id,
@@ -32,5 +33,13 @@ describe('Geometry Nodes Compilation', () => {
         const nodes = [createNode('n1', 'geo/cameraViewMatrix')];
         const code = compileGraph(nodes, []);
         expect(code).toContain('const _node0 = cameraViewMatrix;');
+    });
+
+    it('should compile viewportUV and include its import', () => {
+        const nodes = [createNode('n1', 'geo/viewportUV')];
+        const code = compileGraph(nodes, []);
+
+        expect(code).toContain('const _node0 = viewportUV;');
+        expect(getRequiredImports(nodes)).toContain('viewportUV');
     });
 });

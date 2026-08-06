@@ -119,6 +119,7 @@ const tslFunctions: TSLCompletion[] = [
     { label: 'tangentLocal', type: 'variable', detail: 'vec4', info: 'Local tangent' },
     { label: 'uv', type: 'function', detail: 'uv()', info: 'Texture coordinates', boost: 8 },
     { label: 'screenUV', type: 'variable', detail: 'vec2', info: 'Screen UVs' },
+    { label: 'viewportUV', type: 'variable', detail: 'vec2', info: 'Viewport UVs' },
     { label: 'screenCoordinate', type: 'variable', detail: 'vec2', info: 'Screen coordinates (pixels)' },
     { label: 'screenSize', type: 'variable', detail: 'vec2', info: 'Screen resolution' },
     { label: 'frontFacing', type: 'variable', detail: 'bool', info: 'Is front face' },

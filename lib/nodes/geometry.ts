@@ -196,6 +196,14 @@ export const geometryNodes = [
         pure: true,
     },
     {
+        type: 'geo/viewportUV',
+        label: 'Viewport UV',
+        category: 'Geometry',
+        outputs: vec2Outputs,
+        tsl: 'viewportUV',
+        pure: true,
+    },
+    {
         type: 'geo/screenCoordinate',
         label: 'Screen Coordinate',
         category: 'Geometry',
