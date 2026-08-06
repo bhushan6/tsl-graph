@@ -467,7 +467,6 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                         targetHandle: sourceHandleId,
                     };
 
-                // Add edge
                 setEdges((eds) => {
                     const filtered = replaceEdgeOnTargetHandle(
                         eds,
@@ -536,8 +535,8 @@ export const CanvasEdgeDropPicker = memo(function CanvasEdgeDropPicker() {
                 return;
             }
 
-            // onConnect handles snapshot, target-handle replacement, and
-            // material activeInputs activation — same path as drag-connect.
+            // onConnect handles snapshot, input replacement, and material
+            // activeInputs activation — same path as drag-connect.
             state.onConnect(connection);
             state.selectSingleNode(selection.nodeId);
             focusNodeIfOffscreen(selection.nodeId);

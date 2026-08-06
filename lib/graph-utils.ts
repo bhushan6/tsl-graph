@@ -75,6 +75,7 @@ export function hasCycle(target: Node, source: Node, nodes: Node[], edges: Edge[
     return visit(target);
 }
 
+/** Remove the current edge for an input handle before replacing its value. */
 export function replaceEdgeOnTargetHandle(
     edges: Edge[],
     target: string,

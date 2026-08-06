@@ -48,6 +48,28 @@ beforeAll(() => {
             inputs: {},
             outputs: { out: { type: 'vec3', label: 'Out' } },
         },
+        {
+            type: 'math/add' as NodeType,
+            label: 'Add',
+            category: 'Math',
+            tsl: 'add',
+            inputs: {
+                a: { type: 'any', default: 0, label: 'A' },
+                b: { type: 'any', default: 0, label: 'B' },
+            },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
+        {
+            type: 'math/mul' as NodeType,
+            label: 'Multiply',
+            category: 'Math',
+            tsl: 'mul',
+            inputs: {
+                a: { type: 'any', default: 1, label: 'A' },
+                b: { type: 'any', default: 1, label: 'B' },
+            },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
     ] as never[]);
 });
 
@@ -109,23 +131,84 @@ describe('getExistingNodeCandidates', () => {
         expect(candidates.find((c) => c.nodeId === 'loopOut')).toBeUndefined();
     });
 
-    it('lists source output handles when dragging from an input, ranked by type match', () => {
+    it('keeps compatible source outputs even when they already fan out', () => {
         const nodes = [
             createNode('sink', 'math/sin'),
             createNode('floatSrc', 'const/float'),
-            createNode('vecSrc', 'const/vec3'),
+            createNode('multiply', 'math/mul'),
+        ];
+        const edges: Edge[] = [
+            {
+                id: 'e1',
+                source: 'floatSrc',
+                target: 'multiply',
+                sourceHandle: 'out',
+                targetHandle: 'a',
+            },
+            {
+                id: 'e2',
+                source: 'floatSrc',
+                target: 'multiply',
+                sourceHandle: 'out',
+                targetHandle: 'b',
+            },
         ];
         const candidates = getExistingNodeCandidates({
             ...baseParams,
             nodes,
-            edges: [],
+            edges,
             sourceNodeId: 'sink',
             sourceHandleId: 'in',
             handleDirection: 'input',
         });
-        expect(candidates.map((c) => c.nodeId)).toEqual(['floatSrc', 'vecSrc']);
-        expect(candidates[0].matchRank).toBe(0);
-        expect(candidates[1].matchRank).toBe(1);
+        expect(candidates.map((c) => c.nodeId)).toEqual(['floatSrc', 'multiply']);
+        expect(candidates.every((candidate) => candidate.matchRank === 0)).toBe(true);
+    });
+
+    it('lists only compatible, unoccupied input handles when dragging from an output', () => {
+        const nodes = [
+            createNode('newFloat', 'const/float'),
+            createNode('sourceForFloatA', 'const/float'),
+            createNode('floatA', 'math/add', { values: { localName: 'Float A' } }),
+            createNode('multiply', 'math/mul'),
+        ];
+        const edges: Edge[] = [
+            {
+                id: 'e0',
+                source: 'sourceForFloatA',
+                target: 'floatA',
+                sourceHandle: 'out',
+                targetHandle: 'a',
+            },
+            {
+                id: 'e1',
+                source: 'floatA',
+                target: 'multiply',
+                sourceHandle: 'out',
+                targetHandle: 'a',
+            },
+            {
+                id: 'e2',
+                source: 'floatA',
+                target: 'multiply',
+                sourceHandle: 'out',
+                targetHandle: 'b',
+            },
+        ];
+
+        const candidates = getExistingNodeCandidates({
+            ...baseParams,
+            nodes,
+            edges,
+            sourceNodeId: 'newFloat',
+            sourceHandleId: 'out',
+            handleDirection: 'output',
+        });
+
+        expect(candidates).toHaveLength(1);
+        expect(candidates[0]).toMatchObject({ nodeId: 'floatA', handleId: 'b' });
+        expect(candidates[0].nodeLabel).toContain('Float A');
+        expect(candidates.find((candidate) => candidate.nodeId === 'multiply')).toBeUndefined();
     });
 
     it('resolves declared-any output types through the graph', () => {

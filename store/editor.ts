@@ -1455,14 +1455,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const { edges, nodes } = get();
 
-        // Remove any existing connection to the same target handle
-        // (inputs can only have one connection, so replace the old one)
+        // Inputs are single-consumer: replacing an input's edge is the
+        // established direct-connect behavior. Outputs have no occupancy
+        // check, so one output handle can fan out to any number of inputs.
         const filteredEdges = replaceEdgeOnTargetHandle(
             edges,
             connection.target,
             connection.targetHandle
         );
-
 
         let nextNodes = nodes;
         const targetId = connection.target;

@@ -12,7 +12,7 @@ import {
     type GraphHandleContext,
 } from './graph-handles';
 import { isConnectionAllowed } from './connection-rules';
-import { getHandleDisplayLabel, getTypeMatchRank } from './node-picker-utils';
+import { getHandleDisplayLabel, getTypeMatchRank, isTypeMatch } from './node-picker-utils';
 import { getNodeDisplayName } from './node-display-name';
 import { getNodeSearchFields } from './note-search';
 
@@ -57,6 +57,7 @@ export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): 
         subgraphs,
         codeNodes,
         sourceNodeId,
+        sourceHandleId,
         handleDirection,
         sourceDataType,
     } = params;
@@ -74,13 +75,6 @@ export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): 
     for (const node of nodes) {
         if (node.id === sourceNodeId) continue;
 
-        // Connection rules ignore handles, so one check covers every handle.
-        const connection =
-            handleDirection === 'output'
-                ? { source: sourceNodeId, target: node.id }
-                : { source: node.id, target: sourceNodeId };
-        if (!isConnectionAllowed(connection, nodes, edges)) continue;
-
         const handles =
             handleDirection === 'output'
                 ? getConnectableInputHandles(node, ctx)
@@ -94,6 +88,35 @@ export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): 
         const searchBase = getNodeSearchFields(node, displayName).join(' ');
 
         for (const handle of handles) {
+            const connection =
+                handleDirection === 'output'
+                    ? {
+                        source: sourceNodeId,
+                        sourceHandle: sourceHandleId,
+                        target: node.id,
+                        targetHandle: handle.id,
+                    }
+                    : {
+                        source: node.id,
+                        sourceHandle: handle.id,
+                        target: sourceNodeId,
+                        targetHandle: sourceHandleId,
+                    };
+
+            // Candidate handles must be type-compatible. A dragged output can
+            // only land on an unoccupied input handle; a dragged input can
+            // connect to any compatible output, including one that already
+            // fans out to other inputs.
+            if (!isTypeMatch(handle.type, sourceDataType)) continue;
+            if (
+                handleDirection === 'output'
+                && edges.some(
+                    (edge) => edge.target === node.id
+                        && (edge.targetHandle ?? null) === handle.id
+                )
+            ) continue;
+            if (!isConnectionAllowed(connection, nodes, edges)) continue;
+
             candidates.push({
                 key: `existing:${node.id}:${handle.id}`,
                 nodeId: node.id,
