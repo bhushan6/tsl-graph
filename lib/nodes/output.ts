@@ -3,6 +3,28 @@ import { BaseNodeDef } from './definitions';
 // Material nodes - only ONE material node is allowed per graph
 // This is enforced in the store
 
+const blendingInput = {
+    label: 'Blending',
+    type: 'int',
+    default: 1, // NormalBlending
+    propertyOnly: true,
+    isMaterialProp: true,
+    options: [
+        { label: 'No', value: 0 }, // NoBlending
+        { label: 'Normal', value: 1 }, // NormalBlending
+        { label: 'Additive', value: 2 }, // AdditiveBlending
+        { label: 'Subtractive', value: 3 }, // SubtractiveBlending
+        { label: 'Multiply', value: 4 }, // MultiplyBlending
+        { label: 'Custom', value: 5 }, // CustomBlending
+    ],
+} as const;
+
+const emissiveNodeInput = {
+    label: 'Emissive',
+    type: 'color',
+    default: '#000000',
+} as const;
+
 export const meshStandardMaterial = {
     type: 'material/standard',
     label: 'MeshStandardMaterial',
@@ -13,7 +35,7 @@ export const meshStandardMaterial = {
         normalNode: { label: 'Normal', type: 'vec3', connectionOnly: true },
         roughnessNode: { label: 'Roughness', type: 'float', default: 0.5 },
         metalnessNode: { label: 'Metalness', type: 'float', default: 0 },
-        emissiveNode: { label: 'Emissive', type: 'color', default: '#000000' },
+        emissiveNode: emissiveNodeInput,
         aoNode: { label: 'AO', type: 'float', default: 1 },
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
@@ -39,6 +61,7 @@ export const meshStandardMaterial = {
             propertyOnly: true,
             isMaterialProp: true,
         },
+        blending: blendingInput,
         depthWrite: {
             label: 'Depth Write',
             type: 'bool',
@@ -60,6 +83,7 @@ export const nodeMaterial = {
     inputs: {
         fragmentNode: { label: 'Fragment', type: 'vec4', connectionOnly: true },
         vertexNode: { label: 'Vertex', type: 'vec3', connectionOnly: true },
+        blending: blendingInput,
     },
     outputs: {},
     tsl: 'NodeMaterial',
@@ -73,6 +97,7 @@ export const meshBasicMaterial = {
     defaultActiveInputs: ['colorNode', 'positionNode'],
     inputs: {
         colorNode: { label: 'Color', type: 'color', default: '#ffffff' },
+        emissiveNode: emissiveNodeInput,
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
         outputNode: { label: 'Output', type: 'vec4', connectionOnly: true },
@@ -97,6 +122,7 @@ export const meshBasicMaterial = {
             propertyOnly: true,
             isMaterialProp: true,
         },
+        blending: blendingInput,
         depthWrite: {
             label: 'Depth Write',
             type: 'bool',
@@ -120,7 +146,7 @@ export const meshPhysicalMaterial = {
         normalNode: { label: 'Normal', type: 'vec3', connectionOnly: true },
         roughnessNode: { label: 'Roughness', type: 'float', default: 0.5 },
         metalnessNode: { label: 'Metalness', type: 'float', default: 0 },
-        emissiveNode: { label: 'Emissive', type: 'color', default: '#000000' },
+        emissiveNode: emissiveNodeInput,
         clearcoatNode: { label: 'Clearcoat', type: 'float', default: 0 },
         clearcoatRoughnessNode: { label: 'Clearcoat Rough', type: 'float', default: 0 },
         sheenNode: { label: 'Sheen', type: 'color', default: '#000000' },
@@ -154,6 +180,7 @@ export const meshPhysicalMaterial = {
             propertyOnly: true,
             isMaterialProp: true,
         },
+        blending: blendingInput,
         depthWrite: {
             label: 'Depth Write',
             type: 'bool',
@@ -177,7 +204,7 @@ export const meshPhongMaterial = {
         normalNode: { label: 'Normal', type: 'vec3', connectionOnly: true },
         specularNode: { label: 'Specular', type: 'color', default: '#111111' },
         shininessNode: { label: 'Shininess', type: 'float', default: 30 },
-        emissiveNode: { label: 'Emissive', type: 'color', default: '#000000' },
+        emissiveNode: emissiveNodeInput,
         opacityNode: { label: 'Opacity', type: 'float', default: 1 },
         positionNode: { label: 'Position', type: 'vec3', connectionOnly: true },
         outputNode: { label: 'Output', type: 'vec4', connectionOnly: true },
@@ -202,6 +229,7 @@ export const meshPhongMaterial = {
             propertyOnly: true,
             isMaterialProp: true,
         },
+        blending: blendingInput,
         depthWrite: {
             label: 'Depth Write',
             type: 'bool',
@@ -241,21 +269,7 @@ export const spriteNodeMaterial = {
             propertyOnly: true,
             isMaterialProp: true
         },
-        blending: {
-            label: 'Blending',
-            type: 'int',
-            default: 2, // NormalBlending
-            propertyOnly: true,
-            isMaterialProp: true,
-            options: [
-                { label: 'No', value: 0 }, // NoBlending
-                { label: 'Normal', value: 1 }, // NormalBlending
-                { label: 'Additive', value: 2 }, // AdditiveBlending
-                { label: 'Subtractive', value: 3 }, // SubtractiveBlending
-                { label: 'Multiply', value: 4 }, // MultiplyBlending
-                { label: 'Custom', value: 5 }, // CustomBlending
-            ]
-        }
+        blending: blendingInput,
     },
     outputs: {},
     tsl: 'SpriteNodeMaterial',
