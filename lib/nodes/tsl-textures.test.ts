@@ -48,7 +48,8 @@ describe('TSL Textures Nodes', () => {
         ];
 
         const code = compileGraph(nodes, edges);
-        expect(code).toMatch(/marble\(\{ position: _node\d+/);
+        expect(code).toContain('marble({ position: positionWorld,');
+        expect(code).not.toContain('const _node0 = positionWorld;');
     });
 
     it('includes propertyOnly params in the params object', () => {
@@ -98,9 +99,9 @@ describe('TSL Textures Nodes', () => {
         ];
 
         const code = compileGraph(nodes, edges);
-        expect(code).toMatch(/const _node0 = \{ opacity: clouds\.opacity\(\{/);
+        expect(code).toContain('material.opacityNode = ({ opacity: clouds.opacity({');
         expect(code).not.toContain('color: clouds(');
-        expect(code).toContain('material.opacityNode = _node0.opacity');
+        expect(code).toContain('}) }).opacity;');
     });
 
     it('compiles a plain-color texture with all its defaults', () => {

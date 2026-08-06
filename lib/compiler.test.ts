@@ -493,8 +493,8 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
             expect(code).toContain('const material = new NodeMaterial();');
-            expect(code).toContain('material.fragmentNode = _node0;');
-            expect(code).toContain('material.vertexNode = _node1;');
+            expect(code).toContain('material.fragmentNode = vec3(0.1, 0.2, 0.3);');
+            expect(code).toContain('material.vertexNode = vec3(1, 2, 3);');
         });
 
         it('should compile a uniform node in inline mode', () => {
@@ -795,6 +795,98 @@ describe('compileGraph', () => {
     });
 
     describe('Connected nodes', () => {
+        it('inlines unnamed single-use chains into their final consumer', () => {
+            const nodes = [
+                createNode('time', 'geo/time'),
+                createNode('sin', 'math/sin'),
+                createNode('add', 'math/add', { values: { b: 0.5 } }),
+                createNode('mat', 'material/standard'),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'time', sourceHandle: 'out', target: 'sin', targetHandle: 'x' },
+                { id: 'e2', source: 'sin', sourceHandle: 'out', target: 'add', targetHandle: 'a' },
+                { id: 'e3', source: 'add', sourceHandle: 'out', target: 'mat', targetHandle: 'roughnessNode' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('material.roughnessNode = add(sin(time), 0.5);');
+            expect(code).not.toMatch(/const _node\d+ =/);
+        });
+
+        it('preserves a user-named node even when it has one consumer', () => {
+            const nodes = [
+                createNode('impact', 'const/float', { values: { value: 0, localName: 'finalImpact' } }),
+                createNode('add', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'impact', sourceHandle: 'out', target: 'add', targetHandle: 'a' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const finalImpact = float(0);');
+            expect(code).toContain('add(finalImpact, 1)');
+        });
+
+        it('keeps a shared non-trivial unnamed expression in a temporary', () => {
+            const nodes = [
+                createNode('sum', 'math/add', { values: { a: 1, b: 2 } }),
+                createNode('scaled', 'math/mul', { values: { b: 3, localName: 'scaled' } }),
+                createNode('waved', 'math/sin', { values: { localName: 'waved' } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'sum', sourceHandle: 'out', target: 'scaled', targetHandle: 'a' },
+                { id: 'e2', source: 'sum', sourceHandle: 'out', target: 'waved', targetHandle: 'x' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const _node0 = add(1, 2);');
+            expect(code).toContain('const scaled = mul(_node0, 3);');
+            expect(code).toContain('const waved = sin(_node0);');
+        });
+
+        it('eliminates unnamed Split aliases while preserving a named source', () => {
+            const nodes = [
+                createNode('color', 'const/vec3', { values: { x: 1, y: 2, z: 3, localName: 'hexagonsColor' } }),
+                createNode('split', 'math/split'),
+                createNode('x', 'math/add', { values: { b: 1, localName: 'xValue' } }),
+                createNode('y', 'math/add', { values: { b: 2, localName: 'yValue' } }),
+                createNode('z', 'math/add', { values: { b: 3, localName: 'zValue' } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'color', sourceHandle: 'out', target: 'split', targetHandle: 'in' },
+                { id: 'e2', source: 'split', sourceHandle: 'x', target: 'x', targetHandle: 'a' },
+                { id: 'e3', source: 'split', sourceHandle: 'y', target: 'y', targetHandle: 'a' },
+                { id: 'e4', source: 'split', sourceHandle: 'z', target: 'z', targetHandle: 'a' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const hexagonsColor = vec3(1, 2, 3);');
+            expect(code).toContain('const xValue = add(hexagonsColor.x, 1);');
+            expect(code).toContain('const yValue = add(hexagonsColor.y, 2);');
+            expect(code).toContain('const zValue = add(hexagonsColor.z, 3);');
+            expect(code).not.toMatch(/const _node\d+ = hexagonsColor/);
+        });
+
+        it('inlines cheap exported TSL values even when they are reused', () => {
+            const nodes = [
+                createNode('time', 'geo/time'),
+                createNode('sum', 'math/add', { values: { localName: 'timeSum' } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'time', sourceHandle: 'out', target: 'sum', targetHandle: 'a' },
+                { id: 'e2', source: 'time', sourceHandle: 'out', target: 'sum', targetHandle: 'b' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const timeSum = add(time, time);');
+            expect(code).not.toContain('const _node0 = time;');
+        });
+
         it('should connect two math nodes', () => {
             const nodes = [
                 createNode('add1', 'math/add', { values: { a: 1, b: 2 } }),
@@ -805,8 +897,8 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('const _node0 = add(1, 2);');
-            expect(code).toContain('mul(_node0, 4)');
+            expect(code).toContain('const _node1 = mul(add(1, 2), 4);');
+            expect(code).not.toContain('const _node0');
         });
 
         it('should compile a Math component output without a split node', () => {
@@ -821,8 +913,9 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('mul(_node0, 2)');
-            expect(code).toContain('add(_node1.x, 1)');
+            expect(code).toContain('add(mul(uv(0), 2).x, 1)');
+            expect(code).not.toContain('const _node0');
+            expect(code).not.toContain('const _node1');
             expect(nodes.some((node) => node.data.type === 'math/split')).toBe(false);
         });
 
@@ -836,8 +929,8 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('const _node0 = time;');
-            expect(code).toContain('sin(_node0)');
+            expect(code).toContain('const _node1 = sin(time);');
+            expect(code).not.toContain('const _node0 = time;');
         });
 
         it('should connect node to material', () => {
@@ -850,7 +943,7 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('material.colorNode = _node0;');
+            expect(code).toContain('material.colorNode = add(1, 2);');
         });
 
         it('should compile only active material inputs when unconnected', () => {
@@ -874,7 +967,7 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('material.roughnessNode = _node0;');
+            expect(code).toContain('material.roughnessNode = add(1, 2);');
         });
 
         it('should handle swizzle outputs (component access)', () => {
@@ -887,7 +980,7 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('add(_node0.x, 10)');
+            expect(code).toContain('add(vec3(1, 2, 3).x, 10)');
         });
 
         it('should compile camera near/far handles into perspectiveDepthToViewZ', () => {
@@ -901,8 +994,8 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('const _node0 = vec2(cameraNear, cameraFar);');
-            expect(code).toContain('perspectiveDepthToViewZ(0.5, _node0.x, _node0.y)');
+            expect(code).toContain('perspectiveDepthToViewZ(0.5, vec2(cameraNear, cameraFar).x, vec2(cameraNear, cameraFar).y)');
+            expect(code).not.toContain('const _node0');
         });
 
         it('should wrap default near/far literals for perspectiveDepthToViewZ', () => {
@@ -929,8 +1022,7 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('perspectiveDepthToViewZ(0.5, _node0.x, _node0.y)');
-            expect(code).toContain('viewZToOrthographicDepth(_node1, _node0.x, _node0.y)');
+            expect(code).toContain('viewZToOrthographicDepth(perspectiveDepthToViewZ(0.5, vec2(cameraNear, cameraFar).x, vec2(cameraNear, cameraFar).y), vec2(cameraNear, cameraFar).x, vec2(cameraNear, cameraFar).y)');
         });
 
         it('should handle complex node chains', () => {
@@ -947,10 +1039,8 @@ describe('compileGraph', () => {
             ];
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('const _node0 = time;');
-            expect(code).toContain('sin(_node0)');
-            expect(code).toContain('add(_node1, 0.5)');
-            expect(code).toContain('material.roughnessNode = _node2;');
+            expect(code).toContain('material.roughnessNode = add(sin(time), 0.5);');
+            expect(code).not.toMatch(/const _node\d+ =/);
         });
     });
 
@@ -972,8 +1062,8 @@ describe('compileGraph', () => {
             const code = compileGraph(nodes, edges);
             const declarations = code.match(/^const /gm) ?? [];
 
-            expect(declarations.length).toBe(3);
-            expect(code).toContain('add(_node0, _node1)');
+            expect(declarations.length).toBe(1);
+            expect(code).toContain('add(float(1), float(2))');
             expect(code).not.toContain('Var(');
         });
 
@@ -1091,8 +1181,30 @@ describe('compileGraph', () => {
             ];
 
             const code = compileGraph(nodes, edges);
-            // Both gets should resolve to the same upstream var (_node0)
-            expect(code).toContain('add(_node0, _node0)');
+            // Both gets resolve to the same cheap source expression.
+            expect(code).toContain('add(float(5), float(5))');
+        });
+
+        it('preserves a non-trivial source shared through local portals', () => {
+            const nodes = [
+                createNode('source', 'math/add', { values: { a: 2, b: 3 } }),
+                createNode('setA', 'local/set', { values: { localName: 'shared' } }),
+                createNode('getA1', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('getA2', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('scaled', 'math/mul', { values: { b: 2, localName: 'scaled' } }),
+                createNode('waved', 'math/sin', { values: { localName: 'waved' } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'source', sourceHandle: 'out', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA1', sourceHandle: 'out', target: 'scaled', targetHandle: 'a' },
+                { id: 'e3', source: 'getA2', sourceHandle: 'out', target: 'waved', targetHandle: 'x' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+
+            expect(code).toContain('const _node0 = add(2, 3);');
+            expect(code).toContain('const scaled = mul(_node0, 2);');
+            expect(code).toContain('const waved = sin(_node0);');
         });
 
         it('propagates swizzle through Set/Get locals', () => {
@@ -1108,8 +1220,8 @@ describe('compileGraph', () => {
             ];
 
             const code = compileGraph(nodes, edges);
-            // The set node captures _node0.x; the get node re-uses that expression
-            expect(code).toContain('add(_node0.x, 10)');
+            // The Set/Get alias and its unnamed source are both inlined.
+            expect(code).toContain('add(vec3(1, 2, 3).x, 10)');
         });
 
         it('supports chained Set→Get→Set→Get (multi-hop portals)', () => {
@@ -1128,8 +1240,8 @@ describe('compileGraph', () => {
             ];
 
             const code = compileGraph(nodes, edges);
-            // Multi-hop should resolve all the way back to the original const
-            expect(code).toContain('add(_node0, 1)');
+            // Multi-hop resolves all the way back to the original expression.
+            expect(code).toContain('add(float(7), 1)');
             expect(code).not.toContain('Var(');
         });
 
@@ -1177,8 +1289,7 @@ describe('compileGraph', () => {
 
             const code = compileGraph(nodes, edges);
 
-            expect(code).toContain('mix(color("#ff0000"), color("#0000ff"), _node1)');
-            expect(code).toContain('material.colorNode = _node2;');
+            expect(code).toContain('material.colorNode = mix(color("#ff0000"), color("#0000ff"), mx_noise_float(positionWorld(), 1, 0));');
             expect(code).not.toContain('NaN');
         });
 
@@ -1325,10 +1436,10 @@ describe('compilePostGraph', () => {
 
         const result = compilePostGraph(nodes, edges);
         expect(result.code).toContain('const _subgraph_node1_tex = new THREE.TextureLoader().load("/uv.png");');
-        expect(result.code).toContain('const _subgraph_node1 = texture(_subgraph_node1_tex, _subgraph_node0);');
+        expect(result.code).toContain('return texture(_subgraph_node1_tex, screenUV);');
         expect(result.code).not.toContain('NaN');
         expect(result.code).not.toContain('texture("/uv.png"');
-        expect(result.code).not.toContain('texture(_subgraph_node1_tex, _subgraph_node0,');
+        expect(result.code).not.toContain('const _subgraph_node0 = screenUV;');
     });
 
     it('emits active flipY texture option in post graph', () => {
@@ -1346,7 +1457,7 @@ describe('compilePostGraph', () => {
 
         const result = compilePostGraph(nodes, edges);
         expect(result.code).toContain('_subgraph_node0_tex.flipY = false;');
-        expect(result.code).toContain('const _subgraph_node0 = texture(_subgraph_node0_tex);');
+        expect(result.code).toContain('return texture(_subgraph_node0_tex);');
         expect(result.code).not.toContain('texture(_subgraph_node0_tex, false');
     });
 
@@ -1438,7 +1549,7 @@ describe('compilePostGraph', () => {
         ];
 
         const result = compilePostGraph(nodes, edges);
-        expect(result.code).toContain('const _subgraph_node0 = arg_in_color;');
+        expect(result.code).toContain('return arg_in_color;');
         expect(result.code).toContain('const _subgraph_node1 = arg_in_depth;');
         expect(result.code).toContain('const _subgraph_node2 = arg_in_normal;');
         expect(result.code).not.toContain('__post_scene_color__');
@@ -1543,8 +1654,7 @@ describe('compileSubgraphCode', () => {
         const expected = [
             '// Subgraph Definition: My Subgraph',
             'const My_Subgraph = Fn(([arg_in_0, arg_in_1]) => {',
-            '    const _subgraph_node0 = add(arg_in_0, arg_in_1);',
-            '    return _subgraph_node0;',
+            '    return add(arg_in_0, arg_in_1);',
             '});',
         ].join('\n');
 
@@ -1656,12 +1766,8 @@ describe('Logic Nodes', () => {
 
         const code = compileGraph(nodes, edges);
 
-        // Check for existence of all parts
-        expect(code).toContain('const _node0 = time;'); // t1
-        expect(code).toContain('lessThan(_node0, 0.5)'); // lt1
-        expect(code).toContain('color("#ff0000")'); // red
-        expect(code).toContain('color("#0000ff")'); // blue
-        expect(code).toContain('select(');
+        expect(code).toContain('select(lessThan(time, 0.5), color("#ff0000"), color("#0000ff"))');
+        expect(code).not.toContain('const _node0 = time;');
     });
 
     it('should compile component-wise vector comparison', () => {
@@ -1685,9 +1791,7 @@ describe('Logic Nodes', () => {
         ];
 
         const code = compileGraph(nodes, edges);
-        // The compiler generates matches using variables, so we check for the structure
-        expect(code).toContain('lessThan(_node');
-        expect(code).toContain('select(_node');
+        expect(code).toContain('select(lessThan(vec3(0, 1, 0), vec3(1, 0, 0)), color("#ff0000"), color("#0000ff"))');
 
     });
 
@@ -1768,16 +1872,11 @@ describe('Logic Nodes', () => {
             const expected = [
                 '// Generated TSL Code',
                 '',
-                'const _node0 = uv(0);',
-                'const _node1 = int(1);',
-                'const loop2_count = max(int(_node1), 0);',
+                'const loop2_count = max(int(int(1)), 0);',
                 'const loop2_fn = Fn(() => {',
-                '    const loop2_acc = Var(_node0);',
+                '    const loop2_acc = Var(uv(0));',
                 '    Loop(loop2_count, ({ i }) => {',
-                '        const _node3 = float(10);',
-                '        const _node4 = mul(_node0, _node3);',
-                '        const _node5 = fract(_node4);',
-                '        loop2_acc.assign(_node5);',
+                '        loop2_acc.assign(fract(mul(uv(0), float(10))));',
                 '    });',
                 '    return loop2_acc;',
                 '});',
@@ -1868,9 +1967,8 @@ describe('Logic Nodes', () => {
                 '// Generated TSL Code',
                 '',
                 'const _node0 = float(0);',
-                'const _node1 = float(1);',
                 'const _assign_2 = Fn(() => {',
-                '    _node0.assign(_node1);',
+                '    _node0.assign(float(1));',
                 '    return _node0;',
                 '});',
                 'const _node2 = _assign_2();',
@@ -1896,9 +1994,8 @@ describe('Logic Nodes', () => {
                 '// Generated TSL Code',
                 '',
                 'const _node0 = float(0);',
-                'const _node1 = float(2);',
                 'const _assign_2 = Fn(() => {',
-                '    _node0.addAssign(_node1);',
+                '    _node0.addAssign(float(2));',
                 '    return _node0;',
                 '});',
                 'const _node2 = _assign_2();',

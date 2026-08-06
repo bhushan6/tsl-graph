@@ -321,6 +321,131 @@ function getCompiledNodeOutputExpression(
     return `${compiledNode.varName}${getSwizzleSuffix(outputHandle, compiledNode.singleOutput)}`;
 }
 
+function getUserDefinedNodeName(node: Node<TSLNodeData>): string | null {
+    const rawName = node.data.localName || (node.data.values?.localName as string | undefined);
+    if (typeof rawName !== 'string' || rawName.trim().length === 0) {
+        return null;
+    }
+    return rawName;
+}
+
+function isTransparentExpressionNode(node: Node<TSLNodeData> | undefined): boolean {
+    if (!node) return false;
+    return node.data.type === 'math/split'
+        || isLocalSetType(node.data.type)
+        || isLocalGetType(node.data.type);
+}
+
+/**
+ * Count the number of final expression consumers for each node. Pass-through
+ * nodes (Split and local portals) do not count as consumers themselves, so a
+ * value feeding a Split with three connected components is treated as having
+ * three uses rather than one.
+ */
+function createEffectiveUseCounter(
+    nodes: Node<TSLNodeData>[],
+    edges: Edge[],
+    additionalUses: Map<string, number> = new Map()
+): (nodeId: string) => number {
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const outgoingEdges = new Map<string, Edge[]>();
+    for (const edge of edges) {
+        const outgoing = outgoingEdges.get(edge.source) ?? [];
+        outgoing.push(edge);
+        outgoingEdges.set(edge.source, outgoing);
+    }
+
+    const memo = new Map<string, number>();
+    const countUses = (nodeId: string, active: Set<string>): number => {
+        const cached = memo.get(nodeId);
+        if (cached !== undefined) return cached;
+        if (active.has(nodeId)) return 1;
+
+        const nextActive = new Set(active);
+        nextActive.add(nodeId);
+        let count = additionalUses.get(nodeId) ?? 0;
+
+        for (const edge of outgoingEdges.get(nodeId) ?? []) {
+            const target = nodesById.get(edge.target);
+            const isNamedSplit = target?.data.type === 'math/split'
+                && getUserDefinedNodeName(target) !== null;
+            if (target && isTransparentExpressionNode(target) && !isNamedSplit) {
+                const downstreamUses = countUses(target.id, nextActive);
+                // Preserve a dangling pass-through node as the terminal consumer.
+                count += Math.max(downstreamUses, 1);
+            } else {
+                count += 1;
+            }
+        }
+
+        memo.set(nodeId, count);
+        return count;
+    };
+
+    return (nodeId: string) => countUses(nodeId, new Set());
+}
+
+function collectAssignmentTargetSources(
+    nodes: Node<TSLNodeData>[],
+    edges: Edge[]
+): Set<string> {
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const incomingEdges = new Map<string, Edge[]>();
+    for (const edge of edges) {
+        const incoming = incomingEdges.get(edge.target) ?? [];
+        incoming.push(edge);
+        incomingEdges.set(edge.target, incoming);
+    }
+
+    const sources = new Set<string>();
+    const markSource = (nodeId: string) => {
+        if (sources.has(nodeId)) return;
+        sources.add(nodeId);
+
+        const node = nodesById.get(nodeId);
+        if (!isTransparentExpressionNode(node)) return;
+        for (const edge of incomingEdges.get(nodeId) ?? []) {
+            markSource(edge.source);
+        }
+    };
+
+    for (const edge of edges) {
+        const target = nodesById.get(edge.target);
+        if (target && ASSIGN_NODE_METHODS[target.data.type] && edge.targetHandle === 'target') {
+            markSource(edge.source);
+        }
+    }
+
+    return sources;
+}
+
+function shouldInlineNodeExpression(
+    node: Node<TSLNodeData>,
+    def: NodeDef | undefined,
+    effectiveUseCount: number,
+    mustPreserveIdentity = false
+): boolean {
+    if (getUserDefinedNodeName(node) || effectiveUseCount === 0 || mustPreserveIdentity) {
+        return false;
+    }
+
+    // Split is a code-generation alias, not a value worth declaring.
+    if (node.data.type === 'math/split') {
+        return true;
+    }
+
+    // Exported TSL values/functions and literal constructors remain readable
+    // when repeated and do not benefit from generated temporary variables.
+    const isCheapExpression = def?.pure === true
+        || (node.data.type.startsWith('const/') && node.data.type !== 'const/uniform');
+
+    return isCheapExpression || effectiveUseCount === 1;
+}
+
+function asInlineExpression(code: string): string {
+    return code.trimStart().startsWith('{') ? `(${code})` : code;
+}
+
 function getAssignTargetExpression(
     node: Node<TSLNodeData>,
     edges: Edge[],
@@ -692,6 +817,8 @@ function compileSubgraphDefinition(
     // We saved edges including those to anchor nodes in store/editor.ts
     const internalEdges = withLocalDependencyEdges(internalNodes, subgraph.edges);
     const nodesById = new Map(internalNodes.map((node) => [node.id, node]));
+    const getEffectiveUseCount = createEffectiveUseCounter(internalNodes, internalEdges);
+    const assignmentTargetSources = collectAssignmentTargetSources(internalNodes, internalEdges);
 
     const isLoopGroupNode = (node: Node<TSLNodeData>) => node.type === 'loop' || node.data.type === 'loop';
     const loopGroupIds = new Set(internalNodes.filter(isLoopGroupNode).map((node) => node.id));
@@ -1046,11 +1173,19 @@ function compileSubgraphDefinition(
             nodeIndex++;
 
             const code = compileMultiOpChain(node, internalEdges, compiledNodes, argsMap);
-            targetLines.push(`${indent}const ${displayName} = ${code};`);
+            const shouldInline = shouldInlineNodeExpression(
+                node,
+                registry.get(node.data.type),
+                getEffectiveUseCount(node.id),
+                assignmentTargetSources.has(node.id)
+            );
+            if (!shouldInline) {
+                targetLines.push(`${indent}const ${displayName} = ${code};`);
+            }
 
             compiledNodes.set(node.id, {
                 id: node.id,
-                varName: displayName,
+                varName: shouldInline ? asInlineExpression(code) : displayName,
                 code,
                 singleOutput: true,
             });
@@ -1187,11 +1322,19 @@ function compileSubgraphDefinition(
             code = `${def.tsl}(${args.join(', ')})`;
         }
 
-        targetLines.push(`${indent}const ${displayName} = ${code};`);
+        const shouldInline = shouldInlineNodeExpression(
+            node,
+            def,
+            getEffectiveUseCount(node.id),
+            assignmentTargetSources.has(node.id)
+        );
+        if (!shouldInline) {
+            targetLines.push(`${indent}const ${displayName} = ${code};`);
+        }
 
         compiledNodes.set(node.id, {
             id: node.id,
-            varName: displayName,
+            varName: shouldInline ? asInlineExpression(code) : displayName,
             code,
         });
     };
@@ -1882,6 +2025,16 @@ export function compileGraph(
     lines.push('');
 
     const nodesById = new Map(nodes.map(n => [n.id, n]));
+    const additionalExpressionUses = new Map<string, number>();
+    if (options.previewTarget) {
+        additionalExpressionUses.set(options.previewTarget.nodeId, 1);
+    }
+    const getEffectiveUseCount = createEffectiveUseCounter(
+        nodes,
+        compileEdges,
+        additionalExpressionUses
+    );
+    const assignmentTargetSources = collectAssignmentTargetSources(nodes, compileEdges);
 
     const isLoopGroupNode = (node: Node<TSLNodeData>) => node.type === 'loop' || node.data.type === 'loop';
 
@@ -2214,11 +2367,19 @@ export function compileGraph(
             nodeIndex++;
 
             const code = compileMultiOpChain(node, edgesForInputs, compiledNodes);
-            targetLines.push(`const ${displayName} = ${code};`);
+            const shouldInline = shouldInlineNodeExpression(
+                node,
+                registry.get(node.data.type),
+                getEffectiveUseCount(node.id),
+                assignmentTargetSources.has(node.id)
+            );
+            if (!shouldInline) {
+                targetLines.push(`const ${displayName} = ${code};`);
+            }
 
             compiledNodes.set(node.id, {
                 id: node.id,
-                varName: displayName,
+                varName: shouldInline ? asInlineExpression(code) : displayName,
                 code,
                 singleOutput: true,
             });
@@ -2428,11 +2589,19 @@ export function compileGraph(
             code = `${def.tsl}(${args.join(', ')})`;
         }
 
-        targetLines.push(`const ${displayName} = ${code};`);
+        const shouldInline = shouldInlineNodeExpression(
+            node,
+            def,
+            getEffectiveUseCount(node.id),
+            assignmentTargetSources.has(node.id)
+        );
+        if (!shouldInline) {
+            targetLines.push(`const ${displayName} = ${code};`);
+        }
 
         compiledNodes.set(node.id, {
             id: node.id,
-            varName: displayName,
+            varName: shouldInline ? asInlineExpression(code) : displayName,
             code,
         });
     };
