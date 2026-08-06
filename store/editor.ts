@@ -1663,6 +1663,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (!targetNode) return;
 
         let nextValue = value;
+        let removeValue = false;
         if (key === 'localName' && targetNode.data.type === 'const/uniform') {
             const trimmed = String(value ?? '').trim();
             if (!trimmed) {
@@ -1695,6 +1696,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
             nextValue = trimmed;
         }
+        if (key === 'localName' && String(value ?? '').trim() === '') {
+            removeValue = true;
+            if (!Object.prototype.hasOwnProperty.call(targetNode.data.values, key)) return;
+        }
 
         get().takeSnapshot();
         let uniformKind: UniformKind | null = null;
@@ -1703,7 +1708,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         let uniformNextValue = nextValue;
         const updatedNodes = prevNodes.map((node) => {
             if (node.id !== nodeId) return node;
-            const nextValues = { ...node.data.values, [key]: nextValue };
+            const nextValues = { ...node.data.values };
+            if (removeValue) {
+                delete nextValues[key];
+            } else {
+                nextValues[key] = nextValue;
+            }
             if (node.data.type === 'const/uniform' && key === 'value') {
                 isUniformValueUpdate = true;
                 uniformKind = getUniformKindFromNode({ data: { values: nextValues } } as AppNode);

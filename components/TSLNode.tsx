@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useCallback, useEffect, useMemo } from "react";
+import { memo, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Position, useUpdateNodeInternals } from "@xyflow/react";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
@@ -159,6 +159,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   const storedName = typeof storedNameValue === "string" ? storedNameValue : "";
   const [isEditingName, setIsEditingName] = useState(false);
   const [localName, setLocalName] = useState(storedName || "local");
+  const isNameEditActiveRef = useRef(false);
 
   useEffect(() => {
     setLocalName(storedName || "local");
@@ -180,10 +181,13 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
   );
 
   const handleNameSubmit = useCallback(() => {
+    if (!isNameEditActiveRef.current) return;
+    isNameEditActiveRef.current = false;
+
     const trimmedName = localName.trim();
-    if (trimmedName) {
-      updateNodeValue(id, "localName", trimmedName);
-    }
+    // The store removes empty optional names. Required names (uniform/local
+    // nodes) are rejected there and remain unchanged.
+    updateNodeValue(id, "localName", trimmedName);
     setIsEditingName(false);
   }, [id, localName, updateNodeValue]);
 
@@ -191,6 +195,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") handleNameSubmit();
       else if (e.key === "Escape") {
+        isNameEditActiveRef.current = false;
         setLocalName(storedName);
         setIsEditingName(false);
       }
@@ -445,6 +450,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
                 <span
                   className="text-[9px] text-gray-400 dark:text-white/40 tracking-wider cursor-pointer hover:text-gray-600 dark:hover:text-white/60 transition-colors truncate block"
                   onDoubleClick={() => {
+                    isNameEditActiveRef.current = true;
                     setLocalName(storedName);
                     setIsEditingName(true);
                   }}
