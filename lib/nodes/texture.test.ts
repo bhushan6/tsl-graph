@@ -24,7 +24,7 @@ describe('Texture Nodes', () => {
         const def = textureNodes.find((node) => node.type === type);
         const outputs = def?.outputs as Record<string, unknown> | undefined;
 
-        expect(Object.keys(outputs ?? {})).toEqual(['out', 'r', 'g', 'b', 'a']);
+        expect(Object.keys(outputs ?? {})).toEqual(['r', 'g', 'b', 'a', 'out']);
         expect(outputs?.r).toEqual({ label: 'R', type: 'float' });
         expect(outputs?.a).toEqual({ label: 'A', type: 'float' });
     });

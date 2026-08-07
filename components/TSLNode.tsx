@@ -704,8 +704,13 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     );
   }
   // Include 'out' in the main list of outputs.
-  // We strictly align by index now for compactness
-  const maxRows = Math.max(visibleInputKeys.length, visibleOutputKeys.length);
+  // Texture thumbnails make their input row much taller than a handle row, so
+  // render that node's outputs as an independent compact column.
+  const hasCompactTextureOutputs =
+    isTextureSample && visibleOutputKeys.length > 1;
+  const maxRows = hasCompactTextureOutputs
+    ? visibleInputKeys.length
+    : Math.max(visibleInputKeys.length, visibleOutputKeys.length);
 
   const rows: Array<{
     key: string;
@@ -715,7 +720,9 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
 
   for (let i = 0; i < maxRows; i++) {
     const inputKey = visibleInputKeys[i];
-    const outputKey = visibleOutputKeys[i];
+    const outputKey = hasCompactTextureOutputs
+      ? undefined
+      : visibleOutputKeys[i];
 
     rows.push({
       key: `row-${i}`,
@@ -759,7 +766,10 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       {/* Content - Removed px-2 to allow handles to touch edges pattern. Added pb-3 for safe area near rounded corners */}
       <div
         className={cn(
-          "flex flex-col gap-0 pt-1 pb-1.5 rounded-b-xl",
+          "relative gap-0 pt-1 pb-1.5 rounded-b-xl",
+          hasCompactTextureOutputs
+            ? "grid grid-cols-[max-content_max-content] items-start"
+            : "flex flex-col",
           contentClass,
         )}
       >
@@ -771,81 +781,116 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
             />
           </div>
         )}
-        {rows.map((row) => (
-          <div
-            key={row.key}
-            className="flex items-center justify-between min-h-[22px]"
-          >
-            {/* Input Side */}
-            <div className="flex items-center flex-1 min-w-0 mr-2">
-              {/* Added mr-2 to separate from output side */}
-              {row.input ? (
-                <>
-                  {!row.input[1].propertyOnly && (
-                    <TSLHandle
-                      id={row.input[0]}
-                      type="target"
-                      position={Position.Left}
-                      dataType={row.input[1].type as TSLType}
-                      label={row.input[1].label}
-                      isConnected={connectedInputs.has(row.input[0])}
-                      isDark={isDark}
-                      isMaterialNode={isMaterialNode}
-                    />
-                  )}
-
-                  {row.input[1].propertyOnly && (
-                    <span className="text-[9px] text-gray-500 dark:text-gray-400 mr-2 font-mono uppercase tracking-wider ml-2">
-                      {row.input[1].label}
-                    </span>
-                  )}
-
-                  {/* Value Preview / Control - only if not connected */}
-                  {!connectedInputs.has(row.input[0]) &&
-                    !row.input[1].connectionOnly && (
-                      <div
-                        className={cn(
-                          "flex-1 flex items-center min-w-0",
-                          row.input[1].propertyOnly && "justify-end",
-                        )}
-                      >
-                        <ValuePreview
-                          inputKey={row.input[0]}
-                          type={row.input[1].type}
-                          value={
-                            nodeData.values?.[row.input[0]] ??
-                            row.input[1].default
-                          }
-                        />
-                      </div>
+        <div
+          className={cn(
+            "flex flex-col",
+            hasCompactTextureOutputs && "col-start-1 row-start-1",
+          )}
+        >
+          {rows.map((row) => (
+            <div
+              key={row.key}
+              className="flex min-h-[22px] items-center justify-between"
+            >
+              {/* Input Side */}
+              <div
+                className={cn(
+                  "flex flex-1 items-center min-w-0",
+                  !hasCompactTextureOutputs && "mr-2",
+                )}
+              >
+                {row.input ? (
+                  <>
+                    {!row.input[1].propertyOnly && (
+                      <TSLHandle
+                        id={row.input[0]}
+                        type="target"
+                        position={Position.Left}
+                        dataType={row.input[1].type as TSLType}
+                        label={row.input[1].label}
+                        isConnected={connectedInputs.has(row.input[0])}
+                        isDark={isDark}
+                        isMaterialNode={isMaterialNode}
+                      />
                     )}
-                </>
-              ) : (
-                (isUniformNode && renderUniformRowControl(row.output?.[0])) || (
-                  <div className="flex-1" />
-                )
-              )}
-            </div>
 
-            {/* Output Side */}
-            <div className="flex items-center shrink-0">
-              {row.output && (
+                    {row.input[1].propertyOnly && (
+                      <span className="text-[9px] text-gray-500 dark:text-gray-400 mr-2 font-mono uppercase tracking-wider ml-2">
+                        {row.input[1].label}
+                      </span>
+                    )}
+
+                    {/* Value Preview / Control - only if not connected */}
+                    {!connectedInputs.has(row.input[0]) &&
+                      !row.input[1].connectionOnly && (
+                        <div
+                          className={cn(
+                            "flex-1 flex items-center min-w-0",
+                            row.input[1].propertyOnly && "justify-end",
+                          )}
+                        >
+                          <ValuePreview
+                            inputKey={row.input[0]}
+                            type={row.input[1].type}
+                            value={
+                              nodeData.values?.[row.input[0]] ??
+                              row.input[1].default
+                            }
+                          />
+                        </div>
+                      )}
+                  </>
+                ) : (
+                  (isUniformNode &&
+                    renderUniformRowControl(row.output?.[0])) || (
+                    <div className="flex-1" />
+                  )
+                )}
+              </div>
+
+              {/* Output Side */}
+              <div className="flex items-center shrink-0">
+                {row.output && (
+                  <TSLHandle
+                    id={row.output[0]}
+                    type="source"
+                    position={Position.Right}
+                    dataType={
+                      inferredOutputTypes.get(row.output[0]) ??
+                      (row.output[1].type as TSLType)
+                    }
+                    label={row.output[1].label}
+                    isConnected={connectedOutputs.has(row.output[0])}
+                    isDark={isDark}
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        {hasCompactTextureOutputs && (
+          <div className="col-start-2 row-start-1 flex flex-col">
+            {visibleOutputKeys.map((outputKey) => (
+              <div
+                key={outputKey}
+                className="flex min-h-[22px] items-center justify-end"
+              >
                 <TSLHandle
-                  id={row.output[0]}
+                  id={outputKey}
                   type="source"
                   position={Position.Right}
                   dataType={
-                    inferredOutputTypes.get(row.output[0]) ??
-                    (row.output[1].type as TSLType)
+                    inferredOutputTypes.get(outputKey) ??
+                    (outputs[outputKey].type as TSLType)
                   }
-                  label={row.output[1].label}
-                  isConnected={connectedOutputs.has(row.output[0])}
+                  label={outputs[outputKey].label}
+                  isConnected={connectedOutputs.has(outputKey)}
                   isDark={isDark}
                 />
-              )}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

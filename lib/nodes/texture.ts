@@ -18,8 +18,8 @@ export const textureNodes = [
             uv: { label: 'UV', type: 'vec2', connectionOnly: true },
         },
         outputs: {
-            out: { label: 'Out', type: 'vec4' },
             ...RGBA_OUTPUTS,
+            out: { label: 'Out', type: 'vec4' },
         },
         tsl: 'texture',
     },
@@ -96,8 +96,8 @@ export const textureNodes = [
             },
         },
         outputs: {
-            out: { label: 'Out', type: 'vec4' },
             ...RGBA_OUTPUTS,
+            out: { label: 'Out', type: 'vec4' },
         },
         tsl: 'texture',
     },
@@ -126,8 +126,8 @@ export const textureNodes = [
             normal: { label: 'Normal', type: 'vec3', connectionOnly: true },
         },
         outputs: {
-            out: { label: 'Out', type: 'vec4' },
             ...RGBA_OUTPUTS,
+            out: { label: 'Out', type: 'vec4' },
         },
         tsl: 'triplanarTexture',
     },
