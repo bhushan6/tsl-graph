@@ -3,6 +3,7 @@ import {
     getComponentOutputHandle,
     getComponentOutputPorts,
     getComponentOutputType,
+    withComponentOutputPorts,
 } from './component-outputs';
 
 describe('component outputs', () => {
@@ -37,5 +38,19 @@ describe('component outputs', () => {
     it('maps color and vector swizzle aliases to their visible handles', () => {
         expect(getComponentOutputHandle('vec3', 'g')).toBe('y');
         expect(getComponentOutputHandle('color', 'y')).toBe('g');
+    });
+
+    it('adds components before a single typed output', () => {
+        expect(Object.keys(withComponentOutputPorts({
+            out: { label: 'Out', type: 'vec3' },
+        }))).toEqual(['x', 'y', 'z', 'out']);
+    });
+
+    it('does not add ambiguous components to multiple outputs', () => {
+        const outputs = {
+            out_0: { label: 'First', type: 'vec3' as const },
+            out_1: { label: 'Second', type: 'vec2' as const },
+        };
+        expect(withComponentOutputPorts(outputs)).toEqual(outputs);
     });
 });

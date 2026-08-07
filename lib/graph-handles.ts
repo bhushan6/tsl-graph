@@ -18,7 +18,7 @@ import { getMultiOpInputs } from './multi-op';
 import { resolveNodeOutputTypeById } from './type-inference';
 import { getUniformKindFromNode, getUniformOutputs } from './uniform-utils';
 import { getVisibleSplitOutputKeys } from './split-node';
-import { getComponentOutputPorts } from './component-outputs';
+import { getComponentOutputPorts, withComponentOutputPorts } from './component-outputs';
 
 export interface GraphHandleContext {
     nodesById: Map<string, AppNode>;
@@ -63,7 +63,7 @@ function collectPorts(
                 outputs[port.id] = { label: port.label, type: port.type as TSLType };
             }
         }
-        return { inputs, outputs };
+        return { inputs, outputs: withComponentOutputPorts(outputs) };
     }
 
     if (type.startsWith('code/')) {
@@ -77,14 +77,14 @@ function collectPorts(
                 outputs[port.id] = { label: port.label, type: port.type as TSLType };
             }
         }
-        return { inputs, outputs };
+        return { inputs, outputs: withComponentOutputPorts(outputs) };
     }
 
     if (type === 'global/ref') {
         const globalId = typeof node.data.values?.globalId === 'string' ? node.data.values.globalId : '';
         const entry = globalId ? ctx.globals.find((g) => g.id === globalId) : undefined;
         outputs = { out: { label: entry?.name || 'Global', type: (entry?.type as TSLType) || 'any' } };
-        return { inputs, outputs };
+        return { inputs, outputs: withComponentOutputPorts(outputs) };
     }
 
     if ((type === 'subgraph/input' || type === 'subgraph/output') && node.data.dynamicPorts) {

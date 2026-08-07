@@ -59,6 +59,24 @@ export function getComponentOutputPorts(outputType: TSLType): Record<string, Por
     );
 }
 
+/**
+ * Adds scalar component handles when a node exposes one typed output.
+ *
+ * Component handles are intentionally only derived for single-output nodes:
+ * `x` is unambiguous for a returned vec3, but not for an object containing
+ * several vector outputs.
+ */
+export function withComponentOutputPorts(outputs: Record<string, Port>): Record<string, Port> {
+    const entries = Object.entries(outputs);
+    if (entries.length !== 1) return outputs;
+
+    const [, output] = entries[0];
+    return {
+        ...getComponentOutputPorts(output.type),
+        ...outputs,
+    };
+}
+
 export function getComponentOutputType(
     outputType: TSLType,
     handleId: string | null | undefined,

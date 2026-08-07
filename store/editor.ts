@@ -42,6 +42,7 @@ import {
     planEdgeToLocalPortal,
     type EdgePortalBlockReason,
 } from '@/lib/edge-portal';
+import { getComponentOutputPorts } from '@/lib/component-outputs';
 
 // Counter to keep addNode IDs unique even when many nodes are created in the same millisecond
 let addNodeIdCounter = 0;
@@ -3673,6 +3674,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // Find existing edges to remove if ports are removed
         const newInputIds = (updatedCodeNode.inputs || []).map(p => p.id);
         const newOutputId = updatedCodeNode.output?.id;
+        const newComponentOutputIds = updatedCodeNode.output
+            ? Object.keys(getComponentOutputPorts(updatedCodeNode.output.type))
+            : [];
 
         let newEdges = edges;
 
@@ -3682,11 +3686,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (node.data.type === id || node.type === id) {
                 const newPorts = [...(updatedCodeNode.inputs || []), updatedCodeNode.output].filter(Boolean) as SubgraphPort[];
 
-                // If ports are removed, we must remove connected edges
-                // Identify removed input IDs
-                // Note: we only check inputs for removal here as output usually persists (or is single 'out')
-                // But strictly checking all valid handles is better.
-                const validHandleIds = new Set([...newInputIds, newOutputId].filter(Boolean));
+                // Keep declared inputs/output plus the channels supported by
+                // the updated output type; remove edges to channels that vanished.
+                const validHandleIds = new Set([
+                    ...newInputIds,
+                    newOutputId,
+                    ...newComponentOutputIds,
+                ].filter(Boolean));
 
                 // Filter edges connected to this node
                 newEdges = newEdges.filter(edge => {

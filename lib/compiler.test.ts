@@ -557,6 +557,28 @@ describe('compileGraph', () => {
             expect(() => new Function(code)).not.toThrow();
         });
 
+        it('should compile component handles from typed globals', () => {
+            const nodes = [
+                createNode('direction', 'global/ref', { values: { globalId: 'global-direction' } }),
+                createNode('add', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'direction', sourceHandle: 'x', target: 'add', targetHandle: 'a' },
+            ];
+            const globals: GlobalContextEntry[] = [
+                {
+                    id: 'global-direction',
+                    name: 'direction',
+                    kind: 'uniform',
+                    type: 'vec3',
+                    defaultValue: [0, 1, 0],
+                },
+            ];
+
+            const code = compileGraph(nodes, edges, undefined, undefined, { globals });
+            expect(code).toContain('add(direction.x, 1)');
+        });
+
         it('omits the global context block when omitGlobalContext is set', () => {
             const nodes = [
                 createNode('g1', 'global/ref', { values: { globalId: 'global-1' } }),
@@ -693,6 +715,32 @@ describe('compileGraph', () => {
             expect(code).toContain('const WGSL_Test = wgslFn(`');
             expect(code).toContain('const _code_node_0 = WGSL_Test({ baseColor:');
             expect(code).toContain('uv:');
+        });
+
+        it('should compile component handles from typed code nodes', () => {
+            const nodes = [
+                createNode('vector-node', 'code/vector-test'),
+                createNode('add', 'math/add', { values: { b: 1 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'vector-node', sourceHandle: 'z', target: 'add', targetHandle: 'a' },
+            ];
+            const codeNodes: Record<string, CodeNodeDefinition> = {
+                'code/vector-test': {
+                    id: 'code/vector-test',
+                    name: 'Vector Test',
+                    scope: 'project',
+                    language: 'tsl',
+                    code: 'Fn(() => vec3(1, 2, 3))',
+                    inputs: [],
+                    output: { id: 'out', label: 'Result', type: 'vec3' },
+                    createdAt: 0,
+                    updatedAt: 0,
+                },
+            };
+
+            const code = compileGraph(nodes, edges, undefined, codeNodes);
+            expect(code).toContain('add(_code_node_0.z, 1)');
         });
     });
 
@@ -1676,6 +1724,37 @@ describe('compileSubgraphCode', () => {
 
         expect(code).toBe(expected);
         expect(() => new Function(code)).not.toThrow();
+    });
+
+    it('should compile component handles from typed subgraph instances', () => {
+        const subgraph: SubgraphDefinition = {
+            id: 'custom/direction',
+            name: 'Direction',
+            inputs: [],
+            outputs: [{ id: 'out_0', label: 'Direction', type: 'vec3' }],
+            nodes: [createNode('position', 'geo/positionWorld')],
+            edges: [
+                {
+                    id: 'to-output',
+                    source: 'position',
+                    sourceHandle: 'out',
+                    target: 'subgraph-output',
+                    targetHandle: 'out_0',
+                },
+            ],
+            createdAt: 0,
+            updatedAt: 0,
+        };
+        const nodes = [
+            createNode('direction', subgraph.id),
+            createNode('add', 'math/add', { values: { b: 1 } }),
+        ];
+        const edges: Edge[] = [
+            { id: 'e1', source: 'direction', sourceHandle: 'y', target: 'add', targetHandle: 'a' },
+        ];
+
+        const code = compileGraph(nodes, edges, { [subgraph.id]: subgraph });
+        expect(code).toContain('add(_subgraph_inst_0.y, 1)');
     });
 
     it('should compile loop groups inside subgraphs', () => {

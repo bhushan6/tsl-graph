@@ -14,7 +14,10 @@ import { TEXTURE_PROP_INPUTS } from "@/lib/texture-props";
 import { POST_OUTPUT_COLOR_CONTROL_INPUTS } from "@/lib/post-output-settings";
 import { resolveNodeOutputTypeById } from "@/lib/type-inference";
 import { getVisibleSplitOutputKeys } from "@/lib/split-node";
-import { getComponentOutputPorts } from "@/lib/component-outputs";
+import {
+  getComponentOutputPorts,
+  withComponentOutputPorts,
+} from "@/lib/component-outputs";
 import {
   Tooltip,
   TooltipContent,
@@ -261,12 +264,38 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       [shouldInferOutputTypes],
     ),
   );
+  const typedOutputPortsKey = (() => {
+    if (isGlobalRef) {
+      return `global:${globalEntry?.type ?? "any"}`;
+    }
+    if (isSubgraphInstance) {
+      const ports = subgraphDef?.outputs ?? nodeData.dynamicPorts ?? [];
+      return ports
+        .filter((port) => port.id === "out" || port.id.startsWith("out_"))
+        .map((port) => `${port.id}:${port.type}`)
+        .join(HANDLE_SEPARATOR);
+    }
+    if (isCodeNodeInstance) {
+      const ports = nodeData.dynamicPorts ?? (codeNode ? [codeNode.output] : []);
+      return ports
+        .filter((port) => port.id === "out" || port.id.startsWith("out_"))
+        .map((port) => `${port.id}:${port.type}`)
+        .join(HANDLE_SEPARATOR);
+    }
+    return "";
+  })();
 
   useEffect(() => {
-    if (shouldInferOutputTypes) {
+    if (shouldInferOutputTypes || typedOutputPortsKey) {
       updateNodeInternals(id);
     }
-  }, [id, outputTypeVersion, shouldInferOutputTypes, updateNodeInternals]);
+  }, [
+    id,
+    outputTypeVersion,
+    shouldInferOutputTypes,
+    typedOutputPortsKey,
+    updateNodeInternals,
+  ]);
 
   // For subgraph and code node instances, we don't need a registry definition
   // We'll use the dynamicPorts from node data
@@ -300,15 +329,18 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
         outputs[port.id] = { label: port.label, type: port.type as TSLType };
       }
     }
+    outputs = withComponentOutputPorts(outputs);
     // Extract name from type (custom/name-timestamp)
     const namePart = nodeType.replace("custom/", "").split("-")[0];
     // Try to get dynamic name from store, fallback to parsed name from type
     nodeLabel =
       subgraphDef?.name ||
       namePart.charAt(0).toUpperCase() + namePart.slice(1).replace(/-/g, " ");
-  } else if (isCodeNodeInstance && nodeData.dynamicPorts) {
-    // Code node instance: dynamicPorts contains inputs (in_*) and output (out)
-    for (const port of nodeData.dynamicPorts) {
+  } else if (isCodeNodeInstance) {
+    const ports = nodeData.dynamicPorts ??
+      (codeNode ? [...codeNode.inputs, codeNode.output] : []);
+    // Code node instance: ports contain inputs (in_*) and one output (out)
+    for (const port of ports) {
       if (port.id.startsWith("in_")) {
         // Code node inputs are editable (no connectionOnly) to allow fallback values
         inputs[port.id] = { label: port.label, type: port.type as TSLType };
@@ -316,6 +348,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
         outputs[port.id] = { label: port.label, type: port.type as TSLType };
       }
     }
+    outputs = withComponentOutputPorts(outputs);
     if (codeNode) {
       nodeLabel = codeNode.name;
     } else {
@@ -330,6 +363,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     outputs = {
       out: { label: outputLabel, type: outputType },
     };
+    outputs = withComponentOutputPorts(outputs);
     nodeLabel = "Global";
   } else if (isAnchorNode && nodeData.dynamicPorts) {
     // Subgraph Input: dynamic ports become outputs (to connect to internal nodes)

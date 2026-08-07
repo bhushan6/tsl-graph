@@ -131,7 +131,12 @@ describe('getConnectableInputHandles', () => {
         expect(getConnectableInputHandles(node, ctx)).toEqual([
             { id: 'in_strength', label: 'Strength', type: 'float' },
         ]);
-        expect(getConnectableOutputHandles(node, ctx).map((h) => h.id)).toEqual(['out']);
+        expect(getConnectableOutputHandles(node, ctx)).toEqual([
+            { id: 'x', label: 'X', type: 'float' },
+            { id: 'y', label: 'Y', type: 'float' },
+            { id: 'z', label: 'Z', type: 'float' },
+            { id: 'out', label: 'Out', type: 'vec3' },
+        ]);
     });
 
     it('uses dynamicPorts for code instances', () => {
@@ -143,7 +148,12 @@ describe('getConnectableInputHandles', () => {
         });
         const ctx = makeCtx([node]);
         expect(getConnectableInputHandles(node, ctx).map((h) => h.id)).toEqual(['in_amount']);
-        expect(getConnectableOutputHandles(node, ctx).map((h) => h.id)).toEqual(['out']);
+        expect(getConnectableOutputHandles(node, ctx)).toEqual([
+            { id: 'x', label: 'X', type: 'float' },
+            { id: 'y', label: 'Y', type: 'float' },
+            { id: 'z', label: 'Z', type: 'float' },
+            { id: 'out', label: 'Out', type: 'vec3' },
+        ]);
     });
 
     it('returns nothing for groups and comments', () => {
@@ -164,6 +174,21 @@ describe('getConnectableOutputHandles', () => {
         });
         expect(getConnectableOutputHandles(node, ctx)).toEqual([
             { id: 'out', label: 'Time', type: 'float' },
+        ]);
+    });
+
+    it('lists typed component outputs for a vector global', () => {
+        const node = createNode('gref', 'global/ref', { values: { globalId: 'g1' } });
+        const ctx = makeCtx([node], [], {
+            globals: [
+                { id: 'g1', name: 'Direction', kind: 'uniform', type: 'vec3', defaultValue: [0, 1, 0] },
+            ],
+        });
+        expect(getConnectableOutputHandles(node, ctx)).toEqual([
+            { id: 'x', label: 'X', type: 'float' },
+            { id: 'y', label: 'Y', type: 'float' },
+            { id: 'z', label: 'Z', type: 'float' },
+            { id: 'out', label: 'Direction', type: 'vec3' },
         ]);
     });
 

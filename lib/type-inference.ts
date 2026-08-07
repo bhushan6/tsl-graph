@@ -136,18 +136,15 @@ function resolveGlobalRefType(node: Node<TSLNodeData>, globals: GlobalContextEnt
     return (entry?.type as TSLType) ?? 'any';
 }
 
-function findDynamicOutputPort(
-    ports: NonNullable<TSLNodeData['dynamicPorts']>,
-    resolvedHandle: string
-): NonNullable<TSLNodeData['dynamicPorts']>[number] | undefined {
-    return ports.find((port) => port.id === resolvedHandle)
-        ?? (
-            resolvedHandle === 'out'
-                ? ports.find((port) => port.id === 'out')
-                    ?? ports.find((port) => port.id === 'out_0')
-                    ?? ports.find((port) => port.id.startsWith('out_'))
-                : undefined
-        );
+function resolveSingleOutputType(
+    outputType: TSLType,
+    outputHandleId: string,
+    requestedHandleId: string,
+): TSLType {
+    if (requestedHandleId === outputHandleId || requestedHandleId === 'out') {
+        return outputType;
+    }
+    return getComponentOutputType(outputType, requestedHandleId) ?? 'any';
 }
 
 function resolveDeclaredOutputType(
@@ -169,16 +166,40 @@ function resolveDeclaredOutputType(
     if (node.data.type.startsWith('custom/') && subgraphs) {
         const subgraph = subgraphs[node.data.type];
         if (subgraph) {
-            const output = subgraph.outputs.find((port) => port.id === resolvedHandle)
-                ?? subgraph.outputs.find((port) => port.id === 'out_0')
-                ?? subgraph.outputs[0];
-            return (output?.type as TSLType) ?? 'any';
+            const directOutput = subgraph.outputs.find((port) => port.id === resolvedHandle);
+            if (directOutput) return directOutput.type as TSLType;
+
+            if (resolvedHandle === 'out') {
+                const fallbackOutput = subgraph.outputs.find((port) => port.id === 'out_0')
+                    ?? subgraph.outputs[0];
+                return (fallbackOutput?.type as TSLType) ?? 'any';
+            }
+
+            if (subgraph.outputs.length === 1) {
+                const output = subgraph.outputs[0];
+                return resolveSingleOutputType(output.type as TSLType, output.id, resolvedHandle);
+            }
+            return 'any';
         }
     }
 
     if (node.data.dynamicPorts && node.data.dynamicPorts.length > 0) {
-        const dynamicPort = findDynamicOutputPort(node.data.dynamicPorts, resolvedHandle);
+        const outputPorts = node.data.dynamicPorts.filter((port) => (
+            port.id === 'out' || port.id.startsWith('out_')
+        ));
+        const dynamicPort = outputPorts.find((port) => port.id === resolvedHandle);
         if (dynamicPort?.type) return dynamicPort.type;
+
+        if (resolvedHandle === 'out') {
+            const fallbackOutput = outputPorts.find((port) => port.id === 'out_0')
+                ?? outputPorts[0];
+            return fallbackOutput?.type ?? 'any';
+        }
+
+        if (outputPorts.length === 1) {
+            const output = outputPorts[0];
+            return resolveSingleOutputType(output.type, output.id, resolvedHandle);
+        }
     }
 
     const def = registry.get(node.data.type);
@@ -426,7 +447,9 @@ export function resolveNodeOutputTypeById(
     }
 
     if (node.data.type === 'global/ref') {
-        return resolveGlobalRefType(node, globals);
+        const outputType = resolveGlobalRefType(node, globals);
+        if (!handleId || handleId === 'out') return outputType;
+        return getComponentOutputType(outputType, handleId) ?? 'any';
     }
 
     if (isMathNodeType(node.data.type)) {

@@ -358,6 +358,59 @@ describe('resolveNodeOutputTypeById local inference', () => {
     );
 });
 
+describe('resolveNodeOutputTypeById typed custom outputs', () => {
+    it('resolves global vector components', () => {
+        const node = createNode('global', 'global/ref', {
+            values: { globalId: 'direction' },
+        });
+        const globals: GlobalContextEntry[] = [{
+            id: 'direction',
+            name: 'Direction',
+            kind: 'uniform',
+            type: 'vec3',
+            defaultValue: [0, 1, 0],
+        }];
+        const nodesById = new Map([[node.id, node]]);
+
+        expect(resolveNodeOutputTypeById(node.id, 'out', nodesById, [], globals)).toBe('vec3');
+        expect(resolveNodeOutputTypeById(node.id, 'z', nodesById, [], globals)).toBe('float');
+        expect(resolveNodeOutputTypeById(node.id, 'w', nodesById, [], globals)).toBe('any');
+    });
+
+    it('resolves single-output subgraph components', () => {
+        const node = createNode('subgraph', 'custom/direction');
+        const nodesById = new Map([[node.id, node]]);
+        const subgraphs = {
+            'custom/direction': {
+                id: 'custom/direction',
+                name: 'Direction',
+                inputs: [],
+                outputs: [{ id: 'out_0', label: 'Direction', type: 'vec4' as const }],
+                nodes: [],
+                edges: [],
+                createdAt: 0,
+                updatedAt: 0,
+            },
+        };
+
+        expect(resolveNodeOutputTypeById(node.id, 'out_0', nodesById, [], [], subgraphs)).toBe('vec4');
+        expect(resolveNodeOutputTypeById(node.id, 'w', nodesById, [], [], subgraphs)).toBe('float');
+    });
+
+    it('resolves code node components from its dynamic output', () => {
+        const node = createNode('code', 'code/direction', {
+            dynamicPorts: [
+                { id: 'in_scale', label: 'Scale', type: 'float' },
+                { id: 'out', label: 'Direction', type: 'vec3' },
+            ],
+        });
+        const nodesById = new Map([[node.id, node]]);
+
+        expect(resolveNodeOutputTypeById(node.id, 'out', nodesById, [], [])).toBe('vec3');
+        expect(resolveNodeOutputTypeById(node.id, 'y', nodesById, [], [])).toBe('float');
+    });
+});
+
 describe('resolveNodeOutputTypeById Var inference', () => {
     const globals: GlobalContextEntry[] = [];
 

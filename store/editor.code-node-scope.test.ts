@@ -125,6 +125,50 @@ describe('Code node scope behavior', () => {
         expect(onCodeNodeTemplateUpdate).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps valid component edges when a code node output type changes', () => {
+        const codeNodeId = 'code/vector-output';
+        useEditorStore.setState((state) => ({
+            ...state,
+            codeNodes: {
+                ...state.codeNodes,
+                [codeNodeId]: {
+                    id: codeNodeId,
+                    name: 'Vector Output',
+                    scope: 'project',
+                    language: 'tsl',
+                    code: 'Fn(() => vec3(1, 2, 3))',
+                    inputs: [],
+                    output: { id: 'out', label: 'Result', type: 'vec3' },
+                    createdAt: 1,
+                    updatedAt: 1,
+                },
+            },
+            nodes: [
+                {
+                    id: 'code-instance',
+                    type: codeNodeId,
+                    position: { x: 0, y: 0 },
+                    data: {
+                        type: codeNodeId,
+                        values: {},
+                        connected: {},
+                        dynamicPorts: [{ id: 'out', label: 'Result', type: 'vec3' }],
+                    },
+                },
+            ],
+            edges: [
+                { id: 'edge-x', source: 'code-instance', sourceHandle: 'x', target: 'target-x', targetHandle: 'value' },
+                { id: 'edge-z', source: 'code-instance', sourceHandle: 'z', target: 'target-z', targetHandle: 'value' },
+            ],
+        }));
+
+        useEditorStore.getState().updateCodeNode(codeNodeId, {
+            output: { id: 'out', label: 'Result', type: 'vec2' },
+        });
+
+        expect(useEditorStore.getState().edges.map((edge) => edge.id)).toEqual(['edge-x']);
+    });
+
     it('detaches template metadata when switching code node scope from library to project', async () => {
         const codeNodeId = 'code/library-node';
         useEditorStore.setState((state) => ({
