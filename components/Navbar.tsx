@@ -1,11 +1,25 @@
 import { memo, useRef, useCallback, useEffect, useState } from 'react';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { FileText, Download, Upload, Trash2, ChevronDown, Loader2, Pen, Share2, BookOpen, GraduationCap } from 'lucide-react';
+import {
+    BookOpen,
+    Download,
+    GraduationCap,
+    HelpCircle,
+    Loader2,
+    MessageSquarePlus,
+    Moon,
+    MoreHorizontal,
+    Pen,
+    Share2,
+    Sun,
+    Trash2,
+    Upload,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuTrigger,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -25,6 +39,7 @@ import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
 import { HelpDialog } from '@/components/HelpDialog';
 import Link from 'next/link';
+import { useTheme } from 'next-themes';
 import { useTutorialStore } from '@/store/tutorial-store';
 import {
     DEFAULT_EDITOR_HOST_CAPABILITIES,
@@ -37,7 +52,6 @@ interface NavbarProps {
     projectName?: string;
     projectId?: string;
     isReadOnly?: boolean;
-    noteSearchBar?: React.ReactNode;
     capabilities?: EditorHostCapabilities;
 }
 
@@ -76,10 +90,10 @@ export const Navbar = memo(function Navbar({
     projectName,
     projectId,
     isReadOnly,
-    noteSearchBar,
     capabilities = DEFAULT_EDITOR_HOST_CAPABILITIES,
 }: NavbarProps) {
     const router = useRouter();
+    const { resolvedTheme, setTheme } = useTheme();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const saveToJSON = useEditorStore((s) => s.saveToJSON);
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
@@ -112,6 +126,8 @@ export const Navbar = memo(function Navbar({
     const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
     const [tempName, setTempName] = useState(projectName || "");
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+    const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = useState(false);
+    const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
     const [projectIsPublic, setProjectIsPublic] = useState(false);
     const [isShareStateLoaded, setIsShareStateLoaded] = useState(false);
 
@@ -248,16 +264,19 @@ export const Navbar = memo(function Navbar({
     const shareUrl = projectId && typeof window !== "undefined"
         ? `${window.location.origin}/share/${projectId}`
         : "";
+    const isDarkTheme = resolvedTheme === 'dark';
 
     return (
-        <div className="w-full flex items-center justify-between px-3 h-10 bg-card border-b border-border pointer-events-auto rounded-md">
-            <div className="flex items-center gap-2">
-                <div
+        <div className="w-full min-w-0 flex items-center justify-between gap-2 px-3 h-10 bg-card border-b border-border pointer-events-auto rounded-md">
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                <button
+                    type="button"
                     onClick={() => router.push('/dashboard')}
                     className="flex items-center gap-2 mr-2 cursor-pointer select-none transition-opacity hover:opacity-80"
+                    aria-label="Go to dashboard"
                 >
                     <Logo size="sm" />
-                </div>
+                </button>
 
                 <div className="h-4 w-px bg-border mx-1" />
 
@@ -271,6 +290,7 @@ export const Navbar = memo(function Navbar({
                             onKeyDown={handleKeyDown}
                             autoFocus
                             disabled={isRenamingInProgress}
+                            aria-label="Project name"
                             className="text-sm font-medium mr-2 bg-transparent border-b focus:ring-0 focus:ring-offset-0 focus:outline-none text-foreground disabled:opacity-50 !flex !items-center !gap-1 w-full p-1"
                         />
                         {isRenamingInProgress && (
@@ -281,10 +301,10 @@ export const Navbar = memo(function Navbar({
                     projectName && (
                         <div
                             onDoubleClick={canRenameProject ? handleRenameStart : undefined}
-                            className="text-sm font-medium mr-2 hidden sm:inline-block text-muted-foreground cursor-text hover:text-foreground transition-colors select-none !flex !items-center !gap-1 group"
+                            className="mr-2 hidden min-w-0 max-w-40 items-center gap-1 text-sm font-medium text-muted-foreground cursor-text hover:text-foreground transition-colors select-none sm:flex group"
                             title={canRenameProject ? "Double-click to rename" : undefined}
                         >
-                            <span>{projectName}</span>
+                            <span className="truncate">{projectName}</span>
                             {canRenameProject && <Pen className="w-3 h-3 ml-1 hidden group-hover:block" />}
                         </div>
                     )
@@ -315,39 +335,9 @@ export const Navbar = memo(function Navbar({
                     )}
                 </div>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="text-xs">File</span>
-                            <ChevronDown className="w-3 h-3 opacity-50" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-48">
-                        <DropdownMenuItem onClick={handleSaveFile} className="gap-2">
-                            <Download className="w-4 h-4 text-muted-foreground" />
-                            <span>Save to JSON</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleLoadClick} className="gap-2">
-                            <Upload className="w-4 h-4 text-muted-foreground" />
-                            <span>Load from output</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={handleClearClick}
-                            disabled={nodeCount === 0}
-                            className="gap-2 text-destructive focus:text-destructive"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Clear Graph</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
             </div>
 
-            <div className="flex items-center gap-2 group">
-                {noteSearchBar}
-
+            <div className="flex shrink-0 items-center gap-2">
                 <SaveStatusBadge />
 
                 {/* Share Button - Only show for project owners, not in read-only mode */}
@@ -358,35 +348,71 @@ export const Navbar = memo(function Navbar({
                         className="h-7 w-7"
                         onClick={() => setIsShareDialogOpen(true)}
                         title="Share Project"
+                        aria-label="Share project"
                     >
                         <Share2 className="h-4 w-4" />
                     </Button>
                 )}
 
-                <Button
-                    asChild
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    title="Docs"
-                >
-                    <Link href="/docs/nodes">
-                        <BookOpen className="h-4 w-4" />
-                    </Link>
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            title="More options"
+                            aria-label="More options"
+                        >
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">File</DropdownMenuLabel>
+                        <DropdownMenuItem onSelect={handleSaveFile}>
+                            <Download />
+                            <span>Save to JSON</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={handleLoadClick}>
+                            <Upload />
+                            <span>Load from JSON</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onSelect={handleClearClick}
+                            disabled={nodeCount === 0}
+                            variant="destructive"
+                        >
+                            <Trash2 />
+                            <span>Clear graph</span>
+                        </DropdownMenuItem>
 
-                <FeedbackDialog />
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    title="Interactive Tutorials"
-                    onClick={() => useTutorialStore.getState().setLauncherOpen(true)}
-                >
-                    <GraduationCap className="h-4 w-4" />
-                </Button>
-                <HelpDialog />
-                <ThemeToggle />
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">Help</DropdownMenuLabel>
+                        <DropdownMenuItem asChild>
+                            <Link href="/docs/nodes">
+                                <BookOpen />
+                                <span>Documentation</span>
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setIsHelpDialogOpen(true)}>
+                            <HelpCircle />
+                            <span>User guide</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => useTutorialStore.getState().setLauncherOpen(true)}>
+                            <GraduationCap />
+                            <span>Interactive tutorials</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setIsFeedbackDialogOpen(true)}>
+                            <MessageSquarePlus />
+                            <span>Send feedback</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setTheme(isDarkTheme ? 'light' : 'dark')}>
+                            {isDarkTheme ? <Sun /> : <Moon />}
+                            <span>{isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             {/* Hidden file input */}
@@ -428,6 +454,17 @@ export const Navbar = memo(function Navbar({
                     shareUrl={shareUrl}
                 />
             )}
+
+            <FeedbackDialog
+                open={isFeedbackDialogOpen}
+                onOpenChange={setIsFeedbackDialogOpen}
+                showTrigger={false}
+            />
+            <HelpDialog
+                open={isHelpDialogOpen}
+                onOpenChange={setIsHelpDialogOpen}
+                showTrigger={false}
+            />
         </div>
     );
 });

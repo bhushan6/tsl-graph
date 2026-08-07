@@ -120,11 +120,19 @@ const EditorChrome = memo(function EditorChrome({
     return (
         <>
             <UILayer>
-                {!isReadOnly && isTutorialActive && isTutorialRoute && (
-                    <UILayer.CenterPanel>
+                <UILayer.CenterPanel>
+                    {!isReadOnly && isTutorialActive && isTutorialRoute && (
                         <TutorialOverlay />
-                    </UILayer.CenterPanel>
-                )}
+                    )}
+                    {isFindOpen && (
+                        <div className="pointer-events-auto absolute right-0 top-0 z-50">
+                            <NoteSearchBar
+                                open={true}
+                                onClose={onCloseFind}
+                            />
+                        </div>
+                    )}
+                </UILayer.CenterPanel>
 
                 <UILayer.TopBar>
                     <Navbar
@@ -132,14 +140,6 @@ const EditorChrome = memo(function EditorChrome({
                         projectId={projectId}
                         isReadOnly={isReadOnly}
                         capabilities={navbarProps?.capabilities}
-                        noteSearchBar={
-                            isFindOpen ? (
-                                <NoteSearchBar
-                                    open={true}
-                                    onClose={onCloseFind}
-                                />
-                            ) : null
-                        }
                     />
                 </UILayer.TopBar>
 

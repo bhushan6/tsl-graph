@@ -33,7 +33,7 @@ const UILayerRoot = memo(({ children }: UILayerProps) => {
             className="fixed inset-0 z-40 pointer-events-none"
             style={{
                 display: 'grid',
-                gridTemplateColumns: 'auto 1fr auto',
+                gridTemplateColumns: 'auto minmax(0, 1fr) auto',
                 gridTemplateRows: 'auto 1fr',
                 gridTemplateAreas: `
                     "left topbar right"
@@ -52,7 +52,7 @@ UILayerRoot.displayName = 'UILayerRoot';
 const TopBar = memo(({ children, className = '' }: SlotProps) => (
     <div
         style={{ gridArea: 'topbar' }}
-        className={`pointer-events-none flex items-center justify-between min-h-[40px] ${className}`}
+        className={`pointer-events-none flex min-w-0 items-center justify-between min-h-[40px] ${className}`}
     >
         {children}
     </div>

@@ -29,8 +29,25 @@ import { Id } from "@/convex/_generated/dataModel";
 import { getErrorMessage } from "@/lib/utils";
 import FileUploadCompact from "@/components/file-upload/compact-upload";
 
-export function FeedbackDialog() {
-    const [open, setOpen] = useState(false);
+interface FeedbackDialogProps {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    showTrigger?: boolean;
+}
+
+export function FeedbackDialog({
+    open: controlledOpen,
+    onOpenChange,
+    showTrigger = true,
+}: FeedbackDialogProps = {}) {
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = (nextOpen: boolean) => {
+        if (controlledOpen === undefined) {
+            setInternalOpen(nextOpen);
+        }
+        onOpenChange?.(nextOpen);
+    };
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [type, setType] = useState("feature");
@@ -92,12 +109,14 @@ export function FeedbackDialog() {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                    <MessageSquarePlus className="h-5 w-5" />
-                    <span className="sr-only">Provide Feedback</span>
-                </Button>
-            </DialogTrigger>
+            {showTrigger && (
+                <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+                        <MessageSquarePlus className="h-5 w-5" />
+                        <span className="sr-only">Provide Feedback</span>
+                    </Button>
+                </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Send Feedback</DialogTitle>

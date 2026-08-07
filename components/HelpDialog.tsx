@@ -28,14 +28,22 @@ const COLOR_GUIDE: { label: string; type: TSLType }[] = [
     { label: 'Any', type: 'any' },
 ];
 
-function HelpDialogComponent() {
+interface HelpDialogProps {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    showTrigger?: boolean;
+}
+
+function HelpDialogComponent({ open, onOpenChange, showTrigger = true }: HelpDialogProps) {
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground transition-colors" title="Help & Documentation">
-                    <HelpCircle className="h-4 w-4" />
-                </Button>
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            {showTrigger && (
+                <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground transition-colors" title="Help & Documentation">
+                        <HelpCircle className="h-4 w-4" />
+                    </Button>
+                </DialogTrigger>
+            )}
             <DialogContent className="max-w-[80vw] min-w-[70vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-4 border-b shrink-0">
                     <div className="flex items-center gap-2">
