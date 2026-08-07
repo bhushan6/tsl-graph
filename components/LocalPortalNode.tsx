@@ -1,13 +1,15 @@
 'use client';
 
-import { memo, useCallback, useMemo } from 'react';
-import { Position } from '@xyflow/react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
+import { Position, useUpdateNodeInternals } from '@xyflow/react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useEditorStore } from '@/store/editor';
 import { TSLHandle } from './TSLHandle';
 import { getLocalSetReferenceLabel, getLocalSourceId, isLocalGetType, isLocalSetType } from '@/lib/local-utils';
-import type { AppNode } from '@/lib/types';
+import { resolveNodeOutputTypeById } from '@/lib/type-inference';
+import { getComponentOutputPorts } from '@/lib/component-outputs';
+import type { AppNode, Port, TSLType } from '@/lib/types';
 import type { NodeProps } from '@xyflow/react';
 
 type LocalPortalNodeProps = NodeProps<AppNode>;
@@ -21,6 +23,7 @@ const deserializeHandleSet = (value: string) =>
     new Set(value ? value.split(HANDLE_SEPARATOR).filter(Boolean) : []);
 
 function LocalPortalNodeComponent({ id, data, selected }: LocalPortalNodeProps) {
+    const updateNodeInternals = useUpdateNodeInternals();
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
     const isLocalSet = isLocalSetType(data.type);
@@ -44,6 +47,36 @@ function LocalPortalNodeComponent({ id, data, selected }: LocalPortalNodeProps) 
         const [inputPart = '', outputPart = ''] = connectedHandlesKey.split(HANDLE_GROUP_SEPARATOR);
         return [deserializeHandleSet(inputPart), deserializeHandleSet(outputPart)];
     }, [connectedHandlesKey]);
+
+    const graphStructureVersion = useEditorStore((state) => state.graphStructureVersion);
+    const outputType = useMemo(() => {
+        void graphStructureVersion;
+        const state = useEditorStore.getState();
+        const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
+        return resolveNodeOutputTypeById(
+            id,
+            'out',
+            nodesById,
+            state.edges,
+            state.globals,
+            state.subgraphs,
+        );
+    }, [graphStructureVersion, id]);
+
+    const outputPorts = useMemo(() => {
+        const components = isLocalGet
+            ? Object.entries(getComponentOutputPorts(outputType))
+            : [];
+        return [
+            ...components,
+            ['out', { label: 'Out', type: outputType }] as [string, Port],
+        ];
+    }, [isLocalGet, outputType]);
+
+    const outputHandlesKey = outputPorts.map(([handleId]) => handleId).join(HANDLE_SEPARATOR);
+    useEffect(() => {
+        updateNodeInternals(id);
+    }, [id, outputHandlesKey, updateNodeInternals]);
 
     const localSourceIdValue = data.values?.localSourceId;
     const localSourceId = isLocalGet && typeof localSourceIdValue === 'string' && localSourceIdValue.length > 0
@@ -143,34 +176,36 @@ function LocalPortalNodeComponent({ id, data, selected }: LocalPortalNodeProps) 
             </div>
 
             <div className="flex flex-col gap-0 pt-1 pb-1.5 rounded-b-xl">
-                <div className="flex items-center justify-between min-h-[22px]">
-                    <div className="flex items-center flex-1 min-w-0 mr-2">
-                        {isLocalSet ? (
+                {outputPorts.map(([handleId, port], index) => (
+                    <div key={handleId} className="flex items-center justify-between min-h-[22px]">
+                        <div className="flex items-center flex-1 min-w-0 mr-2">
+                            {isLocalSet && index === 0 ? (
+                                <TSLHandle
+                                    id="value"
+                                    type="target"
+                                    position={Position.Left}
+                                    dataType={outputType}
+                                    label="Value"
+                                    isConnected={connectedInputs.has('value')}
+                                    isDark={isDark}
+                                />
+                            ) : (
+                                <div className="flex-1" />
+                            )}
+                        </div>
+                        <div className="flex items-center shrink-0">
                             <TSLHandle
-                                id="value"
-                                type="target"
-                                position={Position.Left}
-                                dataType="any"
-                                label="Value"
-                                isConnected={connectedInputs.has('value')}
+                                id={handleId}
+                                type="source"
+                                position={Position.Right}
+                                dataType={port.type as TSLType}
+                                label={port.label}
+                                isConnected={connectedOutputs.has(handleId)}
                                 isDark={isDark}
                             />
-                        ) : (
-                            <div className="flex-1" />
-                        )}
+                        </div>
                     </div>
-                    <div className="flex items-center shrink-0">
-                        <TSLHandle
-                            id="out"
-                            type="source"
-                            position={Position.Right}
-                            dataType="any"
-                            label="Out"
-                            isConnected={connectedOutputs.has('out')}
-                            isDark={isDark}
-                        />
-                    </div>
-                </div>
+                ))}
             </div>
         </div>
     );

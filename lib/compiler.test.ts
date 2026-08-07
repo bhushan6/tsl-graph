@@ -1224,6 +1224,22 @@ describe('compileGraph', () => {
             expect(code).toContain('add(vec3(1, 2, 3).x, 10)');
         });
 
+        it('compiles a component output selected directly from Get Local', () => {
+            const nodes = [
+                createNode('vec', 'const/vec3', { values: { x: 1, y: 2, z: 3 } }),
+                createNode('setA', 'local/set', { values: { localName: 'position' } }),
+                createNode('getA', 'local/get', { values: { localSourceId: 'setA' } }),
+                createNode('sum', 'math/add', { values: { b: 10 } }),
+            ];
+            const edges: Edge[] = [
+                { id: 'e1', source: 'vec', sourceHandle: 'out', target: 'setA', targetHandle: 'value' },
+                { id: 'e2', source: 'getA', sourceHandle: 'z', target: 'sum', targetHandle: 'a' },
+            ];
+
+            const code = compileGraph(nodes, edges);
+            expect(code).toContain('add(vec3(1, 2, 3).z, 10)');
+        });
+
         it('supports chained Set→Get→Set→Get (multi-hop portals)', () => {
             const nodes = [
                 createNode('constA', 'const/float', { values: { value: 7 } }),
@@ -2023,6 +2039,19 @@ describe('Logic Nodes', () => {
 
             expect(code).toContain('const position = Var(');
             expect(code).toContain('position.y.addAssign(');
+        });
+
+        it('should compile a component output selected directly from Var', () => {
+            const vec = createNode('vec1', 'const/vec3', { values: { x: 1, y: 2, z: 3 } });
+            const varNode = createNode('var1', 'advanced/var', { localName: 'position' });
+            const sum = createNode('sum1', 'math/add', { values: { b: 10 } });
+            const edges: Edge[] = [
+                { id: 'e1', source: vec.id, sourceHandle: 'out', target: varNode.id, targetHandle: 'node' },
+                { id: 'e2', source: varNode.id, sourceHandle: 'z', target: sum.id, targetHandle: 'a' },
+            ];
+
+            const code = compileGraph([vec, varNode, sum], edges);
+            expect(code).toContain('add(position.z, 10)');
         });
     });
 });

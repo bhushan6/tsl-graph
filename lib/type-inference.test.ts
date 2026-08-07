@@ -124,6 +124,14 @@ beforeAll(() => {
             },
             outputs: { out: { type: 'any', label: 'Out' } },
         },
+        {
+            type: 'advanced/var',
+            label: 'Var',
+            category: 'Advanced',
+            tsl: 'Var',
+            inputs: { node: { type: 'any', label: 'Node' } },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
     ]);
 });
 
@@ -247,5 +255,160 @@ describe('resolveNodeOutputTypeById math inference', () => {
         ];
 
         expect(resolveNodeOutputTypeById('mix', 'out', nodesById, edges, globals)).toBe('vec3');
+    });
+});
+
+describe('resolveNodeOutputTypeById local inference', () => {
+    const globals: GlobalContextEntry[] = [];
+
+    it('preserves a vec4 type through Set/Get Local and types its components', () => {
+        const sourceNode = createNode('source', 'math/add', {
+            values: { a: [1, 2, 3, 4], b: 1 },
+        });
+        const setNode = createNode('set', 'local/set');
+        const getNode = createNode('get', 'local/get', {
+            values: { localSourceId: 'set' },
+        });
+        const nodesById = new Map([
+            ['source', sourceNode],
+            ['set', setNode],
+            ['get', getNode],
+        ]);
+        const edges: Edge[] = [
+            {
+                id: 'source-to-set',
+                source: 'source',
+                sourceHandle: 'out',
+                target: 'set',
+                targetHandle: 'value',
+            },
+        ];
+
+        expect(resolveNodeOutputTypeById('set', 'out', nodesById, edges, globals)).toBe('vec4');
+        expect(resolveNodeOutputTypeById('get', 'out', nodesById, edges, globals)).toBe('vec4');
+        expect(resolveNodeOutputTypeById('get', 'x', nodesById, edges, globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('get', 'w', nodesById, edges, globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('get', 'z', nodesById, edges, globals)).toBe('float');
+    });
+
+    it('exposes RGB scalar types for a color local', () => {
+        const sourceNode = createNode('source', 'math/add', {
+            values: { a: '#336699', b: 0 },
+        });
+        const setNode = createNode('set', 'local/set');
+        const getNode = createNode('get', 'local/get', {
+            values: { localSourceId: 'set' },
+        });
+        const nodesById = new Map([
+            ['source', sourceNode],
+            ['set', setNode],
+            ['get', getNode],
+        ]);
+        const edges: Edge[] = [
+            {
+                id: 'source-to-set',
+                source: 'source',
+                sourceHandle: 'out',
+                target: 'set',
+                targetHandle: 'value',
+            },
+        ];
+
+        expect(resolveNodeOutputTypeById('get', 'out', nodesById, edges, globals)).toBe('color');
+        expect(resolveNodeOutputTypeById('get', 'r', nodesById, edges, globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('get', 'g', nodesById, edges, globals)).toBe('float');
+        expect(resolveNodeOutputTypeById('get', 'b', nodesById, edges, globals)).toBe('float');
+    });
+
+    it.each([
+        ['float', 'out', 'float'],
+        ['int', 'out', 'int'],
+        ['bool', 'out', 'bool'],
+        ['vec2', 'out', 'vec2'],
+        ['vec3', 'z', 'float'],
+        ['vec4', 'w', 'float'],
+        ['color', 'r', 'float'],
+    ] as const)(
+        'preserves a %s uniform through Set/Get Local for the %s output',
+        (uniformType, handleId, expectedType) => {
+            const uniformNode = createNode('uniform', 'const/uniform', {
+                values: { uniformType },
+            });
+            const setNode = createNode('set', 'local/set');
+            const getNode = createNode('get', 'local/get', {
+                values: { localSourceId: 'set' },
+            });
+            const nodesById = new Map([
+                ['uniform', uniformNode],
+                ['set', setNode],
+                ['get', getNode],
+            ]);
+            const edges: Edge[] = [
+                {
+                    id: 'uniform-to-set',
+                    source: 'uniform',
+                    sourceHandle: 'out',
+                    target: 'set',
+                    targetHandle: 'value',
+                },
+            ];
+
+            expect(resolveNodeOutputTypeById('get', handleId, nodesById, edges, globals)).toBe(expectedType);
+        },
+    );
+});
+
+describe('resolveNodeOutputTypeById Var inference', () => {
+    const globals: GlobalContextEntry[] = [];
+
+    it.each([
+        [0, 'float'],
+        [false, 'bool'],
+        [[1, 2], 'vec2'],
+        [[1, 2, 3], 'vec3'],
+        [[1, 2, 3, 4], 'vec4'],
+        ['#336699', 'color'],
+    ] as const)('mirrors a connected %s input as %s', (value, expectedType) => {
+        const sourceNode = createNode('source', 'math/add', {
+            values: { a: value, b: 0 },
+        });
+        const varNode = createNode('var', 'advanced/var');
+        const nodesById = new Map([
+            ['source', sourceNode],
+            ['var', varNode],
+        ]);
+        const edges: Edge[] = [
+            {
+                id: 'source-to-var',
+                source: 'source',
+                sourceHandle: 'out',
+                target: 'var',
+                targetHandle: 'node',
+            },
+        ];
+
+        expect(resolveNodeOutputTypeById('var', 'out', nodesById, edges, globals)).toBe(expectedType);
+    });
+
+    it('types vector component outputs as floats', () => {
+        const sourceNode = createNode('source', 'math/add', {
+            values: { a: [1, 2, 3, 4], b: 0 },
+        });
+        const varNode = createNode('var', 'advanced/var');
+        const nodesById = new Map([
+            ['source', sourceNode],
+            ['var', varNode],
+        ]);
+        const edges: Edge[] = [
+            {
+                id: 'source-to-var',
+                source: 'source',
+                sourceHandle: 'out',
+                target: 'var',
+                targetHandle: 'node',
+            },
+        ];
+
+        expect(resolveNodeOutputTypeById('var', 'w', nodesById, edges, globals)).toBe('float');
     });
 });

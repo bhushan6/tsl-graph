@@ -18,6 +18,7 @@ import { getMultiOpInputs } from './multi-op';
 import { resolveNodeOutputTypeById } from './type-inference';
 import { getUniformKindFromNode, getUniformOutputs } from './uniform-utils';
 import { getVisibleSplitOutputKeys } from './split-node';
+import { getComponentOutputPorts } from './component-outputs';
 
 export interface GraphHandleContext {
     nodesById: Map<string, AppNode>;
@@ -137,6 +138,23 @@ export function getConnectableOutputHandles(node: AppNode, ctx: GraphHandleConte
     if (isNonConnectable(node)) return [];
     const { outputs } = collectPorts(node, ctx);
     let handles = getVisibleOutputHandles(outputs);
+
+    if (node.data.type === 'local/get' || node.data.type === 'advanced/var') {
+        const outputType = resolveNodeOutputTypeById(
+            node.id,
+            'out',
+            ctx.nodesById,
+            ctx.edges,
+            ctx.globals,
+            ctx.subgraphs
+        );
+        const componentHandles = getVisibleOutputHandles(getComponentOutputPorts(outputType));
+        handles = [
+            ...componentHandles,
+            ...handles.filter((handle) => handle.id !== 'out'),
+            { id: 'out', label: 'Out', type: outputType },
+        ];
+    }
 
     if (node.data.type === 'math/split') {
         const inputConnected = ctx.edges.some(

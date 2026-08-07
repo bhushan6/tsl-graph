@@ -82,6 +82,14 @@ beforeAll(() => {
             },
             outputs: { out: { type: 'any', label: 'Out' } },
         },
+        {
+            type: 'advanced/var' as NodeType,
+            label: 'Var',
+            category: 'Advanced',
+            tsl: 'Var',
+            inputs: { node: { type: 'any', label: 'Node' } },
+            outputs: { out: { type: 'any', label: 'Out' } },
+        },
     ] as never[]);
 });
 
@@ -169,6 +177,93 @@ describe('getConnectableOutputHandles', () => {
         const handles = getConnectableOutputHandles(addNode, ctx);
         const out = handles.find((h) => h.id === 'out');
         expect(out?.type).toBe('float');
+    });
+
+    it('lists typed component outputs for a vec4 Get Local', () => {
+        const sourceNode = createNode('source', 'math/add', {
+            values: { a: [1, 2, 3, 4], b: 1 },
+        });
+        const setNode = createNode('set', 'local/set');
+        const getNode = createNode('get', 'local/get', {
+            values: { localSourceId: 'set' },
+        });
+        const edges: Edge[] = [
+            {
+                id: 'source-to-set',
+                source: 'source',
+                sourceHandle: 'out',
+                target: 'set',
+                targetHandle: 'value',
+            },
+        ];
+        const handles = getConnectableOutputHandles(
+            getNode,
+            makeCtx([sourceNode, setNode, getNode], edges),
+        );
+
+        expect(handles).toEqual([
+            { id: 'x', label: 'X', type: 'float' },
+            { id: 'y', label: 'Y', type: 'float' },
+            { id: 'z', label: 'Z', type: 'float' },
+            { id: 'w', label: 'W', type: 'float' },
+            { id: 'out', label: 'Out', type: 'vec4' },
+        ]);
+    });
+
+    it('lists typed component outputs when Get Local reads a vec3 uniform', () => {
+        const uniformNode = createNode('uniform', 'const/uniform', {
+            values: { uniformType: 'vec3', value: [1, 2, 3] },
+        });
+        const setNode = createNode('set', 'local/set');
+        const getNode = createNode('get', 'local/get', {
+            values: { localSourceId: 'set' },
+        });
+        const edges: Edge[] = [
+            {
+                id: 'uniform-to-set',
+                source: 'uniform',
+                sourceHandle: 'out',
+                target: 'set',
+                targetHandle: 'value',
+            },
+        ];
+
+        expect(getConnectableOutputHandles(
+            getNode,
+            makeCtx([uniformNode, setNode, getNode], edges),
+        )).toEqual([
+            { id: 'x', label: 'X', type: 'float' },
+            { id: 'y', label: 'Y', type: 'float' },
+            { id: 'z', label: 'Z', type: 'float' },
+            { id: 'out', label: 'Out', type: 'vec3' },
+        ]);
+    });
+
+    it('lists inferred component outputs for a Var node', () => {
+        const sourceNode = createNode('source', 'math/add', {
+            values: { a: [1, 2, 3, 4], b: 0 },
+        });
+        const varNode = createNode('var', 'advanced/var');
+        const edges: Edge[] = [
+            {
+                id: 'source-to-var',
+                source: 'source',
+                sourceHandle: 'out',
+                target: 'var',
+                targetHandle: 'node',
+            },
+        ];
+
+        expect(getConnectableOutputHandles(
+            varNode,
+            makeCtx([sourceNode, varNode], edges),
+        )).toEqual([
+            { id: 'x', label: 'X', type: 'float' },
+            { id: 'y', label: 'Y', type: 'float' },
+            { id: 'z', label: 'Z', type: 'float' },
+            { id: 'w', label: 'W', type: 'float' },
+            { id: 'out', label: 'Out', type: 'vec4' },
+        ]);
     });
 });
 

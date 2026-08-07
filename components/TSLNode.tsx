@@ -251,7 +251,10 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
       [isGlobalRef, selectedGlobalId],
     ),
   );
-  const shouldInferOutputTypes = nodeType === "math/multiOp" || nodeType.startsWith("math/");
+  const shouldInferOutputTypes =
+    nodeType === "advanced/var" ||
+    nodeType === "math/multiOp" ||
+    nodeType.startsWith("math/");
   const outputTypeVersion = useEditorStore(
     useCallback(
       (state) => (shouldInferOutputTypes ? state.graphStructureVersion : 0),

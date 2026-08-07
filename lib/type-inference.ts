@@ -4,10 +4,13 @@ import { registry } from './registry';
 import type { GlobalContextEntry, Port, SubgraphDefinition, TSLNodeData, TSLType } from './types';
 import { inferLiteralTSLType } from './value-type-utils';
 import { getComponentOutputType } from './component-outputs';
+import { getUniformKindFromNode } from './uniform-utils';
 
 const LOCAL_SET_NODE_TYPE = 'local/set' as const;
 const LOCAL_GET_NODE_TYPE = 'local/get' as const;
 const LOCAL_SET_INPUT_HANDLE = 'value' as const;
+const VAR_NODE_TYPE = 'advanced/var' as const;
+const VAR_INPUT_HANDLE = 'node' as const;
 
 interface ResolverContext {
     nodesById: Map<string, Node<TSLNodeData>>;
@@ -156,6 +159,12 @@ function resolveDeclaredOutputType(
     if (node.data.type === 'global/ref') return 'any';
 
     const resolvedHandle = handleId ?? 'out';
+
+    if (node.data.type === 'const/uniform') {
+        const uniformType = getUniformKindFromNode(node);
+        if (resolvedHandle === 'out') return uniformType;
+        return getComponentOutputType(uniformType, resolvedHandle) ?? 'any';
+    }
 
     if (node.data.type.startsWith('custom/') && subgraphs) {
         const subgraph = subgraphs[node.data.type];
@@ -363,6 +372,18 @@ function isMathNodeType(type: string): boolean {
     return type === 'math/multiOp' || type.startsWith('math/');
 }
 
+function resolvePassthroughOutputType(
+    node: Node<TSLNodeData>,
+    inputHandle: string,
+    outputHandle: string | null | undefined,
+    context: ResolverContext,
+): TSLType {
+    const def = registry.get(node.data.type);
+    const outputType = resolveInputPortType(node, inputHandle, def?.inputs?.[inputHandle], context);
+    if (!outputHandle || outputHandle === 'out') return outputType;
+    return getComponentOutputType(outputType, outputHandle) ?? 'any';
+}
+
 export function resolveNodeOutputTypeById(
     nodeId: string,
     handleId: string | null | undefined,
@@ -389,11 +410,19 @@ export function resolveNodeOutputTypeById(
         const setNode = nodesById.get(setId);
         if (!setNode || !isLocalSetType(setNode.data.type)) return 'any';
         if (!isLocalScopeAccessible(setNode, node, nodesById)) return 'any';
-        return resolveLocalSetSourceType(setNode, context);
+        const outputType = resolveLocalSetSourceType(setNode, context);
+        if (!handleId || handleId === 'out') return outputType;
+        return getComponentOutputType(outputType, handleId) ?? 'any';
     }
 
     if (isLocalSetType(node.data.type)) {
-        return resolveLocalSetSourceType(node, context);
+        const outputType = resolveLocalSetSourceType(node, context);
+        if (!handleId || handleId === 'out') return outputType;
+        return getComponentOutputType(outputType, handleId) ?? 'any';
+    }
+
+    if (node.data.type === VAR_NODE_TYPE) {
+        return resolvePassthroughOutputType(node, VAR_INPUT_HANDLE, handleId, context);
     }
 
     if (node.data.type === 'global/ref') {
