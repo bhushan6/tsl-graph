@@ -1,10 +1,16 @@
 import { NodeDef, NodeType } from './types';
+import { withComponentOutputPorts } from './component-outputs';
 
 class NodeRegistry {
     private defs = new Map<string, NodeDef>();
 
     register(def: NodeDef) {
-        this.defs.set(def.type, def);
+        this.defs.set(def.type, def.outputs
+            ? {
+                ...def,
+                outputs: withComponentOutputPorts(def.outputs),
+            }
+            : def);
     }
 
     registerMany(defs: readonly NodeDef[]) {
