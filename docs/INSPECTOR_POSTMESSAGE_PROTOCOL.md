@@ -15,6 +15,9 @@ This document defines the iframe integration contract between a host app (for ex
   - `tsl:command:get-uniform-schema`
   - `tsl:command:set-uniform-values`
 - No built-in persistence bridge. Host decides when/how to persist.
+- An optional public project bootstrap can be requested with `projectId` in the standalone URL.
+  It is read once when the iframe starts; the standalone editor does not subscribe to the
+  project or write edits back to Convex. Host applications remain responsible for persistence.
 
 ## Envelope
 
@@ -261,6 +264,8 @@ Recommended host behavior:
 
 1. Create iframe URL:
 - `/editor/standalone?docId=<id>&graphs=material&targetOrigin=<host-origin>`
+- To start from a shared project, append `projectId=<public-project-id>`:
+  `/editor/standalone?projectId=<public-project-id>&targetOrigin=<host-origin>`
 
 2. Listen for messages and validate:
 - `event.origin`
@@ -268,6 +273,10 @@ Recommended host behavior:
 - `requestId` for command/response matching
 
 3. On `tsl:event:ready`:
+- The ready event is sent only after the postMessage listener is installed and the initial
+  standalone bootstrap (including the optional public project graph) has completed.
+- If the host has a newer saved draft, send `tsl:command:load` after this event. That host
+  payload becomes the editor's working copy for the rest of the iframe session.
 - Optionally send `tsl:command:set-root-material` with the selected `materialType`.
 - Editor can stay blank until host chooses a material/graph and sends `tsl:command:load`.
 
@@ -281,6 +290,27 @@ Recommended host behavior:
 
 6. Persist graph in host app:
 - Keep your own debounce policy and persist `graphData` pulled through `tsl:command:get-graph`.
+
+### Public project embed
+
+The share dialog's **Standalone editor URL** points at the auth-free editor bootstrap. It is
+available only while the project is public. The generated iframe markup is equivalent to:
+
+```html
+<iframe
+  src="https://example.com/editor/standalone?projectId=<public-project-id>"
+  width="100%"
+  height="600"
+  title="TSL Graph"
+  allowfullscreen
+  style="border:0"
+></iframe>
+```
+
+The project graph is copied into the iframe's local editor state once. Edits, including edits
+made through host commands, stay browser-local unless the embedding host explicitly reads the
+graph and persists it itself. A private, missing, malformed, or unavailable project id opens
+the recovery screen instead of exposing project data.
 
 ## Security and reliability guidance
 

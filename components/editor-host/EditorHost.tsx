@@ -37,6 +37,8 @@ interface EditorHostProps<TRef> {
         graphData: unknown;
         projectName?: string;
     } | null;
+    /** Called after the one-time bootstrap has initialized the editor store. */
+    onInitialized?: () => void;
     templateCallbacks?: TemplateCallbacks;
 }
 
@@ -47,6 +49,7 @@ export function EditorHost<TRef>({
     hasThumbnail,
     isReadOnly,
     initialData,
+    onInitialized,
     templateCallbacks,
 }: EditorHostProps<TRef>) {
     const loadFromJSON = useEditorStore((s) => s.loadFromJSON);
@@ -224,6 +227,7 @@ export function EditorHost<TRef>({
             } finally {
                 if (!cancelled) {
                     setIsInitializing(false);
+                    onInitialized?.();
                 }
             }
         };
@@ -248,6 +252,7 @@ export function EditorHost<TRef>({
         setProjectId,
         setTemplateCallbacks,
         effectiveTemplateCallbacks,
+        onInitialized,
     ]);
 
     if (isInitializing) {

@@ -3,6 +3,15 @@ import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 import { createErrorData, ErrorCodes } from "./errors";
 
+// Public standalone embeds intentionally use this narrow projection rather than
+// `get`, which also consults auth and returns owner/private project details.
+export const selectPublicStandaloneProject = (
+    project: { graphData: unknown; name: string; isPublic: boolean } | null | undefined,
+) => {
+    if (!project || !project.isPublic) return null;
+    return { graphData: project.graphData, name: project.name };
+};
+
 // Create a new project
 export const create = mutation({
     args: {
@@ -268,6 +277,21 @@ export const get = query({
             likeCount: project.likeCount ?? 0,
             likedByMe,
         };
+    },
+});
+
+// Auth-free bootstrap for the standalone editor. The id is deliberately a
+// string so malformed/public URLs return null instead of throwing Convex's
+// validator error. Private projects remain unavailable, including to owners.
+export const getPublicStandalone = query({
+    args: {
+        id: v.string(),
+    },
+    handler: async (ctx, args) => {
+        const projectId = ctx.db.normalizeId("projects", args.id);
+        if (!projectId) return null;
+
+        return selectPublicStandaloneProject(await ctx.db.get(projectId));
     },
 });
 

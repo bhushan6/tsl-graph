@@ -47,6 +47,7 @@ import {
     type EditorHostCapabilities,
 } from '@/lib/editor-host/types';
 import { useEditorHostConfig } from '@/lib/editor-host/context';
+import { getStandaloneProjectUrl } from '@/lib/editor-host/standalone-project';
 
 interface NavbarProps {
     projectName?: string;
@@ -264,6 +265,9 @@ export const Navbar = memo(function Navbar({
     const shareUrl = projectId && typeof window !== "undefined"
         ? `${window.location.origin}/share/${projectId}`
         : "";
+    const standaloneUrl = projectId && typeof window !== "undefined"
+        ? getStandaloneProjectUrl(window.location.origin, projectId)
+        : "";
     const isDarkTheme = resolvedTheme === 'dark';
 
     return (
@@ -452,6 +456,7 @@ export const Navbar = memo(function Navbar({
                     isPublic={projectIsPublic}
                     onTogglePublic={handleShareVisibilityChange}
                     shareUrl={shareUrl}
+                    embedUrl={standaloneUrl}
                 />
             )}
 

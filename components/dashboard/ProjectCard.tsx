@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ShareDialog } from "@/components/ShareDialog";
+import { getStandaloneProjectUrl } from "@/lib/editor-host/standalone-project";
 
 interface ProjectCardProps {
     project: {
@@ -241,6 +242,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                     });
                 }}
                 shareUrl={typeof window !== "undefined" ? `${window.location.origin}/share/${project._id}` : ""}
+                embedUrl={typeof window !== "undefined" ? getStandaloneProjectUrl(window.location.origin, project._id) : ""}
             />
         </>
     );

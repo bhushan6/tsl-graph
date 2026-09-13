@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useConvex } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { Button } from '@/components/ui/button';
+import { Loader2, RefreshCcw } from 'lucide-react';
 import { EditorHost } from '@/components/editor-host/EditorHost';
 import { compileGraph, compilePostGraph, getRequiredImportsByModule, type ImportGroup } from '@/lib/compiler';
 import { createEditorAssetReconcilerController } from '@/lib/editor-host/use-editor-persistence';
@@ -234,6 +238,17 @@ const stripMaterialClassImports = (imports: ImportGroup[]): ImportGroup[] => imp
 
 export default function StandaloneEditorClient() {
     const searchParams = useSearchParams();
+    const sessionKey = JSON.stringify([
+        searchParams.get('projectId'),
+        searchParams.get('docId') ?? 'standalone',
+    ]);
+
+    return <StandaloneEditorSession key={sessionKey} />;
+}
+
+function StandaloneEditorSession() {
+    const searchParams = useSearchParams();
+    const convex = useConvex();
     const graphStructureVersion = useEditorStore((s) => s.graphStructureVersion);
     const nodes = useEditorStore((s) => s.nodes);
     const globals = useEditorStore((s) => s.globals);
@@ -241,6 +256,7 @@ export default function StandaloneEditorClient() {
 
     const targetOrigin = searchParams.get('targetOrigin') ?? '*';
     const docId = searchParams.get('docId') ?? 'standalone';
+    const projectId = searchParams.get('projectId');
     const requestedEnabledGraphs = useMemo(
         () => parseEnabledGraphs(searchParams.get('graphs')),
         [searchParams]
@@ -249,6 +265,55 @@ export default function StandaloneEditorClient() {
         () => normalizeEnabledGraphs(requestedEnabledGraphs),
         [requestedEnabledGraphs]
     );
+
+    type ProjectLoadState = 'loading' | 'ready' | 'unavailable' | 'error';
+    const [projectLoadState, setProjectLoadState] = useState<ProjectLoadState>(
+        projectId ? 'loading' : 'ready'
+    );
+    const [projectBootstrap, setProjectBootstrap] = useState<{
+        graphData: unknown;
+        projectName?: string;
+    } | null>(null);
+    const [projectBootstrapKey, setProjectBootstrapKey] = useState<string | null>(null);
+    const [retryToken, setRetryToken] = useState(0);
+    const listenerInstalledRef = useRef(false);
+    const [editorInitialized, setEditorInitialized] = useState(false);
+
+    useEffect(() => {
+        if (!projectId) return;
+
+        let active = true;
+
+        void convex.query(api.projects.getPublicStandalone, { id: projectId })
+            .then(async (project) => {
+                if (!active) return;
+                if (!project) {
+                    setProjectLoadState('unavailable');
+                    return;
+                }
+
+                // Reuse the standalone asset rehydrator for public JSON/object
+                // payloads before handing the one-time bootstrap to EditorHost.
+                const graphData = await serializeGraphDataForLoad(project.graphData);
+                if (!active) return;
+
+                setProjectBootstrap({
+                    graphData,
+                    projectName: project.name,
+                });
+                setProjectBootstrapKey(projectId);
+                setProjectLoadState('ready');
+            })
+            .catch((error) => {
+                if (!active) return;
+                console.error('Failed to load public standalone project:', error);
+                setProjectLoadState('error');
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [convex, projectId, retryToken]);
 
     const persistence = useMemo(() => createNoopPersistenceAdapter(), []);
     const assets = useMemo(() => createStandaloneIndexedDbAssetsAdapter(), []);
@@ -326,7 +391,18 @@ export default function StandaloneEditorClient() {
         };
     }, [enabledGraphs]);
 
+    const readySentRef = useRef(false);
+    const graphReadyRevisionRef = useRef<number | null>(null);
+
     useEffect(() => {
+        if (
+            !listenerInstalledRef.current
+            || !editorInitialized
+            || projectLoadState !== 'ready'
+            || (!!projectId && projectBootstrapKey !== projectId)
+            || readySentRef.current
+        ) return;
+
         const payload: EditorReadyPayload = {
             version: 1,
             enabledGraphs,
@@ -340,9 +416,25 @@ export default function StandaloneEditorClient() {
             },
             targetOrigin
         );
-    }, [enabledGraphs, targetOrigin]);
+        readySentRef.current = true;
+    }, [
+        docId,
+        editorInitialized,
+        enabledGraphs,
+        projectBootstrapKey,
+        projectId,
+        projectLoadState,
+        targetOrigin,
+    ]);
 
     useEffect(() => {
+        if (
+            !listenerInstalledRef.current
+            || !editorInitialized
+            || graphReadyRevisionRef.current === null
+            || graphStructureVersion === graphReadyRevisionRef.current
+        ) return;
+
         const payload: EditorGraphChangedPayload = {
             revision: graphStructureVersion,
         };
@@ -355,7 +447,7 @@ export default function StandaloneEditorClient() {
             },
             targetOrigin
         );
-    }, [graphStructureVersion, targetOrigin]);
+    }, [editorInitialized, graphStructureVersion, targetOrigin]);
 
     useEffect(() => {
         if (!assets.reconcileGraphAssets) {
@@ -372,26 +464,6 @@ export default function StandaloneEditorClient() {
             controller.dispose();
         };
     }, [assets, docId]);
-
-    useEffect(() => {
-        const uniforms = buildUniformSchema();
-        const signature = createUniformsSignature(uniforms);
-        if (signature === lastUniformsSignatureRef.current) {
-            return;
-        }
-
-        lastUniformsSignatureRef.current = signature;
-        const payload: UniformsChangedPayload = { uniforms };
-
-        postMessageToHost(
-            {
-                source: EDITOR_POSTMESSAGE_SOURCE,
-                type: 'tsl:event:uniforms-changed',
-                payload,
-            },
-            targetOrigin
-        );
-    }, [globals, nodes, targetOrigin]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -591,10 +663,34 @@ export default function StandaloneEditorClient() {
         };
 
         window.addEventListener('message', handleMessage);
+        listenerInstalledRef.current = true;
         return () => {
+            listenerInstalledRef.current = false;
             window.removeEventListener('message', handleMessage);
         };
     }, [buildCodePayload, targetOrigin]);
+
+    useEffect(() => {
+        if (!listenerInstalledRef.current || !editorInitialized) return;
+
+        const uniforms = buildUniformSchema();
+        const signature = createUniformsSignature(uniforms);
+        if (signature === lastUniformsSignatureRef.current) {
+            return;
+        }
+
+        lastUniformsSignatureRef.current = signature;
+        const payload: UniformsChangedPayload = { uniforms };
+
+        postMessageToHost(
+            {
+                source: EDITOR_POSTMESSAGE_SOURCE,
+                type: 'tsl:event:uniforms-changed',
+                payload,
+            },
+            targetOrigin
+        );
+    }, [editorInitialized, globals, nodes, targetOrigin]);
 
     const hostConfig = useMemo<EditorHostConfig<StandaloneRef>>(
         () => ({
@@ -615,5 +711,72 @@ export default function StandaloneEditorClient() {
         [assets, docId, enabledGraphs, persistence]
     );
 
-    return <EditorHost config={hostConfig} projectName="" />;
+    const isBootstrapReady = projectLoadState === 'ready'
+        && (!projectId || projectBootstrapKey === projectId);
+    const initialData = projectId && projectBootstrapKey === projectId
+        ? projectBootstrap
+        : null;
+    const handleEditorInitialized = useCallback(() => {
+        graphReadyRevisionRef.current = useEditorStore.getState().graphStructureVersion;
+        setEditorInitialized(true);
+    }, []);
+    const handleOpenEmpty = useCallback(() => {
+        setProjectBootstrap(null);
+        setProjectBootstrapKey(projectId);
+        setProjectLoadState('ready');
+    }, [projectId]);
+
+    if (!isBootstrapReady) {
+        if (projectLoadState === 'unavailable' || projectLoadState === 'error') {
+            const isNetworkError = projectLoadState === 'error';
+            return (
+                <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+                    <div className="w-full max-w-md space-y-4 text-center">
+                        <h1 className="text-lg font-medium">
+                            {isNetworkError ? 'Unable to load public project' : 'Project unavailable'}
+                        </h1>
+                        <p className="text-sm text-muted-foreground">
+                            {isNetworkError
+                                ? 'Check your connection and try again, or open an empty editor.'
+                                : 'This project may be private, missing, or no longer shared.'}
+                        </p>
+                        <div className="flex justify-center gap-2">
+                            {isNetworkError && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setProjectLoadState('loading');
+                                        setRetryToken((value) => value + 1);
+                                    }}
+                                >
+                                    <RefreshCcw className="mr-2 h-4 w-4" />
+                                    Retry
+                                </Button>
+                            )}
+                            <Button type="button" onClick={handleOpenEmpty}>
+                                Open empty editor
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+                <Loader2 className="h-7 w-7 animate-spin text-primary" aria-label="Loading editor" />
+            </div>
+        );
+    }
+
+    return (
+        <EditorHost
+            key={`${projectId ?? 'empty'}:${docId}`}
+            config={hostConfig}
+            projectName={projectBootstrap?.projectName ?? ''}
+            initialData={initialData}
+            onInitialized={handleEditorInitialized}
+        />
+    );
 }
