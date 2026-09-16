@@ -1,7 +1,16 @@
+import type { StandaloneUiSurface } from './standalone-ui';
+
 /** Build the public, auth-free editor URL used for embeds. */
-export function getStandaloneProjectUrl(origin: string, projectId: string): string {
+export function getStandaloneProjectUrl(
+    origin: string,
+    projectId: string,
+    show?: readonly StandaloneUiSurface[],
+): string {
     const url = new URL('/editor/standalone', origin);
     url.searchParams.set('projectId', projectId);
+    if (show !== undefined) {
+        url.searchParams.set('show', show.join(','));
+    }
     return url.toString();
 }
 

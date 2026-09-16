@@ -19,6 +19,7 @@ import {
 import type { Id } from '@/convex/_generated/dataModel';
 import { EditorHostProvider } from '@/lib/editor-host/context';
 import { TemplateLibraryProvider, requestTemplateLibraryRefresh } from '@/lib/editor-host/template-library';
+import type { EditorChromeVisibility } from '@/lib/editor-host/standalone-ui';
 
 interface TemplateCallbacks {
     onSubgraphTemplateCreate?: (subgraph: SubgraphDefinition) => Promise<{ templateId: string; version: number }>;
@@ -33,6 +34,7 @@ interface EditorHostProps<TRef> {
     projectName?: string;
     hasThumbnail?: boolean;
     isReadOnly?: boolean;
+    chromeVisibility?: EditorChromeVisibility;
     initialData?: {
         graphData: unknown;
         projectName?: string;
@@ -48,6 +50,7 @@ export function EditorHost<TRef>({
     projectName,
     hasThumbnail,
     isReadOnly,
+    chromeVisibility,
     initialData,
     onInitialized,
     templateCallbacks,
@@ -275,6 +278,7 @@ export function EditorHost<TRef>({
                             projectId={projectId}
                             hasThumbnail={hasThumbnail}
                             isReadOnly={isReadOnly}
+                            chromeVisibility={chromeVisibility}
                             capabilities={capabilities}
                         />
                     </main>

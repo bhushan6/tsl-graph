@@ -37,6 +37,7 @@ import {
 } from '@/lib/editor-host/postmessage';
 import type { EditorGraphKind, EditorHostConfig, EditorPersistenceAdapter } from '@/lib/editor-host/types';
 import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
+import { parseStandaloneUiVisibility } from '@/lib/editor-host/standalone-ui';
 
 const parseEnabledGraphs = (rawValue: string | null): EditorGraphKind[] | undefined => {
     if (!rawValue) return undefined;
@@ -241,6 +242,7 @@ export default function StandaloneEditorClient() {
     const sessionKey = JSON.stringify([
         searchParams.get('projectId'),
         searchParams.get('docId') ?? 'standalone',
+        searchParams.get('show'),
     ]);
 
     return <StandaloneEditorSession key={sessionKey} />;
@@ -257,6 +259,11 @@ function StandaloneEditorSession() {
     const targetOrigin = searchParams.get('targetOrigin') ?? '*';
     const docId = searchParams.get('docId') ?? 'standalone';
     const projectId = searchParams.get('projectId');
+    const showParam = searchParams.get('show');
+    const chromeVisibility = useMemo(
+        () => parseStandaloneUiVisibility(showParam),
+        [showParam]
+    );
     const requestedEnabledGraphs = useMemo(
         () => parseEnabledGraphs(searchParams.get('graphs')),
         [searchParams]
@@ -777,6 +784,7 @@ function StandaloneEditorSession() {
             projectName={projectBootstrap?.projectName ?? ''}
             initialData={initialData}
             onInitialized={handleEditorInitialized}
+            chromeVisibility={chromeVisibility}
         />
     );
 }

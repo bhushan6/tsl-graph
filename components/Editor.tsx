@@ -44,7 +44,7 @@ import { AiChatDock } from './AiChatDock';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
 import { Button } from '@/components/ui/button';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, SlidersHorizontal } from 'lucide-react';
 import TSLEdge from './TSLEdge';
 import { CanvasEdgeDropPicker } from './CanvasEdgeDropPicker';
 import { EdgeContextMenu } from './EdgeContextMenu';
@@ -57,6 +57,11 @@ import { DEFAULT_EDITOR_HOST_CAPABILITIES, type EditorHostCapabilities } from '@
 import { TutorialOverlay, TutorialHighlight, TutorialComplete, TutorialLauncher } from '@/components/tutorial';
 import { useTutorialStore } from '@/store/tutorial-store';
 import { EDITOR_SHORTCUTS, isEditorShortcutBlocked, matchesEditorShortcut } from '@/lib/editor-shortcuts';
+import {
+    FULL_EDITOR_CHROME,
+    type EditorChromeVisibility,
+} from '@/lib/editor-host/standalone-ui';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 // Initialize nodes on module load
 initializeNodes();
@@ -68,6 +73,16 @@ const edgeTypes = {
 const MULTI_SELECTION_KEYS = ["Shift", "Meta", "Control"];
 const DELETE_KEYS = ["Backspace", "Delete"];
 
+type ToggleableChrome = Exclude<keyof EditorChromeVisibility, 'controls'>;
+
+const CHROME_OPTIONS: { key: ToggleableChrome; label: string }[] = [
+    { key: 'library', label: 'Node library' },
+    { key: 'preview', label: 'Preview' },
+    { key: 'inspector', label: 'Properties' },
+    { key: 'toolbar', label: 'Toolbar' },
+    { key: 'navbar', label: 'Navbar' },
+];
+
 interface NavbarProps {
     projectName?: string;
     projectId?: Id<"projects">;
@@ -78,6 +93,7 @@ interface EditorProps extends NavbarProps {
     projectId?: Id<"projects">;
     hasThumbnail?: boolean;
     isReadOnly?: boolean;
+    chromeVisibility?: EditorChromeVisibility;
 }
 
 interface EditorChromeProps {
@@ -85,6 +101,7 @@ interface EditorChromeProps {
     projectId?: Id<"projects">;
     hasThumbnail?: boolean;
     isReadOnly?: boolean;
+    chromeVisibility?: EditorChromeVisibility;
     isFindOpen: boolean;
     onCloseFind: () => void;
 }
@@ -94,6 +111,7 @@ const EditorChrome = memo(function EditorChrome({
     projectId,
     hasThumbnail,
     isReadOnly,
+    chromeVisibility = FULL_EDITOR_CHROME,
     isFindOpen,
     onCloseFind,
 }: EditorChromeProps) {
@@ -106,8 +124,10 @@ const EditorChrome = memo(function EditorChrome({
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
     const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
+    const [chromeOverrides, setChromeOverrides] = useState<Partial<EditorChromeVisibility>>({});
     const canUseAI = navbarProps?.capabilities?.canUseAI ?? DEFAULT_EDITOR_HOST_CAPABILITIES.canUseAI;
     const effectiveBottomBarMode = canUseAI ? bottomBarMode : 'toolbar';
+    const visibleChrome = { ...chromeVisibility, ...chromeOverrides };
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
     const onOpenNodePicker = useCallback(() => setIsNodePickerOpen(true), []);
@@ -116,6 +136,21 @@ const EditorChrome = memo(function EditorChrome({
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
     const onOpenAiDock = useCallback(() => setBottomBarMode('ai'), []);
     const onOpenToolbar = useCallback(() => setBottomBarMode('toolbar'), []);
+    const setChromeVisible = useCallback((surface: ToggleableChrome, visible: boolean) => {
+        setChromeOverrides((current) => ({ ...current, [surface]: visible }));
+    }, []);
+    const showAllChrome = useCallback(() => {
+        setChromeOverrides({
+            navbar: true,
+            library: true,
+            preview: true,
+            inspector: true,
+            toolbar: true,
+        });
+    }, []);
+    const resetChrome = useCallback(() => setChromeOverrides({}), []);
+    const hidePreview = useCallback(() => setChromeVisible('preview', false), [setChromeVisible]);
+    const hideInspector = useCallback(() => setChromeVisible('inspector', false), [setChromeVisible]);
 
     return (
         <>
@@ -132,18 +167,65 @@ const EditorChrome = memo(function EditorChrome({
                             />
                         </div>
                     )}
+                    {chromeVisibility.controls && (
+                        <div className="pointer-events-auto absolute right-0 top-0 z-50">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-10 w-10 border-sidebar-border bg-background/95 shadow-sm backdrop-blur"
+                                        aria-label="Configure editor panels"
+                                        title="Configure editor panels"
+                                    >
+                                        <SlidersHorizontal className="h-4 w-4" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="end" className="w-56 p-2">
+                                    <p className="px-2 pb-1.5 text-sm font-medium">Editor panels</p>
+                                    <div className="space-y-0.5">
+                                        {CHROME_OPTIONS.map((option) => (
+                                            <label
+                                                key={option.key}
+                                                className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                                            >
+                                                <span>{option.label}</span>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={visibleChrome[option.key]}
+                                                    onChange={(event) => setChromeVisible(option.key, event.target.checked)}
+                                                    className="h-4 w-4 accent-foreground"
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="mt-2 flex gap-2 border-t pt-2">
+                                        <Button type="button" variant="outline" size="sm" onClick={showAllChrome}>
+                                            Show all
+                                        </Button>
+                                        <Button type="button" variant="ghost" size="sm" onClick={resetChrome}>
+                                            Reset
+                                        </Button>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    )}
                 </UILayer.CenterPanel>
 
-                <UILayer.TopBar>
-                    <Navbar
-                        {...navbarProps}
-                        projectId={projectId}
-                        isReadOnly={isReadOnly}
-                        capabilities={navbarProps?.capabilities}
-                    />
-                </UILayer.TopBar>
+                {visibleChrome.navbar && (
+                    <UILayer.TopBar>
+                        <Navbar
+                            {...navbarProps}
+                            projectId={projectId}
+                            isReadOnly={isReadOnly}
+                            capabilities={navbarProps?.capabilities}
+                        />
+                    </UILayer.TopBar>
+                )}
 
-                {!isReadOnly && (
+                {!isReadOnly && visibleChrome.library && (
                     <UILayer.LeftPanel>
                         {isNodePickerOpen ? (
                             <NodePicker
@@ -163,12 +245,22 @@ const EditorChrome = memo(function EditorChrome({
                     </UILayer.LeftPanel>
                 )}
 
-                <UILayer.RightPanel>
-                    {editorMode === 'main' && <Preview projectId={projectId} hasThumbnail={hasThumbnail} />}
-                    {!isReadOnly && <PropertiesPanel />}
-                </UILayer.RightPanel>
+                {(visibleChrome.preview || (!isReadOnly && visibleChrome.inspector)) && (
+                    <UILayer.RightPanel>
+                        {visibleChrome.preview && editorMode === 'main' && (
+                            <Preview
+                                projectId={projectId}
+                                hasThumbnail={hasThumbnail}
+                                onHide={chromeVisibility.controls ? hidePreview : undefined}
+                            />
+                        )}
+                        {!isReadOnly && visibleChrome.inspector && (
+                            <PropertiesPanel onHide={chromeVisibility.controls ? hideInspector : undefined} />
+                        )}
+                    </UILayer.RightPanel>
+                )}
 
-                {!isReadOnly && (
+                {!isReadOnly && visibleChrome.toolbar && (
                     <UILayer.BottomBar>
                         {editorMode === 'subgraph' ? (
                             <Toolbar
@@ -809,6 +901,7 @@ function EditorContent(props: EditorProps) {
                 projectId={props.projectId}
                 hasThumbnail={props.hasThumbnail}
                 isReadOnly={props.isReadOnly}
+                chromeVisibility={props.chromeVisibility}
                 isFindOpen={isFindOpen}
                 onCloseFind={onCloseFind}
             />

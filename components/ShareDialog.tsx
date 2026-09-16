@@ -221,6 +221,9 @@ export function ShareDialog({
                                 <p className="text-xs text-muted-foreground">
                                     Embedded edits stay in the browser. Your host app owns persistence.
                                 </p>
+                                <p className="text-xs text-muted-foreground">
+                                    To start with a compact UI, append <code>show=preview,controls</code> to the URL.
+                                </p>
                             </div>
                         </div>
                     )}

@@ -43,6 +43,7 @@ export interface PreviewCanvas3DProps {
 export interface PreviewControlsProps {
     isFullScreen: boolean;
     onToggleFullScreen: () => void;
+    onHide?: () => void;
     onDownloadSnapshot: () => void;
     isReady: boolean;
     allowPostProcessingToggle: boolean;

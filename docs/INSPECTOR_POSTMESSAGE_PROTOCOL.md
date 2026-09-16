@@ -312,6 +312,38 @@ made through host commands, stay browser-local unless the embedding host explici
 graph and persists it itself. A private, missing, malformed, or unavailable project id opens
 the recovery screen instead of exposing project data.
 
+### Embedded UI controls
+
+Use the optional `show` query parameter as a comma-separated allow-list of editor surfaces. If
+`show` is absent, the complete editor remains visible for backward compatibility. The graph
+canvas is always rendered and is not a `show` value.
+
+Supported values are:
+
+- `preview` — final shader preview
+- `library` — node library on the left
+- `inspector` — properties, uniforms, and globals on the right
+- `toolbar` — graph toolbar
+- `navbar` — top navigation
+- `controls` — menu for independently showing, hiding, or resetting the optional panels
+- `none` — explicit graph-only preset; it overrides other values
+
+Examples:
+
+```text
+# Graph only
+/editor/standalone?projectId=<id>&show=none
+
+# Graph and final preview, with independent panel controls
+/editor/standalone?projectId=<id>&show=preview,controls
+
+# Graph, preview, and toolbar
+/editor/standalone?projectId=<id>&show=preview,toolbar,controls
+```
+
+The `show` value controls only the initial embed presentation. Changes made through the controls
+menu last for the iframe session only; they do not change the URL, graph, or persistence behavior.
+
 ## Security and reliability guidance
 
 1. Always validate message origin in production.

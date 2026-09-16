@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { AlertCircle, Camera, Maximize2, Minimize2, Settings2 } from 'lucide-react';
+import { AlertCircle, Camera, EyeOff, Maximize2, Minimize2, Settings2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -49,6 +49,7 @@ const hdriOptions = [
 function PreviewControlsComponent({
     isFullScreen,
     onToggleFullScreen,
+    onHide,
     onDownloadSnapshot,
     isReady,
     allowPostProcessingToggle,
@@ -109,6 +110,18 @@ function PreviewControlsComponent({
             </Dialog>
 
             <div className="absolute top-2 right-2 z-10 flex gap-1">
+                {onHide && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={onHide}
+                        title="Hide preview"
+                        aria-label="Hide preview"
+                    >
+                        <EyeOff className="h-4 w-4" />
+                    </Button>
+                )}
                 <Button
                     variant="ghost"
                     size="icon"

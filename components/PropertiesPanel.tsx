@@ -23,7 +23,7 @@ import { AnyInput } from './inputs/AnyInput';
 import { useDebouncedCallback } from '@/utils/useDebouncedCallback';
 import type { SubgraphPort, TSLType, CodeNodeDefinition, TSLValueType, AppNode, GlobalContextEntry, GlobalContextKind } from '@/lib/types';
 import { getMultiOpInputs, getMultiOpLabel, type MultiOp } from '@/lib/multi-op';
-import { Layers, Plus, Trash2, Upload, Code, Crosshair } from 'lucide-react';
+import { Layers, Plus, Trash2, Upload, Code, Crosshair, PanelRightClose } from 'lucide-react';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { AssetInput } from './inputs/AssetInput';
 import {
@@ -2497,7 +2497,7 @@ function NumberInput({
     );
 }
 
-function PropertiesPanelComponent() {
+function PropertiesPanelComponent({ onHide }: { onHide?: () => void }) {
     return (
         <div
             data-tutorial-target="properties-panel"
@@ -2508,11 +2508,26 @@ function PropertiesPanelComponent() {
             )}
         >
             <Tabs defaultValue="properties" className="flex flex-col h-full">
-                <TabsList className="mx-2 mt-3 mb-2 w-[calc(100%-1rem)]">
-                    <TabsTrigger value="properties">Properties</TabsTrigger>
-                    <TabsTrigger value="uniforms">Uniforms</TabsTrigger>
-                    <TabsTrigger value="globals">Globals</TabsTrigger>
-                </TabsList>
+                <div className="mx-2 mt-3 mb-2 flex items-center gap-1">
+                    <TabsList className="min-w-0 flex-1">
+                        <TabsTrigger value="properties">Properties</TabsTrigger>
+                        <TabsTrigger value="uniforms">Uniforms</TabsTrigger>
+                        <TabsTrigger value="globals">Globals</TabsTrigger>
+                    </TabsList>
+                    {onHide && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={onHide}
+                            className="h-8 w-8 shrink-0"
+                            title="Hide properties"
+                            aria-label="Hide properties"
+                        >
+                            <PanelRightClose className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
                 <TabsContent value="properties" className="flex-1 min-h-0">
                     <PropertiesPanelContent />
                 </TabsContent>

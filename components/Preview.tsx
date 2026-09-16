@@ -13,7 +13,7 @@ import type { PreviewCanvasHandle, PreviewCaptureUploadArgs } from './preview/ty
 import { useEditorHostConfig } from '@/lib/editor-host/context';
 import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
 
-export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
+export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onHide?: () => void }) {
     const canvasRef = useRef<PreviewCanvasHandle | null>(null);
     const hostConfig = useEditorHostConfig();
     const enabledGraphs = normalizeEnabledGraphs(hostConfig?.enabledGraphs);
@@ -222,6 +222,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean }) {
             <PreviewControls
                 isFullScreen={isFullScreen}
                 onToggleFullScreen={handleToggleFullScreen}
+                onHide={props.onHide}
                 onDownloadSnapshot={handleDownloadSnapshot}
                 isReady={isReady}
                 allowPostProcessingToggle={postGraphEnabled}
