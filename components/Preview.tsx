@@ -158,7 +158,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
 
             if ((previewSettings.thumbnailMode ?? 'auto') === 'auto') {
                 updatePreviewSettings({ thumbnailMode: 'manual' });
-                toast.success('Thumbnail updated — auto-updates paused', {
+                toast.success('Thumbnail updated : auto-updates paused', {
                     action: {
                         label: 'Keep auto',
                         onClick: () => updatePreviewSettings({ thumbnailMode: 'auto' }),
