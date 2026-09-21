@@ -1,14 +1,15 @@
 'use client';
 
 import { memo } from 'react';
-import { AlertCircle, Camera, EyeOff, Maximize2, Minimize2, Settings2 } from 'lucide-react';
+import { AlertCircle, Camera, Download, EyeOff, ImageIcon, Loader2, Maximize2, Minimize2, Settings2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { useTheme } from 'next-themes';
-import type { PreviewMeshType } from '@/store/editor';
+import type { PreviewMeshType, ThumbnailMode } from '@/store/editor';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,11 @@ function PreviewControlsComponent({
     onToggleFullScreen,
     onHide,
     onDownloadSnapshot,
+    canSetThumbnail,
+    isSettingThumbnail,
+    onSetThumbnail,
+    thumbnailMode,
+    onThumbnailModeChange,
     isReady,
     allowPostProcessingToggle,
     previewSettings,
@@ -131,15 +137,39 @@ function PreviewControlsComponent({
                     {isFullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </Button>
 
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={onDownloadSnapshot}
-                    title="Take Snapshot"
-                >
-                    <Camera className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            title="Snapshot"
+                            aria-label="Snapshot"
+                            disabled={isSettingThumbnail}
+                        >
+                            {isSettingThumbnail ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Camera className="h-4 w-4" />
+                            )}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {canSetThumbnail && (
+                            <DropdownMenuItem
+                                disabled={!isReady || isSettingThumbnail}
+                                onSelect={() => onSetThumbnail()}
+                            >
+                                <ImageIcon className="h-4 w-4" />
+                                Set as thumbnail
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onSelect={() => onDownloadSnapshot()}>
+                            <Download className="h-4 w-4" />
+                            Download snapshot
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
                 <Popover>
                     <PopoverTrigger asChild>
@@ -508,6 +538,29 @@ function PreviewControlsComponent({
                                                 />
                                             </div>
                                         )}
+                                    </>
+                                )}
+
+                                {canSetThumbnail && (
+                                    <>
+                                        <div className="h-[1px] bg-border my-1" />
+
+                                        <div className="grid grid-cols-2 items-center gap-4">
+                                            <Label>Thumbnail</Label>
+                                            <select
+                                                className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors"
+                                                value={thumbnailMode}
+                                                onChange={(e) => onThumbnailModeChange(e.target.value as ThumbnailMode)}
+                                            >
+                                                <option value="auto">Auto</option>
+                                                <option value="manual">Manual</option>
+                                            </select>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {thumbnailMode === 'auto'
+                                                ? 'The project thumbnail updates automatically as the graph changes.'
+                                                : 'The project thumbnail only updates when you set it from the snapshot menu.'}
+                                        </p>
                                     </>
                                 )}
                             </div>

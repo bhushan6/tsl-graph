@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useConvex } from 'convex/react';
 import { toast } from 'sonner';
-import { useEditorStore } from '@/store/editor';
+import { useEditorStore, type ThumbnailMode } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -27,6 +27,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
 
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [isReady, setIsReady] = useState(false);
+    const [isSettingThumbnail, setIsSettingThumbnail] = useState(false);
     const [materialError, setMaterialError] = useState<string | null>(null);
     const [postError, setPostError] = useState<string | null>(null);
     const [geometryScriptError, setGeometryScriptError] = useState<string | null>(null);
@@ -128,8 +129,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
         return () => setPreviewSnapshotProvider(null);
     }, [capturePreviewForAi, setPreviewSnapshotProvider]);
 
-    const captureSnapshot = useCallback(async () => {
-        if (!canUploadThumbnail || !canvasRef.current) return;
+    const captureSnapshot = useCallback(async (): Promise<boolean> => {
+        if (!canUploadThumbnail || !canvasRef.current) return false;
 
         try {
             await canvasRef.current.capturePreviewForAi({
@@ -137,10 +138,49 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
                 quality: 0.7,
                 purpose: 'thumbnail',
             });
+            return true;
         } catch (err) {
             console.error('Failed to update thumbnail:', err);
+            return false;
         }
     }, [canUploadThumbnail]);
+
+    const handleSetThumbnail = useCallback(async () => {
+        if (isSettingThumbnail || !canUploadThumbnail) return;
+
+        setIsSettingThumbnail(true);
+        try {
+            const didCapture = await captureSnapshot();
+            if (!didCapture) {
+                toast.error('Failed to update thumbnail');
+                return;
+            }
+
+            if ((previewSettings.thumbnailMode ?? 'auto') === 'auto') {
+                updatePreviewSettings({ thumbnailMode: 'manual' });
+                toast.success('Thumbnail updated — auto-updates paused', {
+                    action: {
+                        label: 'Keep auto',
+                        onClick: () => updatePreviewSettings({ thumbnailMode: 'auto' }),
+                    },
+                });
+            } else {
+                toast.success('Thumbnail updated');
+            }
+        } finally {
+            setIsSettingThumbnail(false);
+        }
+    }, [
+        canUploadThumbnail,
+        captureSnapshot,
+        isSettingThumbnail,
+        previewSettings.thumbnailMode,
+        updatePreviewSettings,
+    ]);
+
+    const handleThumbnailModeChange = useCallback((mode: ThumbnailMode) => {
+        updatePreviewSettings({ thumbnailMode: mode });
+    }, [updatePreviewSettings]);
 
     const handleDownloadSnapshot = useCallback(() => {
         canvasRef.current?.downloadSnapshot();
@@ -150,18 +190,21 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
         setIsFullScreen((prev) => !prev);
     }, []);
 
-    useEffect(() => {
-        if (isReady && canUploadThumbnail && !props.hasThumbnail && !initialSnapshotTaken.current) {
-            const timeout = setTimeout(() => {
-                captureSnapshot();
-                initialSnapshotTaken.current = true;
-            }, 1000);
-            return () => clearTimeout(timeout);
-        }
-    }, [canUploadThumbnail, isReady, props.hasThumbnail, captureSnapshot]);
+    const thumbnailMode = previewSettings.thumbnailMode ?? 'auto';
 
     useEffect(() => {
-        if (!isReady || !canUploadThumbnail) return;
+        if (!isReady || !canUploadThumbnail || thumbnailMode !== 'auto') return;
+        if (props.hasThumbnail || initialSnapshotTaken.current) return;
+
+        const timeout = setTimeout(() => {
+            captureSnapshot();
+            initialSnapshotTaken.current = true;
+        }, 1000);
+        return () => clearTimeout(timeout);
+    }, [canUploadThumbnail, isReady, props.hasThumbnail, captureSnapshot, thumbnailMode]);
+
+    useEffect(() => {
+        if (!isReady || !canUploadThumbnail || thumbnailMode !== 'auto') return;
 
         if (nodeCount < lastSnapshotNodeCount.current) {
             lastSnapshotNodeCount.current = nodeCount;
@@ -175,7 +218,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
             }, 1000);
             return () => clearTimeout(timeout);
         }
-    }, [nodeCount, canUploadThumbnail, isReady, captureSnapshot]);
+    }, [nodeCount, canUploadThumbnail, isReady, captureSnapshot, thumbnailMode]);
 
     useEffect(() => {
         const { nodes: currentNodes, updateNodeValue } = useEditorStore.getState();
@@ -224,6 +267,11 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
                 onToggleFullScreen={handleToggleFullScreen}
                 onHide={props.onHide}
                 onDownloadSnapshot={handleDownloadSnapshot}
+                canSetThumbnail={canUploadThumbnail}
+                isSettingThumbnail={isSettingThumbnail}
+                onSetThumbnail={handleSetThumbnail}
+                thumbnailMode={thumbnailMode}
+                onThumbnailModeChange={handleThumbnailModeChange}
                 isReady={isReady}
                 allowPostProcessingToggle={postGraphEnabled}
                 previewSettings={previewSettings}

@@ -157,4 +157,32 @@ describe('Editor Store Persistence', () => {
             restored.getRootGraph('post').nodes.some((node) => node.data.type === 'math/mul')
         ).toBe(true);
     });
+
+    it('should default thumbnail mode to auto and round-trip manual', () => {
+        const store = useEditorStore.getState();
+        expect(store.previewSettings.thumbnailMode).toBe('auto');
+
+        store.updatePreviewSettings({ thumbnailMode: 'manual' });
+        const json = store.saveToJSON();
+        expect(JSON.parse(json).previewSettings.thumbnailMode).toBe('manual');
+
+        store.resetEditor();
+        expect(useEditorStore.getState().previewSettings.thumbnailMode).toBe('auto');
+
+        const success = store.loadFromJSON(json);
+        expect(success).toBe(true);
+        expect(useEditorStore.getState().previewSettings.thumbnailMode).toBe('manual');
+    });
+
+    it('should fall back to auto thumbnail mode for legacy or invalid settings', () => {
+        const store = useEditorStore.getState();
+        const legacyData = { version: 2, nodes: [], edges: [] };
+
+        expect(store.loadFromJSON(JSON.stringify(legacyData))).toBe(true);
+        expect(useEditorStore.getState().previewSettings.thumbnailMode).toBe('auto');
+
+        const invalidData = { ...legacyData, previewSettings: { thumbnailMode: 'bogus' } };
+        expect(store.loadFromJSON(JSON.stringify(invalidData))).toBe(true);
+        expect(useEditorStore.getState().previewSettings.thumbnailMode).toBe('auto');
+    });
 });

@@ -88,6 +88,8 @@ export interface GeometryConfig {
     openEnded?: boolean;
 }
 
+export type ThumbnailMode = 'auto' | 'manual';
+
 // Preview settings interface
 export interface PreviewSettings {
     mesh: PreviewMeshType;
@@ -103,6 +105,7 @@ export interface PreviewSettings {
     showBackdrop?: boolean;
     showGrid?: boolean;
     postEnabled?: boolean;
+    thumbnailMode?: ThumbnailMode;
 }
 
 // Graph save format
@@ -244,6 +247,7 @@ export const createDefaultPreviewSettings = (): PreviewSettings => ({
     showBackdrop: false,
     showGrid: true,
     postEnabled: true,
+    thumbnailMode: 'auto',
     config: {
         width: 1.5,
         height: 1.5,
@@ -2715,6 +2719,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 const mergedPreviewSettings: PreviewSettings = {
                     ...defaultPreviewSettings,
                     ...persistedPreview,
+                    thumbnailMode: persistedPreview?.thumbnailMode === 'manual' ? 'manual' : 'auto',
                     config: {
                         ...defaultPreviewSettings.config,
                         ...(persistedPreview?.config || {}),

@@ -1,4 +1,4 @@
-import type { PreviewSettings } from '@/store/editor';
+import type { PreviewSettings, ThumbnailMode } from '@/store/editor';
 
 export type PreviewCapturePurpose = 'ai' | 'thumbnail';
 
@@ -45,6 +45,11 @@ export interface PreviewControlsProps {
     onToggleFullScreen: () => void;
     onHide?: () => void;
     onDownloadSnapshot: () => void;
+    canSetThumbnail: boolean;
+    isSettingThumbnail: boolean;
+    onSetThumbnail: () => void;
+    thumbnailMode: ThumbnailMode;
+    onThumbnailModeChange: (mode: ThumbnailMode) => void;
     isReady: boolean;
     allowPostProcessingToggle: boolean;
     previewSettings: PreviewSettings;
