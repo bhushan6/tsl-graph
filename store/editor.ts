@@ -43,6 +43,14 @@ import {
     type EdgePortalBlockReason,
 } from '@/lib/edge-portal';
 import { getComponentOutputPorts } from '@/lib/component-outputs';
+import { resolveNodeOutputTypeById } from '@/lib/type-inference';
+import {
+    computeChannelOccupancy,
+    decidePacking,
+    getConstructorComponentCount,
+    getPackingSourceWidth,
+    isPackingEnabled,
+} from '@/lib/vector-packing';
 
 // Counter to keep addNode IDs unique even when many nodes are created in the same millisecond
 let addNodeIdCounter = 0;
@@ -1455,16 +1463,73 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     },
 
     onConnect: (connection: Connection) => {
+        const { edges, nodes, globals, subgraphs } = get();
+        const targetNode = connection.target
+            ? nodes.find((node) => node.id === connection.target)
+            : undefined;
+
+        let evictedEdgeIds = new Set<string>();
+
+        if (targetNode && connection.targetHandle && isPackingEnabled(targetNode.data.type)) {
+            const nodesById = new Map(nodes.map((node) => [node.id, node]));
+            const incoming = edges
+                .filter((edge) => edge.target === targetNode.id)
+                .map((edge) => ({
+                    edgeId: edge.id,
+                    targetHandle: edge.targetHandle,
+                    width: getPackingSourceWidth(
+                        resolveNodeOutputTypeById(
+                            edge.source,
+                            edge.sourceHandle,
+                            nodesById,
+                            edges,
+                            globals,
+                            subgraphs
+                        )
+                    ),
+                }));
+            const sourceWidth = getPackingSourceWidth(
+                resolveNodeOutputTypeById(
+                    connection.source,
+                    connection.sourceHandle,
+                    nodesById,
+                    edges,
+                    globals,
+                    subgraphs
+                )
+            );
+            const decision = decidePacking({
+                nodeType: targetNode.data.type,
+                anchorHandle: connection.targetHandle,
+                sourceWidth,
+                occupancy: computeChannelOccupancy(
+                    getConstructorComponentCount(targetNode.data.type),
+                    incoming
+                ),
+            });
+
+            if (decision.kind === 'reject') {
+                toast.error(decision.message);
+                return;
+            }
+
+            if (decision.kind === 'pack') {
+                evictedEdgeIds = new Set(decision.conflictEdgeIds);
+            }
+        }
+
         // Snapshot before connecting
         get().takeSnapshot();
 
-        const { edges, nodes } = get();
+        const remainingEdges = evictedEdgeIds.size > 0
+            ? edges.filter((edge) => !evictedEdgeIds.has(edge.id))
+            : edges;
 
         // Inputs are single-consumer: replacing an input's edge is the
         // established direct-connect behavior. Outputs have no occupancy
         // check, so one output handle can fan out to any number of inputs.
         const filteredEdges = replaceEdgeOnTargetHandle(
-            edges,
+            remainingEdges,
             connection.target,
             connection.targetHandle
         );
@@ -1473,11 +1538,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const targetId = connection.target;
         const targetHandle = connection.targetHandle ?? null;
         if (targetId && targetHandle) {
-            const targetNode = nodes.find((n) => n.id === targetId);
-            const isMaterialNode = !!targetNode && (MATERIAL_NODE_TYPES as readonly string[]).includes(targetNode.data.type);
-            if (targetNode && isMaterialNode) {
-                const def = registry.get(targetNode.data.type);
-                const current = new Set(getMaterialStoredActiveInputs(targetNode.data, def));
+            const materialTargetNode = nodes.find((n) => n.id === targetId);
+            const isMaterialNode = !!materialTargetNode && (MATERIAL_NODE_TYPES as readonly string[]).includes(materialTargetNode.data.type);
+            if (materialTargetNode && isMaterialNode) {
+                const def = registry.get(materialTargetNode.data.type);
+                const current = new Set(getMaterialStoredActiveInputs(materialTargetNode.data, def));
                 if (!current.has(targetHandle)) {
                     current.add(targetHandle);
                     nextNodes = nodes.map((node) => {
@@ -1499,6 +1564,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             nodes: nextNodes,
             graphStructureVersion: get().graphStructureVersion + 1,
         });
+
+        if (evictedEdgeIds.size > 0) {
+            const count = evictedEdgeIds.size;
+            toast(`Replaced ${count} connection${count === 1 ? '' : 's'}`, {
+                action: {
+                    label: 'Undo',
+                    onClick: () => {
+                        get().undo();
+                    },
+                },
+            });
+        }
 
         get().markDirty();
     },

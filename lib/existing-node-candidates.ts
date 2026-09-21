@@ -15,6 +15,13 @@ import { isConnectionAllowed } from './connection-rules';
 import { getHandleDisplayLabel, getTypeMatchRank, isTypeMatch } from './node-picker-utils';
 import { getNodeDisplayName } from './node-display-name';
 import { getNodeSearchFields } from './note-search';
+import {
+    getChannelIndex,
+    getChannelRangeLabel,
+    getPackingSourceWidth,
+    getPackingVectorType,
+    isPackingAnchorCompatible,
+} from './vector-packing';
 
 export interface ExistingNodeCandidate {
     key: string;
@@ -88,6 +95,14 @@ export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): 
         const searchBase = getNodeSearchFields(node, displayName).join(' ');
 
         for (const handle of handles) {
+            const packingWidth = getPackingSourceWidth(
+                (sourceDataType || null) as TSLType | null
+            );
+            const packingIndex = getChannelIndex(handle.id);
+            const isPackingAnchor =
+                handleDirection === 'output'
+                && isPackingAnchorCompatible(node.data.type, handle.id, sourceDataType);
+
             const connection =
                 handleDirection === 'output'
                     ? {
@@ -107,7 +122,7 @@ export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): 
             // only land on an unoccupied input handle; a dragged input can
             // connect to any compatible output, including one that already
             // fans out to other inputs.
-            if (!isTypeMatch(handle.type, sourceDataType)) continue;
+            if (!isTypeMatch(handle.type, sourceDataType) && !isPackingAnchor) continue;
             if (
                 handleDirection === 'output'
                 && edges.some(
@@ -117,16 +132,22 @@ export function getExistingNodeCandidates(params: ExistingNodeCandidateParams): 
             ) continue;
             if (!isConnectionAllowed(connection, nodes, edges)) continue;
 
+            const handleLabel = isPackingAnchor
+                ? getChannelRangeLabel(packingIndex, packingWidth)
+                : handle.label;
+
             candidates.push({
                 key: `existing:${node.id}:${handle.id}`,
                 nodeId: node.id,
                 handleId: handle.id,
                 nodeLabel,
-                handleLabel: handle.label,
-                displayLabel: getHandleDisplayLabel(nodeLabel, handle.label, handles.length),
-                type: handle.type,
-                matchRank: getTypeMatchRank(handle.type, sourceDataType),
-                searchText: `${searchBase} ${handle.label}`,
+                handleLabel,
+                displayLabel: getHandleDisplayLabel(nodeLabel, handleLabel, handles.length),
+                type: isPackingAnchor
+                    ? (getPackingVectorType(packingWidth) ?? handle.type)
+                    : handle.type,
+                matchRank: isPackingAnchor ? 0 : getTypeMatchRank(handle.type, sourceDataType),
+                searchText: `${searchBase} ${handleLabel}`,
             });
         }
     }
