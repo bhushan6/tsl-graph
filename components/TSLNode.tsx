@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Position, useUpdateNodeInternals } from "@xyflow/react";
+import { Position, useConnection, useUpdateNodeInternals } from "@xyflow/react";
+import type { ConnectionState } from "@xyflow/react";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
 import { nodeUniformKey, useLiveUniformStore } from "@/store/live-uniforms";
@@ -18,6 +19,20 @@ import {
   getComponentOutputPorts,
   withComponentOutputPorts,
 } from "@/lib/component-outputs";
+import {
+  computeChannelOccupancy,
+  decidePacking,
+  getChannelIndex,
+  getChannelRangeLabel,
+  getConstructorComponentCount,
+  getPackedChannelVisuals,
+  getPackingCapacityTooltip,
+  getPackingSourceWidth,
+  getPackingVectorType,
+  isPackingEnabled,
+  type ChannelOccupancy,
+  type PackedChannelVisual,
+} from "@/lib/vector-packing";
 import {
   Tooltip,
   TooltipContent,
@@ -157,6 +172,139 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     const [inputPart = "", outputPart = ""] = connectedHandlesKey.split(HANDLE_GROUP_SEPARATOR);
     return [deserializeHandleSet(inputPart), deserializeHandleSet(outputPart)];
   }, [connectedHandlesKey]);
+
+  const isPackingConstructor = !!def && isPackingEnabled(nodeType);
+
+  const packingStructureVersion = useEditorStore(
+    useCallback(
+      (state) => (isPackingConstructor ? state.graphStructureVersion : -1),
+      [isPackingConstructor],
+    ),
+  );
+
+  const { packedVisuals, packingOccupancy } = useMemo(() => {
+    void packingStructureVersion;
+    if (!isPackingConstructor) {
+      return {
+        packedVisuals: new Map<string, PackedChannelVisual>(),
+        packingOccupancy: null as ChannelOccupancy | null,
+      };
+    }
+
+    const state = useEditorStore.getState();
+    const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
+    const incoming = state.edges
+      .filter((edge) => edge.target === id)
+      .map((edge) => ({
+        edgeId: edge.id,
+        targetHandle: edge.targetHandle,
+        width: getPackingSourceWidth(
+          resolveNodeOutputTypeById(
+            edge.source,
+            edge.sourceHandle,
+            nodesById,
+            state.edges,
+            state.globals,
+            state.subgraphs,
+          ),
+        ),
+      }));
+
+    return {
+      packedVisuals: getPackedChannelVisuals(nodeType, incoming),
+      packingOccupancy: computeChannelOccupancy(
+        getConstructorComponentCount(nodeType),
+        incoming,
+      ),
+    };
+  }, [id, isPackingConstructor, nodeType, packingStructureVersion]);
+
+  const packingConnectionKey = useConnection(
+    useCallback(
+      (connection: ConnectionState) => {
+        if (!isPackingConstructor || !connection.inProgress) return "";
+        const targetNodeId =
+          connection.toHandle?.nodeId ?? connection.toNode?.id ?? "";
+        if (targetNodeId !== id) return "";
+        return [
+          connection.toHandle?.id ?? "",
+          connection.fromNode?.id ?? "",
+          connection.fromHandle?.id ?? "",
+        ].join("|");
+      },
+      [id, isPackingConstructor],
+    ),
+  );
+
+  const packingPreview = useMemo(() => {
+    if (!packingConnectionKey || !packingOccupancy) return null;
+
+    const [anchorHandle, sourceNodeId, sourceHandle] =
+      packingConnectionKey.split("|");
+    if (!anchorHandle || !sourceNodeId) return null;
+
+    const state = useEditorStore.getState();
+    const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
+    const sourceWidth = getPackingSourceWidth(
+      resolveNodeOutputTypeById(
+        sourceNodeId,
+        sourceHandle || "out",
+        nodesById,
+        state.edges,
+        state.globals,
+        state.subgraphs,
+      ),
+    );
+
+    const decision = decidePacking({
+      nodeType,
+      anchorHandle,
+      sourceWidth,
+      occupancy: packingOccupancy,
+    });
+    if (decision.kind === "none") return null;
+
+    const anchorIndex = getChannelIndex(anchorHandle);
+    if (anchorIndex < 0) return null;
+
+    const componentCount = getConstructorComponentCount(nodeType);
+    const width = Math.max(1, Math.floor(sourceWidth));
+    const range: number[] = [];
+    for (
+      let index = anchorIndex;
+      index < Math.min(anchorIndex + width, componentCount);
+      index++
+    ) {
+      range.push(index);
+    }
+
+    const conflictChannels = new Set<number>();
+    if (decision.kind === "pack") {
+      const conflictEdgeIds = new Set(decision.conflictEdgeIds);
+      for (const [index, owner] of packingOccupancy.ownerByChannel) {
+        if (conflictEdgeIds.has(owner.edgeId)) conflictChannels.add(index);
+      }
+    }
+
+    return {
+      anchorIndex,
+      width,
+      range,
+      invalid: decision.kind === "reject",
+      label:
+        decision.kind === "pack"
+          ? decision.label
+          : getChannelRangeLabel(
+              anchorIndex,
+              Math.min(width, componentCount - anchorIndex),
+            ),
+      sourceType:
+        decision.kind === "pack"
+          ? decision.sourceType
+          : getPackingVectorType(width),
+      conflictChannels,
+    };
+  }, [nodeType, packingConnectionKey, packingOccupancy]);
 
   const storedNameValue = nodeData.values?.localName;
   const storedName = typeof storedNameValue === "string" ? storedNameValue : "";
@@ -768,6 +916,21 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
     });
   }
 
+  const getPackingRowInfo = (inputKey: string) => {
+    const visual = packedVisuals.get(inputKey);
+    let preview: "anchor" | "fill" | "conflict" | "invalid" | null = null;
+    if (packingPreview) {
+      const index = getChannelIndex(inputKey);
+      if (index >= 0 && packingPreview.range.includes(index)) {
+        if (packingPreview.invalid) preview = "invalid";
+        else if (index === packingPreview.anchorIndex) preview = "anchor";
+        else if (packingPreview.conflictChannels.has(index)) preview = "conflict";
+        else preview = "fill";
+      }
+    }
+    return { visual, preview };
+  };
+
   // Tweak controls rendered on the empty input side of uniform nodes, one per
   // output row so vector components line up with their handles.
   const VECTOR_COMPONENT_INDEX: Record<string, number> = { x: 0, y: 1, z: 2, w: 3 };
@@ -824,7 +987,41 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
             hasCompactTextureOutputs && "col-start-1 row-start-1",
           )}
         >
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const packing = row.input ? getPackingRowInfo(row.input[0]) : null;
+            const inputPort = row.input?.[1];
+            const isConsumed = packing?.visual?.kind === "consumed";
+            const isAnchor = packing?.visual?.kind === "anchor";
+            const isPreviewAnchor = packing?.preview === "anchor";
+            const inputHandleLabel = isPreviewAnchor
+              ? (packingPreview?.label ?? inputPort?.label ?? "")
+              : isAnchor
+                ? (packing?.visual?.ownerLabel ?? inputPort?.label ?? "")
+                : (inputPort?.label ?? "");
+            const inputHandleType = (isAnchor
+              ? (packing?.visual?.sourceType ?? inputPort?.type)
+              : isPreviewAnchor
+                ? (packingPreview?.sourceType ?? inputPort?.type)
+                : inputPort?.type) as TSLType;
+            const inputHandleTooltip = isConsumed
+              ? `${inputPort?.label.toUpperCase()} is supplied by the ${packing?.visual?.ownerLabel} connection.`
+              : isAnchor
+                ? `This ${packing?.visual?.sourceType ?? "vector"} supplies ${packing?.visual?.ownerLabel}.`
+                : packing?.preview === "fill"
+                  ? `${inputPort?.label.toUpperCase()} will be supplied by ${packingPreview?.label}.`
+                  : packing?.preview === "conflict"
+                    ? `${inputPort?.label.toUpperCase()} is already connected and will be replaced.`
+                    : (getPackingCapacityTooltip(nodeType, row.input?.[0]) ?? undefined);
+            const inputPreviewClass =
+              packing?.preview === "anchor" || packing?.preview === "fill"
+                ? "bg-emerald-500/10 rounded-sm"
+                : packing?.preview === "conflict"
+                  ? "bg-amber-500/15 rounded-sm"
+                  : packing?.preview === "invalid"
+                    ? "bg-red-500/10 rounded-sm"
+                    : "";
+
+            return (
             <div
               key={row.key}
               className="flex min-h-[22px] items-center justify-between"
@@ -834,6 +1031,7 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
                 className={cn(
                   "flex flex-1 items-center min-w-0",
                   !hasCompactTextureOutputs && "mr-2",
+                  inputPreviewClass,
                 )}
               >
                 {row.input ? (
@@ -843,11 +1041,13 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
                         id={row.input[0]}
                         type="target"
                         position={Position.Left}
-                        dataType={row.input[1].type as TSLType}
-                        label={row.input[1].label}
+                        dataType={inputHandleType}
+                        label={inputHandleLabel}
                         isConnected={connectedInputs.has(row.input[0])}
                         isDark={isDark}
                         isMaterialNode={isMaterialNode}
+                        disabled={isConsumed}
+                        tooltipText={inputHandleTooltip}
                       />
                     )}
 
@@ -866,14 +1066,28 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
                             row.input[1].propertyOnly && "justify-end",
                           )}
                         >
-                          <ValuePreview
-                            inputKey={row.input[0]}
-                            type={row.input[1].type}
-                            value={
-                              nodeData.values?.[row.input[0]] ??
-                              row.input[1].default
-                            }
-                          />
+                          {isConsumed ? (
+                            <span className="text-[9px] uppercase tracking-wider text-gray-400 dark:text-white/35 truncate">
+                              from {packing?.visual?.ownerLabel}
+                            </span>
+                          ) : packing?.preview === "fill" ? (
+                            <span className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">
+                              filled by {packingPreview?.label}
+                            </span>
+                          ) : packing?.preview === "anchor" ? (
+                            <span className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">
+                              fills {packingPreview?.label}
+                            </span>
+                          ) : (
+                            <ValuePreview
+                              inputKey={row.input[0]}
+                              type={row.input[1].type}
+                              value={
+                                nodeData.values?.[row.input[0]] ??
+                                row.input[1].default
+                              }
+                            />
+                          )}
                         </div>
                       )}
                   </>
@@ -903,7 +1117,8 @@ function TSLNodeComponent({ id, data, selected, type }: TSLNodeProps) {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         {hasCompactTextureOutputs && (
           <div className="col-start-2 row-start-1 flex flex-col">

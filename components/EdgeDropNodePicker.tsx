@@ -27,6 +27,12 @@ import {
 } from '@/lib/quick-create';
 import { Code, Layers, Link2 } from 'lucide-react';
 import { getExistingNodeCandidates } from '@/lib/existing-node-candidates';
+import {
+    getChannelIndex,
+    getChannelRangeLabel,
+    getPackingSourceWidth,
+    isPackingAnchorCompatible,
+} from '@/lib/vector-packing';
 import { useEditorStore } from '@/store/editor';
 import { MATERIAL_NODE_TYPES, POST_ANCHOR_NODE_TYPES, POST_FX_NODE_TYPES } from '@/lib/nodes';
 import { resolveCodeNodeScope } from '@/lib/code-node-scope';
@@ -459,15 +465,23 @@ export function EdgeDropNodePicker({
             for (const handle of handles) {
                 const nodePickerKey = node.pickerKey ?? node.type;
                 const isGenericGlobal = node.type === 'global/ref' && !node.isGlobalRefNode;
+                const packingWidth = getPackingSourceWidth((sourceDataType || null) as TSLType | null);
+                const packingIndex = getChannelIndex(handle.id);
+                const isPackingAnchor =
+                    handleDirection === 'output'
+                    && isPackingAnchorCompatible(node.type, handle.id, sourceDataType);
+                const handleLabel = isPackingAnchor
+                    ? getChannelRangeLabel(packingIndex, packingWidth)
+                    : handle.label;
                 const row: EdgeDropHandleRow = {
                     key: `${nodePickerKey}::${handle.id}`,
                     category: node.category,
                     nodeType: node.type as NodeType,
                     nodeLabel: node.label,
                     handleId: handle.id,
-                    handleLabel: handle.label,
-                    displayLabel: getHandleDisplayLabel(node.label, handle.label, handles.length),
-                    matchRank: getTypeMatchRank(handle.type, sourceDataType),
+                    handleLabel,
+                    displayLabel: getHandleDisplayLabel(node.label, handleLabel, handles.length),
+                    matchRank: isPackingAnchor ? 0 : getTypeMatchRank(handle.type, sourceDataType),
                     isCodeNode: node.isCodeNode,
                     isSubgraphNode: node.isSubgraphNode,
                     isGlobalRefNode: node.isGlobalRefNode,

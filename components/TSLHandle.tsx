@@ -43,6 +43,8 @@ interface TSLHandleProps extends Omit<HandleProps, 'isConnectable'> {
     isConnected?: boolean;
     isDark?: boolean;
     isMaterialNode?: boolean;
+    disabled?: boolean;
+    tooltipText?: string;
 }
 
 export function TSLHandle({
@@ -51,6 +53,8 @@ export function TSLHandle({
     isConnected = false,
     isDark = true,
     isMaterialNode = false,
+    disabled = false,
+    tooltipText,
     ...props
 }: TSLHandleProps) {
     const handleColor = TYPE_COLORS[dataType] ?? DEFAULT_HANDLE_COLOR;
@@ -74,13 +78,19 @@ export function TSLHandle({
                     <div className={cn('relative flex items-center')}>
                         <Handle
                             {...props}
-                            isConnectable={true}
+                            isConnectable={!disabled}
 
                             className={cn(
                                 "!relative !transform-none !inset-auto !w-2 !h-4 !border-0 transition-colors duration-150",
-                                isOutput ? "!rounded-l-[3px] !rounded-r-none" : "!rounded-r-[3px] !rounded-l-none"
+                                isOutput ? "!rounded-l-[3px] !rounded-r-none" : "!rounded-r-[3px] !rounded-l-none",
+                                disabled && "!cursor-not-allowed opacity-40"
                             )}
-                            style={{
+                            style={disabled ? {
+                                '--handle-bg': 'transparent',
+                                '--handle-hover-bg': 'transparent',
+                                backgroundColor: 'transparent',
+                                boxShadow: `inset 0 0 0 1px ${handleColor}80`,
+                            } as React.CSSProperties : {
                                 '--handle-bg': defaultBg,
                                 '--handle-hover-bg': handleColor,
                                 backgroundColor: 'var(--handle-bg)',
@@ -89,16 +99,18 @@ export function TSLHandle({
                     </div>
                 </TooltipTrigger>
                 <TooltipContent side={isOutput ? 'right' : 'left'} className="text-xs rounded-sm">
-                    <p>{dataType}</p>
+                    <p>{tooltipText ?? dataType}</p>
                 </TooltipContent>
             </Tooltip>
 
             {/* Label */}
             <span className={cn(
                 'text-[10px] uppercase tracking-wider font-medium whitespace-nowrap transition-colors duration-150 px-1',
-                isConnected
-                    ? 'text-gray-700 dark:text-white/90'
-                    : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/90',
+                disabled
+                    ? 'text-gray-400 dark:text-white/30'
+                    : isConnected
+                        ? 'text-gray-700 dark:text-white/90'
+                        : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/90',
                 isMaterialNode ? isOutput ? '' : 'min-w-[100px] max-w-[100px] whitespace-normal' : ''
             )}>
                 {label}

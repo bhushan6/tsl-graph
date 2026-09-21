@@ -18,6 +18,15 @@ import {
     withLocalDependencyEdges,
 } from './local-utils';
 import { inferLiteralTSLType } from './value-type-utils';
+import { resolveNodeOutputTypeById } from './type-inference';
+import {
+    computeChannelOccupancy,
+    getChannelIndex,
+    getConstructorComponentCount,
+    getPackingSourceWidth,
+    isPackingEnabled,
+    type IncomingChannelEdge,
+} from './vector-packing';
 
 interface CompiledNode {
     id: string;
@@ -557,6 +566,61 @@ function getInputValue(
     }
 
     return String(num);
+}
+
+function collectConstructorOccupancy(
+    node: Node<TSLNodeData>,
+    edges: Edge[],
+    nodesById: Map<string, Node<TSLNodeData>>,
+    globals: GlobalContextEntry[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+) {
+    const incoming: IncomingChannelEdge[] = edges
+        .filter((edge) => edge.target === node.id)
+        .map((edge) => ({
+            edgeId: edge.id,
+            targetHandle: edge.targetHandle,
+            width: getPackingSourceWidth(
+                resolveNodeOutputTypeById(
+                    edge.source,
+                    edge.sourceHandle,
+                    nodesById,
+                    edges,
+                    globals,
+                    subgraphs
+                )
+            ),
+        }));
+
+    return computeChannelOccupancy(getConstructorComponentCount(node.data.type), incoming);
+}
+
+function getPackedConstructorArgs(
+    node: Node<TSLNodeData>,
+    def: NodeDef,
+    edges: Edge[],
+    compiledNodes: Map<string, CompiledNode>,
+    inputs: Record<string, Port>,
+    argsMap: Record<string, string> | undefined,
+    nodesById: Map<string, Node<TSLNodeData>>,
+    globals: GlobalContextEntry[],
+    subgraphs?: Record<string, SubgraphDefinition>,
+): string[] | null {
+    if (!isPackingEnabled(def.type)) return null;
+
+    const occupancy = collectConstructorOccupancy(node, edges, nodesById, globals, subgraphs);
+    if (occupancy.overflowEdgeIds.size > 0 || occupancy.overlapEdgeIds.size > 0) return null;
+    if (!occupancy.owners.some((owner) => owner.width > 1)) return null;
+
+    return Object.keys(inputs)
+        .filter((key) => !inputs[key].propertyOnly)
+        .filter((key) => {
+            const index = getChannelIndex(key);
+            if (index < 0) return true;
+            const owner = occupancy.ownerByChannel.get(index);
+            return !owner || owner.anchorIndex === index;
+        })
+        .map((key) => getInputValue(node, key, edges, compiledNodes, inputs[key], argsMap));
 }
 
 function getLinearGradientArgs(
@@ -1317,7 +1381,18 @@ function compileSubgraphDefinition(
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
-            const args = inputKeys.map(key =>
+            const packedArgs = getPackedConstructorArgs(
+                node,
+                def,
+                internalEdges,
+                compiledNodes,
+                inputs,
+                argsMap,
+                nodesById,
+                [],
+                subgraphsMap
+            );
+            const args = packedArgs ?? inputKeys.map(key =>
                 getInputValue(node, key, internalEdges, compiledNodes, inputs[key], argsMap)
             );
             code = `${def.tsl}(${args.join(', ')})`;
@@ -2584,7 +2659,18 @@ export function compileGraph(
         } else if (inputKeys.length === 0) {
             code = `${def.tsl}()`;
         } else {
-            const args = inputKeys.filter(k => !inputs[k].propertyOnly).map(key =>
+            const packedArgs = getPackedConstructorArgs(
+                node,
+                def,
+                edgesForInputs,
+                compiledNodes,
+                inputs,
+                undefined,
+                nodesById,
+                globals,
+                subgraphs
+            );
+            const args = packedArgs ?? inputKeys.filter(k => !inputs[k].propertyOnly).map(key =>
                 getInputValue(node, key, edgesForInputs, compiledNodes, inputs[key])
             );
             code = `${def.tsl}(${args.join(', ')})`;

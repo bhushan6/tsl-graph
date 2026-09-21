@@ -45,7 +45,11 @@ beforeAll(() => {
             label: 'Vec3',
             category: 'Constants',
             tsl: 'vec3',
-            inputs: {},
+            inputs: {
+                x: { type: 'float', default: 0, label: 'X' },
+                y: { type: 'float', default: 0, label: 'Y' },
+                z: { type: 'float', default: 0, label: 'Z' },
+            },
             outputs: { out: { type: 'vec3', label: 'Out' } },
         },
         {
@@ -230,5 +234,39 @@ describe('getExistingNodeCandidates', () => {
         });
         const sinCandidate = candidates.find((c) => c.nodeId === 'sinNode');
         expect(sinCandidate?.type).toBe('float');
+    });
+
+    it('offers packing anchors when a vector wire fits the constructor channels', () => {
+        const nodes = [createNode('src', 'const/float'), createNode('sink', 'const/vec3')];
+        const candidates = getExistingNodeCandidates({
+            ...baseParams,
+            nodes,
+            edges: [],
+            sourceNodeId: 'src',
+            sourceDataType: 'vec2',
+            handleDirection: 'output',
+        });
+
+        const anchorX = candidates.find((c) => c.nodeId === 'sink' && c.handleId === 'x');
+        const anchorY = candidates.find((c) => c.nodeId === 'sink' && c.handleId === 'y');
+
+        expect(anchorX).toMatchObject({ type: 'vec2', matchRank: 0, handleLabel: 'XY' });
+        expect(anchorY).toMatchObject({ type: 'vec2', matchRank: 0, handleLabel: 'YZ' });
+        expect(candidates.find((c) => c.nodeId === 'sink' && c.handleId === 'z')).toBeUndefined();
+    });
+
+    it('does not advertise packing anchors to scalar wires', () => {
+        const nodes = [createNode('src', 'const/float'), createNode('sink', 'const/vec3')];
+        const candidates = getExistingNodeCandidates({
+            ...baseParams,
+            nodes,
+            edges: [],
+            sourceNodeId: 'src',
+            sourceDataType: 'float',
+            handleDirection: 'output',
+        });
+
+        expect(candidates.map((c) => c.handleId).sort()).toEqual(['x', 'y', 'z']);
+        expect(candidates.every((c) => c.type === 'float')).toBe(true);
     });
 });

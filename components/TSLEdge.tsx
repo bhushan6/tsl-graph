@@ -1,12 +1,20 @@
 "use client";
-import { useMemo } from "react";
-import { BaseEdge, EdgeProps, getBezierPath } from "@xyflow/react";
+import { useCallback, useMemo } from "react";
+import { BaseEdge, EdgeProps, getBezierPath, useConnection } from "@xyflow/react";
+import type { ConnectionState } from "@xyflow/react";
 import { TYPE_COLORS, DEFAULT_HANDLE_COLOR } from "./TSLHandle";
 import type { TSLType } from "@/lib/types";
 import { registry } from "@/lib/registry";
 import { useEditorStore } from "@/store/editor";
 import { getMultiOpInputs, type MultiOp } from "@/lib/multi-op";
 import { resolveNodeOutputTypeById } from "@/lib/type-inference";
+import {
+    computeChannelOccupancy,
+    decidePacking,
+    getConstructorComponentCount,
+    getPackingSourceWidth,
+    isPackingEnabled,
+} from "@/lib/vector-packing";
 
 const TSLEdge = ({
     id,
@@ -88,9 +96,113 @@ const TSLEdge = ({
     }, [graphSnapshot, targetHandleId, targetNode]);
 
 
-    const sourceColor = sourceDataType ? (TYPE_COLORS[sourceDataType] ?? DEFAULT_HANDLE_COLOR) : DEFAULT_HANDLE_COLOR
-    const targetColor = targetDataType ? (TYPE_COLORS[targetDataType] ?? DEFAULT_HANDLE_COLOR) : DEFAULT_HANDLE_COLOR
+    const packedTargetType: TSLType | null = useMemo(() => {
+        if (!targetNode || !targetHandleId || !sourceDataType) return null;
+        const targetNodeType = targetNode.data.type;
+        if (!isPackingEnabled(targetNodeType)) return null;
 
+        const incoming = graphSnapshot.edges
+            .filter((edge) => edge.target === target)
+            .map((edge) => ({
+                edgeId: edge.id,
+                targetHandle: edge.targetHandle,
+                width: getPackingSourceWidth(
+                    resolveNodeOutputTypeById(
+                        edge.source,
+                        edge.sourceHandle,
+                        graphSnapshot.nodesById,
+                        graphSnapshot.edges,
+                        graphSnapshot.globals,
+                        graphSnapshot.subgraphs
+                    )
+                ),
+            }));
+
+        const occupancy = computeChannelOccupancy(
+            getConstructorComponentCount(targetNodeType),
+            incoming
+        );
+        if (occupancy.overlapEdgeIds.size > 0) return null;
+
+        const decision = decidePacking({
+            nodeType: targetNodeType,
+            anchorHandle: targetHandleId,
+            sourceWidth: getPackingSourceWidth(sourceDataType),
+            occupancy,
+        });
+
+        return decision.kind === 'pack' ? (decision.sourceType ?? sourceDataType) : null;
+    }, [graphSnapshot, sourceDataType, target, targetHandleId, targetNode]);
+
+
+    const sourceColor = sourceDataType ? (TYPE_COLORS[sourceDataType] ?? DEFAULT_HANDLE_COLOR) : DEFAULT_HANDLE_COLOR
+    const targetColor = (packedTargetType ?? targetDataType)
+        ? (TYPE_COLORS[(packedTargetType ?? targetDataType) as TSLType] ?? DEFAULT_HANDLE_COLOR)
+        : DEFAULT_HANDLE_COLOR
+
+    const packingConflictKey = useConnection(
+        useCallback(
+            (connection: ConnectionState) => {
+                if (!connection.inProgress || !connection.toHandle) return "";
+                if (connection.toHandle.nodeId !== target) return "";
+                return [
+                    connection.toHandle.id ?? "",
+                    connection.fromNode?.id ?? "",
+                    connection.fromHandle?.id ?? "",
+                ].join("|");
+            },
+            [target],
+        ),
+    );
+
+    const isPackingConflict = useMemo(() => {
+        if (!packingConflictKey) return false;
+        const [anchorHandle, sourceNodeId, sourceHandle] = packingConflictKey.split("|");
+        const targetNodeType = targetNode?.data.type;
+        if (!anchorHandle || !sourceNodeId || !targetNodeType || !isPackingEnabled(targetNodeType)) {
+            return false;
+        }
+
+        const state = useEditorStore.getState();
+        const nodesById = new Map(state.nodes.map((node) => [node.id, node]));
+        const incoming = state.edges
+            .filter((edge) => edge.target === target)
+            .map((edge) => ({
+                edgeId: edge.id,
+                targetHandle: edge.targetHandle,
+                width: getPackingSourceWidth(
+                    resolveNodeOutputTypeById(
+                        edge.source,
+                        edge.sourceHandle,
+                        nodesById,
+                        state.edges,
+                        state.globals,
+                        state.subgraphs,
+                    ),
+                ),
+            }));
+        const sourceWidth = getPackingSourceWidth(
+            resolveNodeOutputTypeById(
+                sourceNodeId,
+                sourceHandle || "out",
+                nodesById,
+                state.edges,
+                state.globals,
+                state.subgraphs,
+            ),
+        );
+        const decision = decidePacking({
+            nodeType: targetNodeType,
+            anchorHandle,
+            sourceWidth,
+            occupancy: computeChannelOccupancy(
+                getConstructorComponentCount(targetNodeType),
+                incoming,
+            ),
+        });
+
+        return decision.kind === "pack" && decision.conflictEdgeIds.includes(id);
+    }, [id, packingConflictKey, target, targetNode]);
 
     const gradientId = `${source}-${target}`;
 
@@ -123,7 +235,9 @@ const TSLEdge = ({
                 style={{
                     ...style,
                     strokeWidth: selected ? 4 : 2,
-                    stroke: `url(#${gradientId})`,
+                    stroke: isPackingConflict ? "#f59e0b" : `url(#${gradientId})`,
+                    strokeDasharray: isPackingConflict ? "6 4" : undefined,
+                    opacity: isPackingConflict ? 0.85 : 1,
                 }}
                 type="smoothstep"
             />
