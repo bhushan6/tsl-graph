@@ -219,6 +219,7 @@ const isAnchorNode = (node: Node<TSLNodeData>) =>
 
 const cloneNode = (node: Node<TSLNodeData>): Node<TSLNodeData> => ({
     ...node,
+    dragging: false,
     data: {
         ...node.data,
         values: { ...(node.data.values || {}) },
@@ -4664,7 +4665,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     y: absPos.y - targetAbs.y,
                 },
             };
-        });
+        }).map((node) => (node.dragging ? { ...node, dragging: false } : node));
 
         // Reorder: React Flow requires parent nodes to appear before their children in the array.
         // Nodes that just became children of the group may currently precede the group in the array.

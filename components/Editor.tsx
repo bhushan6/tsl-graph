@@ -17,6 +17,7 @@ import {
     type OnConnectEnd,
     type NodeMouseHandler,
     applyNodeChanges,
+    SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -874,7 +875,8 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
                     className="bg-background"
                     panOnDrag={canvasMode === 'pan'}
                     selectionOnDrag={canvasMode === 'select'}
-                    selectionKeyCode={null} // Box selection is mode-only; Shift here would hijack shift-clicks and leave stale selection rects
+                    // selectionMode={SelectionMode.Partial}
+                    // selectionKeyCode={null} // Box selection is mode-only; Shift here would hijack shift-clicks and leave stale selection rects
                     multiSelectionKeyCode={MULTI_SELECTION_KEYS}
                     maxZoom={4}
                     minZoom={0.05}
