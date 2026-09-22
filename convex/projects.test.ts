@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getPublicStandalone, selectPublicStandaloneProject } from './projects';
+import { getPublicStandalone, selectProjectSummary, selectPublicStandaloneProject } from './projects';
+import type { Id } from './_generated/dataModel';
 
 type Project = {
     graphData: unknown;
@@ -18,6 +19,39 @@ const invokePublicStandalone = async (id: string, project: Project | null) => {
     const result = await handler({ db: { normalizeId, get } }, { id });
     return { result, normalizeId, get };
 };
+
+describe('project summary projection', () => {
+    const makeProject = () => ({
+        _id: 'projects:1' as Id<'projects'>,
+        name: 'Heavy graph',
+        description: 'A project',
+        isPublic: true,
+        graphData: { nodes: [{ id: 'n1' }] },
+        thumbnail: 'https://example.com/thumb.png',
+        thumbnailStorageId: 'storage:1',
+        likeCount: 3,
+        createdAt: 1,
+        updatedAt: 2,
+    });
+
+    it('returns only card metadata and never ships graphData', () => {
+        const summary = selectProjectSummary(makeProject());
+        expect(summary).toEqual({
+            _id: 'projects:1',
+            name: 'Heavy graph',
+            thumbnail: 'https://example.com/thumb.png',
+            updatedAt: 2,
+            isPublic: true,
+            likeCount: 3,
+        });
+        expect(summary).not.toHaveProperty('graphData');
+    });
+
+    it('defaults a missing likeCount to zero', () => {
+        const project = { ...makeProject(), likeCount: undefined };
+        expect(selectProjectSummary(project).likeCount).toBe(0);
+    });
+});
 
 describe('public standalone project projection', () => {
     it('returns only graph data and name for public projects', () => {

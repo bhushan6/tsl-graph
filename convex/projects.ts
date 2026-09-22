@@ -1,5 +1,6 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { authComponent } from "./auth";
 import { createErrorData, ErrorCodes } from "./errors";
 
@@ -11,6 +12,22 @@ export const selectPublicStandaloneProject = (
     if (!project || !project.isPublic) return null;
     return { graphData: project.graphData, name: project.name };
 };
+
+export const selectProjectSummary = (project: {
+    _id: Id<"projects">;
+    name: string;
+    thumbnail?: string;
+    updatedAt: number;
+    isPublic: boolean;
+    likeCount?: number;
+}) => ({
+    _id: project._id,
+    name: project.name,
+    thumbnail: project.thumbnail,
+    updatedAt: project.updatedAt,
+    isPublic: project.isPublic,
+    likeCount: project.likeCount ?? 0,
+});
 
 // Create a new project
 export const create = mutation({
@@ -232,8 +249,7 @@ export const list = query({
             .collect();
 
         return projects.map((project) => ({
-            ...project,
-            likeCount: project.likeCount ?? 0,
+            ...selectProjectSummary(project),
             likedByMe: likedProjectIds.has(project._id),
             isOwner: true,
         }));
@@ -295,6 +311,9 @@ export const getPublicStandalone = query({
     },
 });
 
+const PUBLIC_GALLERY_FETCH_LIMIT = 300;
+const PUBLIC_GALLERY_RETURN_LIMIT = 100;
+
 // List public projects (for explore/gallery)
 export const listPublic = query({
     args: {},
@@ -328,28 +347,32 @@ export const listPublic = query({
         const projects = await ctx.db
             .query("projects")
             .withIndex("by_public", (q) => q.eq("isPublic", true))
-            .collect();
+            .order("desc")
+            .take(PUBLIC_GALLERY_FETCH_LIMIT);
 
         const filteredProjects = user
             ? projects.filter((project) => project.userId !== user._id)
             : projects;
 
-        const ranked = await Promise.all(
-            filteredProjects.map(async (project) => ({
-                ...project,
+        const ranked = filteredProjects
+            .map((project) => ({
+                project,
                 likeCount: project.likeCount ?? 0,
+            }))
+            .sort((a, b) => {
+                if (b.likeCount !== a.likeCount) return b.likeCount - a.likeCount;
+                return b.project.createdAt - a.project.createdAt;
+            })
+            .slice(0, PUBLIC_GALLERY_RETURN_LIMIT);
+
+        return Promise.all(
+            ranked.map(async ({ project }) => ({
+                ...selectProjectSummary(project),
                 likedByMe: likedProjectIds.has(project._id),
                 isOwner: user ? project.userId === user._id : false,
                 authorName: await getAuthorName(project.userId),
             }))
         );
-
-        ranked.sort((a, b) => {
-                if (b.likeCount !== a.likeCount) return b.likeCount - a.likeCount;
-                return b.createdAt - a.createdAt;
-            });
-
-        return ranked.slice(0, 100);
     },
 });
 
@@ -388,8 +411,7 @@ export const listFavorites = query({
                 if (project.userId !== user._id && !project.isPublic) return null;
 
                 return {
-                    ...project,
-                    likeCount: project.likeCount ?? 0,
+                    ...selectProjectSummary(project),
                     likedByMe: true,
                     isOwner: project.userId === user._id,
                     likedAt: like.createdAt,
