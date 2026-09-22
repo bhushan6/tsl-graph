@@ -13,6 +13,7 @@ import {
     useStoreApi,
     type Connection,
     type Edge,
+    type OnBeforeDelete,
     type OnConnectEnd,
     type NodeMouseHandler,
     applyNodeChanges,
@@ -465,7 +466,7 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
         setHoveredGroupId(null);
     }, [takeSnapshot, setHoveredGroupId]);
 
-    // 2. Nodes Change: Snapshot only on Add/Remove
+    // 2. Nodes Change: Snapshot only on Add (removals snapshot once in handleBeforeDelete)
     const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
         const isLiveDragFrame =
             changes.length > 0 &&
@@ -481,25 +482,34 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
             return;
         }
 
-        const hasStructuralChange = changes.some(
-            (c) => c.type === 'add' || c.type === 'remove'
-        );
-        if (hasStructuralChange) {
+        const hasAddedNodes = changes.some((c) => c.type === 'add');
+        if (hasAddedNodes) {
             takeSnapshot();
         }
         onNodesChange(changes);
     }, [flowStore, onNodesChange, takeSnapshot]);
 
-    // 3. Edges Change: Snapshot only on Add/Remove
+    // 3. Edges Change: Snapshot only on Add (removals snapshot once in handleBeforeDelete)
     const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
-        const hasStructuralChange = changes.some(
-            (c) => c.type === 'add' || c.type === 'remove'
-        );
-        if (hasStructuralChange) {
+        const hasAddedEdges = changes.some((c) => c.type === 'add');
+        if (hasAddedEdges) {
             takeSnapshot();
         }
         onEdgesChange(changes);
     }, [onEdgesChange, takeSnapshot]);
+
+    // 4. Deletes: React Flow fires the edge removals before the node removals of
+    // a single delete action. Snapshot once up front so the whole delete (nodes
+    // and their connections) comes back in a single undo step.
+    const handleBeforeDelete = useCallback<OnBeforeDelete<AppNode, Edge>>(
+        async ({ nodes: deletedNodes, edges: deletedEdges }) => {
+            if (deletedNodes.length > 0 || deletedEdges.length > 0) {
+                takeSnapshot();
+            }
+            return true;
+        },
+        [takeSnapshot]
+    );
 
     // Handle selection change
     const onSelectionChange = useCallback(
@@ -846,6 +856,7 @@ const FlowCanvas = memo(function FlowCanvas({ isReadOnly, onOpenFind }: FlowCanv
                     edges={edges}
                     onNodesChange={handleNodesChange}
                     onEdgesChange={handleEdgesChange}
+                    onBeforeDelete={handleBeforeDelete}
                     onConnect={onConnect}
                     onConnectEnd={onConnectEnd}
                     onNodeDragStart={onNodeDragStart}
