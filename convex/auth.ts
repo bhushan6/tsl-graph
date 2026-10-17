@@ -28,6 +28,12 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
                 enabled: true,
             }
         },
+        session: {
+            // Better Auth 1.6 rejects deleteUser on sessions older than freshAge
+            // (default 1 day); 1.4.9's check was effectively off. The delete flow wipes app data
+            // before calling deleteUser, so keep it off until deletion can re-authenticate.
+            freshAge: 0,
+        },
         accountLinking: {
             enabled: true,
             trustedProviders: ["google", "github"],
