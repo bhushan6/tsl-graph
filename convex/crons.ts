@@ -13,4 +13,11 @@ crons.daily(
     internal.assets.garbageCollectAssets
 );
 
+// Expire upload grants and delete uploads that were never claimed.
+crons.hourly(
+    "storage-maintenance",
+    { minuteUTC: 15 },
+    internal.files.runStorageMaintenance
+);
+
 export default crons;

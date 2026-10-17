@@ -1,9 +1,16 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { createErrorData, ErrorCodes } from "./errors";
+import { claimUpload, issueUploadUrl } from "./files";
+
+const MAX_ATTACHMENTS = 10;
 
 export const generateUploadUrl = mutation(async (ctx) => {
-    return await ctx.storage.generateUploadUrl();
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+        throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
+    }
+    return await issueUploadUrl(ctx, identity.subject, "feedback");
 });
 
 export const submitFeedback = mutation({
@@ -20,6 +27,15 @@ export const submitFeedback = mutation({
         }
 
         const userId = identity.subject;
+
+        const attachments = args.attachments ?? [];
+        if (attachments.length > MAX_ATTACHMENTS) {
+            throw new ConvexError(createErrorData(ErrorCodes.LIMIT_EXCEEDED, `At most ${MAX_ATTACHMENTS} attachments are allowed.`));
+        }
+        // Each attachment must be the caller's own fresh upload, never someone else's file.
+        for (const storageId of attachments) {
+            await claimUpload(ctx, { storageId, userId, purpose: "feedback" });
+        }
 
         await ctx.db.insert("feedbacks", {
             userId,

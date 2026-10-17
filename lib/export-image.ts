@@ -1,8 +1,7 @@
 import type { Rect } from '@xyflow/react';
 import { toCanvas } from 'html-to-image';
-import * as THREE from 'three/webgpu';
-import { buildNodePreviewMaterial } from '@/lib/tsl-builder';
 import { getCanvasRelativeDebugPreviewRect } from '@/lib/debug-preview';
+import { captureIsolatedNodePreview, captureIsolatedPreview } from '@/lib/preview-sandbox/bridge';
 import { useEditorStore } from '@/store/editor';
 
 const MAX_EXPORT_SCALE = 2;
@@ -60,14 +59,14 @@ interface PixelArea {
  * DOM capture is rendered transparent and composited over a manually drawn
  * background + dot grid that matches the editor's.
  *
- * Node debug previews are drawn by a separate fullscreen WebGPU overlay
+ * Node debug previews are drawn by a separate sandboxed overlay frame
  * (NodeDebugPreviewOverlay), not by the node DOM, so a plain DOM capture shows
- * them as empty slots. Each active preview is re-rendered offscreen and
- * temporarily injected into its slot element as an <img> so the DOM capture
- * picks it up.
+ * them as empty slots. Each active preview is re-rendered offscreen inside that
+ * frame and temporarily injected into its slot element as an <img> so the DOM
+ * capture picks it up.
  *
- * With `includeShaderPreview`, the main 3D preview canvas is stitched to the
- * right of the graph, vertically centered on the same dotted background.
+ * With `includeShaderPreview`, a capture of the main 3D preview is stitched to
+ * the right of the graph, vertically centered on the same dotted background.
  */
 export async function exportGraphImage({ bounds, includeShaderPreview }: ExportGraphImageOptions): Promise<Blob> {
     const viewportEl = document.querySelector<HTMLElement>('.react-flow__viewport');
@@ -107,15 +106,9 @@ export async function exportGraphImage({ bounds, includeShaderPreview }: ExportG
         removeSnapshots();
     }
 
-    // The shader preview canvas only exists in main editor mode; silently
-    // fall back to a graph-only image when it isn't available.
-    const shaderPreviewCanvas = includeShaderPreview
-        ? document.querySelector<HTMLCanvasElement>('canvas[data-shader-preview-canvas]')
-        : null;
-    const stitchPreview =
-        shaderPreviewCanvas && shaderPreviewCanvas.width > 0 && shaderPreviewCanvas.height > 0
-            ? shaderPreviewCanvas
-            : null;
+    // The shader preview only exists in main editor mode; silently fall back
+    // to a graph-only image when it isn't available.
+    const stitchPreview = includeShaderPreview ? await captureShaderPreview() : null;
 
     let area: PixelArea = { width, height, offsetX: 0, offsetY: 0 };
     let previewRect: { x: number; y: number; width: number; height: number } | null = null;
@@ -168,6 +161,7 @@ export async function exportGraphImage({ bounds, includeShaderPreview }: ExportG
         ctx.drawImage(stitchPreview, previewRect.x, previewRect.y, previewRect.width, previewRect.height);
         ctx.restore();
     }
+    stitchPreview?.close();
 
     const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('Failed to render image.');
@@ -216,51 +210,30 @@ function drawBackgroundDots(
     ctx.fill(path);
 }
 
-interface PreviewRendererBundle {
-    renderer: THREE.WebGPURenderer;
-    scene: THREE.Scene;
-    camera: THREE.OrthographicCamera;
-    mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.Material>;
-    fallbackMaterial: THREE.Material;
+async function captureShaderPreview(): Promise<ImageBitmap | null> {
+    try {
+        const image = await captureIsolatedPreview({ format: 'png' });
+        return image ? await createImageBitmap(image.blob) : null;
+    } catch (error) {
+        console.error('Failed to capture shader preview for export:', error);
+        return null;
+    }
 }
 
-// Shared offscreen renderer for preview snapshots, kept for the page lifetime
-// (WebGPU init is expensive; the debug overlay holds one permanently too).
-let previewRendererPromise: Promise<PreviewRendererBundle> | null = null;
-
-function getPreviewRenderer(): Promise<PreviewRendererBundle> {
-    if (!previewRendererPromise) {
-        previewRendererPromise = (async () => {
-            const renderer = new THREE.WebGPURenderer({ antialias: true, alpha: true });
-            await renderer.init();
-
-            const scene = new THREE.Scene();
-            const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
-            camera.position.set(0, 0, 1);
-            camera.lookAt(0, 0, 0);
-
-            const fallbackMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
-            const mesh = new THREE.Mesh<THREE.PlaneGeometry, THREE.Material>(
-                new THREE.PlaneGeometry(2, 2, 1, 1),
-                fallbackMaterial
-            );
-            scene.add(mesh);
-
-            return { renderer, scene, camera, mesh, fallbackMaterial };
-        })();
-        // Allow a retry on the next export if init fails (e.g. device lost).
-        previewRendererPromise.catch(() => {
-            previewRendererPromise = null;
-        });
-    }
-    return previewRendererPromise;
+function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error ?? new Error('Failed to read preview image.'));
+        reader.readAsDataURL(blob);
+    });
 }
 
 /**
- * Offscreen-render every visible debug preview slot and overlay the result as
- * an <img> inside the slot. Returns a cleanup function that removes the
- * injected images. Failures degrade to the empty slot rather than aborting
- * the export.
+ * Snapshot every visible debug preview slot inside the sandboxed overlay frame
+ * and overlay the result as an <img> inside the slot. Returns a cleanup
+ * function that removes the injected images. Failures degrade to the empty
+ * slot rather than aborting the export.
  */
 async function injectPreviewSnapshots(viewportEl: HTMLElement): Promise<() => void> {
     const injected: HTMLImageElement[] = [];
@@ -273,138 +246,66 @@ async function injectPreviewSnapshots(viewportEl: HTMLElement): Promise<() => vo
     );
     if (slots.length === 0) return removeInjected;
 
-    try {
-        const { renderer, scene, camera, mesh, fallbackMaterial } = await getPreviewRenderer();
-        const state = useEditorStore.getState();
-        const isPostMode = state.editorMode === 'main' && state.activeRootGraph === 'post';
-        const canvasRect = document.querySelector('.react-flow')?.getBoundingClientRect() ?? null;
+    const state = useEditorStore.getState();
+    const isPostMode = state.editorMode === 'main' && state.activeRootGraph === 'post';
+    const canvasRect = document.querySelector('.react-flow')?.getBoundingClientRect() ?? null;
 
-        for (const slot of slots) {
-            const nodeId = slot.dataset.debugPreviewNodeId;
-            if (!nodeId) continue;
+    for (const slot of slots) {
+        const nodeId = slot.dataset.debugPreviewNodeId;
+        if (!nodeId) continue;
 
-            // offsetWidth/Height are layout px, unaffected by the canvas zoom transform.
-            const slotWidth = slot.offsetWidth;
-            const slotHeight = slot.offsetHeight;
-            if (slotWidth <= 0 || slotHeight <= 0) continue;
+        // offsetWidth/Height are layout px, unaffected by the canvas zoom transform.
+        const slotWidth = slot.offsetWidth;
+        const slotHeight = slot.offsetHeight;
+        if (slotWidth <= 0 || slotHeight <= 0) continue;
 
-            // Screen-space nodes (screenUV etc.) look different depending on
-            // where the pixels land on the render target. The overlay draws
-            // previews into a canvas-sized target with the slot as viewport,
-            // so replicate that exactly for slots fully on screen; slots
-            // scrolled out of view (which the overlay never draws) fall back
-            // to a self-contained slot-sized render.
-            let overlayRect: ReturnType<typeof getCanvasRelativeDebugPreviewRect> = null;
-            if (!isPostMode && canvasRect) {
-                const slotScreenRect = slot.getBoundingClientRect();
-                const fullyVisible =
-                    slotScreenRect.left >= canvasRect.left &&
-                    slotScreenRect.top >= canvasRect.top &&
-                    slotScreenRect.right <= canvasRect.right &&
-                    slotScreenRect.bottom <= canvasRect.bottom;
-                overlayRect = fullyVisible
-                    ? getCanvasRelativeDebugPreviewRect(slotScreenRect, canvasRect)
-                    : null;
-            }
-
-            let snapshotUrl: string;
-            try {
-                if (isPostMode) {
-                    const builder = state.postDebugPreviewOutputBuilder;
-                    if (!builder) continue;
-                    renderer.setPixelRatio(PREVIEW_SNAPSHOT_PIXEL_RATIO);
-                    renderer.setSize(slotWidth, slotHeight, false);
-                    renderer.setScissorTest(false);
-                    renderer.setViewport(0, 0, slotWidth, slotHeight);
-                    const preview = builder(nodeId);
-                    const pipeline = new THREE.RenderPipeline(renderer, preview.outputNode as THREE.Node);
-                    try {
-                        preview.update(slotWidth / slotHeight);
-                        pipeline.render();
-                    } finally {
-                        preview.dispose?.();
-                        pipeline.dispose();
-                    }
-                    snapshotUrl = renderer.domElement.toDataURL('image/png');
-                } else {
-                    const material = buildNodePreviewMaterial(
-                        nodeId,
-                        state.nodes,
-                        state.edges,
-                        state.subgraphs,
-                        state.codeNodes,
-                        state.globals
-                    );
-                    try {
-                        mesh.material = material;
-                        if (overlayRect && canvasRect) {
-                            const dpr = window.devicePixelRatio || 1;
-                            renderer.setPixelRatio(dpr);
-                            renderer.setSize(canvasRect.width, canvasRect.height, false);
-                            renderer.setScissorTest(false);
-                            renderer.setClearColor(0x000000, 0);
-                            renderer.clear();
-                            renderer.setViewport(overlayRect.x, overlayRect.y, overlayRect.width, overlayRect.height);
-                            renderer.setScissor(overlayRect.x, overlayRect.y, overlayRect.width, overlayRect.height);
-                            renderer.setScissorTest(true);
-                            // Pipelines compile asynchronously; without this the
-                            // first render can silently draw nothing.
-                            await renderer.compileAsync(scene, camera);
-                            renderer.render(scene, camera);
-                            renderer.setScissorTest(false);
-
-                            const crop = document.createElement('canvas');
-                            crop.width = Math.max(1, Math.round(overlayRect.width * dpr));
-                            crop.height = Math.max(1, Math.round(overlayRect.height * dpr));
-                            const cropCtx = crop.getContext('2d');
-                            if (!cropCtx) continue;
-                            cropCtx.drawImage(
-                                renderer.domElement,
-                                overlayRect.x * dpr,
-                                overlayRect.y * dpr,
-                                overlayRect.width * dpr,
-                                overlayRect.height * dpr,
-                                0,
-                                0,
-                                crop.width,
-                                crop.height
-                            );
-                            snapshotUrl = crop.toDataURL('image/png');
-                        } else {
-                            renderer.setPixelRatio(PREVIEW_SNAPSHOT_PIXEL_RATIO);
-                            renderer.setSize(slotWidth, slotHeight, false);
-                            renderer.setScissorTest(false);
-                            renderer.setViewport(0, 0, slotWidth, slotHeight);
-                            await renderer.compileAsync(scene, camera);
-                            renderer.render(scene, camera);
-                            snapshotUrl = renderer.domElement.toDataURL('image/png');
-                        }
-                    } finally {
-                        mesh.material = fallbackMaterial;
-                        material.dispose();
-                    }
-                }
-            } catch (error) {
-                console.error(`Failed to snapshot preview for node "${nodeId}":`, error);
-                continue;
-            }
-
-            const img = document.createElement('img');
-            img.src = snapshotUrl;
-            img.style.position = 'absolute';
-            img.style.inset = '0';
-            img.style.width = '100%';
-            img.style.height = '100%';
-            try {
-                await img.decode();
-            } catch {
-                // decode() failing doesn't prevent the capture from embedding the data URL.
-            }
-            slot.appendChild(img);
-            injected.push(img);
+        // Screen-space nodes (screenUV etc.) look different depending on
+        // where the pixels land on the render target. The overlay draws
+        // previews into a canvas-sized target with the slot as viewport,
+        // so replicate that exactly for slots fully on screen; slots
+        // scrolled out of view (which the overlay never draws) fall back
+        // to a self-contained slot-sized render.
+        let overlayRect: ReturnType<typeof getCanvasRelativeDebugPreviewRect> = null;
+        if (!isPostMode && canvasRect) {
+            const slotScreenRect = slot.getBoundingClientRect();
+            const fullyVisible =
+                slotScreenRect.left >= canvasRect.left &&
+                slotScreenRect.top >= canvasRect.top &&
+                slotScreenRect.right <= canvasRect.right &&
+                slotScreenRect.bottom <= canvasRect.bottom;
+            overlayRect = fullyVisible
+                ? getCanvasRelativeDebugPreviewRect(slotScreenRect, canvasRect)
+                : null;
         }
-    } catch (error) {
-        console.error('Failed to snapshot node previews for export:', error);
+
+        let snapshotUrl: string;
+        try {
+            const image = await captureIsolatedNodePreview(nodeId, overlayRect && canvasRect
+                ? {
+                    pixelRatio: window.devicePixelRatio || 1,
+                    viewport: { canvasWidth: canvasRect.width, canvasHeight: canvasRect.height, ...overlayRect },
+                    format: 'png',
+                }
+                : { width: slotWidth, height: slotHeight, pixelRatio: PREVIEW_SNAPSHOT_PIXEL_RATIO, format: 'png' });
+            snapshotUrl = await blobToDataUrl(image.blob);
+        } catch (error) {
+            console.error(`Failed to snapshot preview for node "${nodeId}":`, error);
+            continue;
+        }
+
+        const img = document.createElement('img');
+        img.src = snapshotUrl;
+        img.style.position = 'absolute';
+        img.style.inset = '0';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        try {
+            await img.decode();
+        } catch {
+            // decode() failing doesn't prevent the capture from embedding the data URL.
+        }
+        slot.appendChild(img);
+        injected.push(img);
     }
 
     return removeInjected;

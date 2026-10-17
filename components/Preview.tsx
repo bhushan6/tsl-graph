@@ -1,12 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation, useConvex } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { toast } from 'sonner';
 import { useEditorStore, type ThumbnailMode } from '@/store/editor';
 import { cn } from '@/lib/utils';
 import { api } from '@/convex/_generated/api';
-import { Id } from '@/convex/_generated/dataModel';
+import type { Id } from '@/convex/_generated/dataModel';
 import { PreviewCanvas3D } from './preview/PreviewCanvas3D';
 import { PreviewControls } from './preview/PreviewControls';
 import type { PreviewCanvasHandle, PreviewCaptureUploadArgs } from './preview/types';
@@ -34,8 +34,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
     const [isGeometryScriptOpen, setIsGeometryScriptOpen] = useState(false);
     const [geometryScriptDraft, setGeometryScriptDraft] = useState(previewSettings.geometryScript ?? '');
 
-    const convex = useConvex();
     const generatePreviewUploadUrl = useMutation(api.ai.generatePreviewUploadUrl);
+    const registerPreviewImage = useMutation(api.ai.registerPreviewImage);
     const projectService = hostConfig?.services?.project;
     const hostRef = hostConfig?.ref;
     const canUploadThumbnail = Boolean(projectService?.uploadThumbnail && hostRef !== undefined);
@@ -76,7 +76,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
 
             return {
                 imageUrl: '',
-                storageId: result.storageId,
+                storageId: result.storageId ?? '',
                 width,
                 height,
                 format,
@@ -94,10 +94,8 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
             throw new Error('Failed to upload preview image');
         }
 
-        const { storageId } = await response.json();
-        const result = await convex.query(api.ai.getPreviewUrl, {
-            storageId: storageId as Id<'_storage'>,
-        });
+        const { storageId } = await response.json() as { storageId: Id<'_storage'> };
+        const result = await registerPreviewImage({ storageId });
 
         return {
             imageUrl: result.url,
@@ -107,10 +105,10 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
             format,
         };
     }, [
-        convex,
         generatePreviewUploadUrl,
         hostRef,
         projectService,
+        registerPreviewImage,
     ]);
 
     const capturePreviewForAi = useCallback(async (options?: { format?: 'png' | 'jpeg'; quality?: number }) => {

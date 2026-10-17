@@ -731,7 +731,7 @@ function emitTextureSampleNode(
 ): string {
     const url = getStringValue(node, 'url', inputs['url']);
     const texVarName = `${texVarBaseName}_tex`;
-    targetLines.push(`${indent}const ${texVarName} = new THREE.TextureLoader().load("${url}");`);
+    targetLines.push(`${indent}const ${texVarName} = new THREE.TextureLoader().load(${JSON.stringify(url)});`);
 
     const texturePropKeys = new Set<string>(TEXTURE_PROP_INPUTS);
     const activeInputs = getMaterialActiveInputsSet(node.data, def);

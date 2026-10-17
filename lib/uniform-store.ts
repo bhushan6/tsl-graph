@@ -7,6 +7,27 @@ type UniformNodeLike = {
 
 const uniformStore = new Map<string, { node: UniformNodeLike; kind: UniformKind }>();
 let uniformFactory: ((value: unknown) => UniformNodeLike) | null = null;
+export type UniformEvent =
+    | { type: 'update'; id: string; kind: UniformKind; value: TSLValueType }
+    | { type: 'remove'; id: string }
+    | { type: 'clear' };
+const listeners = new Set<(event: UniformEvent) => void>();
+
+/** Mirror uniform changes into isolated renderers, which own the real uniform nodes. */
+export function subscribeUniformEvents(listener: (event: UniformEvent) => void) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+}
+
+const emit = (event: UniformEvent) => {
+    for (const listener of listeners) listener(event);
+};
+
+export function applyUniformEvent(event: UniformEvent) {
+    if (event.type === 'update') updateUniformValue(event.id, event.kind, event.value);
+    else if (event.type === 'remove') removeUniform(event.id);
+    else clearUniforms();
+}
 
 export function setUniformFactory(factory: (value: unknown) => UniformNodeLike) {
     uniformFactory = factory;
@@ -65,6 +86,7 @@ export function ensureUniform(id: string, value: unknown, kind: UniformKind) {
 }
 
 export function updateUniformValue(id: string, kind: UniformKind, value: TSLValueType) {
+    emit({ type: 'update', id, kind, value });
     const entry = uniformStore.get(id);
     if (!entry || entry.kind !== kind) return;
 
@@ -73,9 +95,11 @@ export function updateUniformValue(id: string, kind: UniformKind, value: TSLValu
 }
 
 export function removeUniform(id: string) {
+    emit({ type: 'remove', id });
     uniformStore.delete(id);
 }
 
 export function clearUniforms() {
+    emit({ type: 'clear' });
     uniformStore.clear();
 }

@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        // The shader preview runs in an opaque-origin sandbox, so loading the
+        // public textures/models it uses (e.g. /uv.png) is a CORS request.
+        source: "/:file([^/]+\\.(?:png|jpe?g|webp|glb|gltf|hdr))",
+        headers: [{ key: "Access-Control-Allow-Origin", value: "*" }],
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

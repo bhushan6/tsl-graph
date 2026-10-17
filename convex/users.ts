@@ -1,8 +1,8 @@
-import { ConvexError } from "convex/values";
-import { mutation } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import { internalMutation, mutation } from "./_generated/server";
 import { authComponent } from "./auth";
 import { createErrorData, ErrorCodes } from "./errors";
-import { v } from "convex/values";
+import { deleteUserFiles, transferFileOwnership } from "./files";
 
 export const deleteSelf = mutation({
     args: {},
@@ -30,15 +30,6 @@ export const deleteSelf = mutation({
                 await ctx.db.delete(like._id);
             }
 
-            // Check for project assets/thumbnails if needed, but schema seems to handle storage cleanups via cron or manual triggers usually
-            // However, we should try to clean up storage if we have the reference
-            if (project.thumbnailStorageId) {
-                try {
-                    await ctx.storage.delete(project.thumbnailStorageId);
-                } catch (e) {
-                    console.error("Failed to delete thumbnail for project", project._id, e);
-                }
-            }
             await ctx.db.delete(project._id);
         }
 
@@ -59,11 +50,6 @@ export const deleteSelf = mutation({
             .collect();
 
         for (const asset of assets) {
-            try {
-                await ctx.storage.delete(asset.storageId);
-            } catch (e) {
-                console.error("Failed to delete asset file", asset._id, e);
-            }
             await ctx.db.delete(asset._id);
         }
 
@@ -87,32 +73,19 @@ export const deleteSelf = mutation({
             .withIndex("by_user", (q) => q.eq("userId", userId))
             .collect();
         for (const f of feedbacks) {
-            if (f.attachments) {
-                for (const attachmentId of f.attachments) {
-                    try {
-                        await ctx.storage.delete(attachmentId);
-                    } catch (e) {
-                        console.error("Failed to delete feedback attachment", attachmentId, e);
-                    }
-                }
-            }
-            // Handle legacy single attachment
-            if (f.attachment) {
-                try {
-                    await ctx.storage.delete(f.attachment);
-                } catch (e) {
-                    console.error("Failed to delete feedback attachment", f.attachment, e);
-                }
-            }
-
             await ctx.db.delete(f._id);
         }
+
+        // 6. Delete files: thumbnails, asset files, feedback attachments and AI
+        // captures. Only files bound to this user are deleted; storage IDs that
+        // merely appear in this user's rows may belong to someone else.
+        await deleteUserFiles(ctx, userId);
 
         return { success: true };
     },
 });
 
-export const transferGuestDataToUser = mutation({
+export const transferGuestDataToUser = internalMutation({
     args: {
         guestUserId: v.string(),    // Better Auth user ID
         targetUserId: v.string(),   // Better Auth user ID
@@ -120,74 +93,58 @@ export const transferGuestDataToUser = mutation({
     handler: async (ctx, args) => {
         const { guestUserId, targetUserId } = args;
 
-        try {
-            // Get the Convex document IDs for both users from the Better Auth user table
-            // The userId stored in projects/assets is the Convex _id, not Better Auth's id
-            const guestUser = await authComponent.getAnyUserById(ctx, guestUserId);
-            const targetUser = await authComponent.getAnyUserById(ctx, targetUserId);
-
-            if (!guestUser || !targetUser) {
-                console.log("Could not find users:", { guestUser: !!guestUser, targetUser: !!targetUser });
-                return { success: false, error: "User not found" };
-            }
-
-            // Use the Convex document _id (which is what's stored in projects/assets)
-            const guestConvexId = guestUser._id;
-            const targetConvexId = targetUser._id;
-
-            console.log("Transferring data from", guestConvexId, "to", targetConvexId);
-
-            // 1. Update the Project (guest user has only one)
-            const project = await ctx.db
-                .query("projects")
-                .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
-                .unique();
-
-            console.log("Found guest project:", project?._id);
-
-            if (project) {
-                // Simply update the userId - don't delete and recreate
-                await ctx.db.patch(project._id, {
-                    userId: targetConvexId,
-                });
-                console.log("Transferred project to new user");
-            }
-
-            // 2. Update Assets (transfer ownership)
-            const assets = await ctx.db
-                .query("assets")
-                .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
-                .collect();
-
-            console.log("Found", assets.length, "assets to transfer");
-
-            for (const asset of assets) {
-                await ctx.db.patch(asset._id, {
-                    userId: targetConvexId,
-                });
-            }
-
-            // 3. Update Feedbacks
-            const feedback = await ctx.db
-                .query("feedbacks")
-                .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
-                .collect();
-
-            console.log("Found", feedback.length, "feedbacks to transfer");
-
-            for (const f of feedback) {
-                await ctx.db.patch(f._id, {
-                    userId: targetConvexId,
-                });
-            }
-
-            // Note: assetReferences and deletedAssetReferences reference project._id (graphId)
-            // which stays the same since we're patching, not deleting and recreating
-
-            return { success: true };
-        } catch (error) {
-            console.error("Error transferring guest data:", error);
-            return { success: false, error: String(error) };
+        if (guestUserId === targetUserId) {
+            throw new Error("Guest and target users must be different");
         }
+
+        // These are Better Auth user IDs; app data stores the users' Convex document IDs.
+        const [guestUser, targetUser] = await Promise.all([
+            authComponent.getAnyUserById(ctx, guestUserId),
+            authComponent.getAnyUserById(ctx, targetUserId),
+        ]);
+
+        if (!guestUser || guestUser.isAnonymous !== true) {
+            throw new Error("Source user must be an existing anonymous user");
+        }
+        if (!targetUser || targetUser.isAnonymous === true) {
+            throw new Error("Target user must be an existing non-anonymous user");
+        }
+
+        const guestConvexId = guestUser._id;
+        const targetConvexId = targetUser._id;
+
+        // A guest may have created multiple projects; transfer every one in this
+        // mutation so a failure rolls the whole migration back atomically.
+        const projects = await ctx.db
+            .query("projects")
+            .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
+            .collect();
+
+        for (const project of projects) {
+            await ctx.db.patch(project._id, { userId: targetConvexId });
+        }
+
+        const assets = await ctx.db
+            .query("assets")
+            .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
+            .collect();
+
+        for (const asset of assets) {
+            await ctx.db.patch(asset._id, { userId: targetConvexId });
+        }
+
+        const feedbacks = await ctx.db
+            .query("feedbacks")
+            .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
+            .collect();
+
+        for (const feedback of feedbacks) {
+            await ctx.db.patch(feedback._id, { userId: targetConvexId });
+        }
+
+        await transferFileOwnership(ctx, guestConvexId, targetConvexId);
+
+        // References use project IDs, which remain stable because projects are patched in place.
+        return { success: true };
     }
 });

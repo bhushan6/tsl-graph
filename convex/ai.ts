@@ -1,6 +1,8 @@
-import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import { mutation } from "./_generated/server";
 import { authComponent } from "./auth";
+import { createErrorData, ErrorCodes } from "./errors";
+import { claimUpload, deleteOwnedFile, issueUploadUrl } from "./files";
 
 export const generatePreviewUploadUrl = mutation({
     handler: async (ctx) => {
@@ -8,11 +10,12 @@ export const generatePreviewUploadUrl = mutation({
         if (!user) {
             throw new Error("Not authenticated");
         }
-        return await ctx.storage.generateUploadUrl();
+        return await issueUploadUrl(ctx, user._id, "ai-preview");
     },
 });
 
-export const getPreviewUrl = query({
+/** Bind an uploaded preview capture to the caller and return a URL the AI provider can fetch. */
+export const registerPreviewImage = mutation({
     args: {
         storageId: v.id("_storage"),
     },
@@ -21,9 +24,10 @@ export const getPreviewUrl = query({
         if (!user) {
             throw new Error("Not authenticated");
         }
+        await claimUpload(ctx, { storageId: args.storageId, userId: user._id, purpose: "ai-preview" });
         const url = await ctx.storage.getUrl(args.storageId);
         if (!url) {
-            throw new Error("Failed to resolve preview URL");
+            throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND, "Failed to resolve preview URL"));
         }
         return { url };
     },
@@ -38,7 +42,8 @@ export const deletePreviewImage = mutation({
         if (!user) {
             throw new Error("Not authenticated");
         }
-        await ctx.storage.delete(args.storageId);
-        return { success: true };
+        // Only the caller's own preview captures can be deleted.
+        const deleted = await deleteOwnedFile(ctx, args.storageId, user._id, "ai-preview");
+        return { success: deleted };
     },
 });

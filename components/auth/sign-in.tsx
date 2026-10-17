@@ -4,11 +4,13 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { SignInCard } from "./sign-in-card";
 import { Loader2 } from "lucide-react";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 function SignInContent() {
     const searchParams = useSearchParams();
     const redirect = searchParams.get("redirect");
-    const callbackUrl = redirect ? decodeURIComponent(redirect) : "/dashboard";
+    // Only same-origin paths: this value ends up in window.location.href.
+    const callbackUrl = safeRedirectPath(redirect);
 
     return <SignInCard callbackUrl={callbackUrl} />;
 }

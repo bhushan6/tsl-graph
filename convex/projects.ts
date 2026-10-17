@@ -1,8 +1,9 @@
 import { v, ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { authComponent } from "./auth";
 import { createErrorData, ErrorCodes } from "./errors";
+import { claimUpload, deleteOwnedFile, issueUploadUrl } from "./files";
 
 // Public standalone embeds intentionally use this narrow projection rather than
 // `get`, which also consults auth and returns owner/private project details.
@@ -29,6 +30,21 @@ export const selectProjectSummary = (project: {
     likeCount: project.likeCount ?? 0,
 });
 
+// Guests get one project; account migration and the UI both rely on that.
+async function assertCanCreateProject(ctx: MutationCtx, user: { _id: string; isAnonymous?: boolean | null }) {
+    if (!user.isAnonymous) return;
+    const existing = await ctx.db
+        .query("projects")
+        .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
+        .first();
+    if (existing) {
+        throw new ConvexError(createErrorData(
+            ErrorCodes.LIMIT_EXCEEDED,
+            "Anonymous users are limited to 1 project. Please sign up to create more."
+        ));
+    }
+}
+
 // Create a new project
 export const create = mutation({
     args: {
@@ -44,19 +60,7 @@ export const create = mutation({
             throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
         }
 
-        if (user.isAnonymous) {
-            const userProjects = await ctx.db
-                .query("projects")
-                .withIndex("by_user_updated", (q) => q.eq("userId", user._id))
-                .collect();
-
-            if (userProjects.length >= 1) {
-                throw new ConvexError(createErrorData(
-                    ErrorCodes.LIMIT_EXCEEDED,
-                    "Anonymous users are limited to 1 project. Please sign up to create more."
-                ));
-            }
-        }
+        await assertCanCreateProject(ctx, user);
 
         const now = Date.now();
         let finalName = args.name?.trim() || "Untitled";
@@ -152,14 +156,20 @@ export const updateThumbnail = mutation({
             throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHORIZED));
         }
 
+        // Store old storage ID for deletion after update
+        const oldStorageId = project.thumbnailStorageId;
+        if (oldStorageId === args.storageId) {
+            return { id: args.id, url: project.thumbnail ?? null };
+        }
+
+        // Proves the caller uploaded this file; another user's storage ID is rejected.
+        await claimUpload(ctx, { storageId: args.storageId, userId: user._id, purpose: "thumbnail" });
+
         // Get the URL for the new thumbnail
         const url = await ctx.storage.getUrl(args.storageId);
         if (!url) {
             throw new Error("Failed to get thumbnail URL");
         }
-
-        // Store old storage ID for deletion after update
-        const oldStorageId = project.thumbnailStorageId;
 
         // Update project with new thumbnail
         await ctx.db.patch(args.id, {
@@ -168,14 +178,9 @@ export const updateThumbnail = mutation({
             updatedAt: Date.now(),
         });
 
-        // Delete old thumbnail from storage if it exists
+        // Delete the old thumbnail only if the caller provably owns that file
         if (oldStorageId) {
-            try {
-                await ctx.storage.delete(oldStorageId);
-                console.log("[updateThumbnail] Deleted old thumbnail:", oldStorageId);
-            } catch (err) {
-                console.error("[updateThumbnail] Failed to delete old thumbnail:", err);
-            }
+            await deleteOwnedFile(ctx, oldStorageId, user._id, "thumbnail");
         }
 
         return { id: args.id, url };
@@ -189,7 +194,7 @@ export const generateThumbnailUploadUrl = mutation({
         if (!user) {
             throw new ConvexError(createErrorData(ErrorCodes.NOT_AUTHENTICATED));
         }
-        return await ctx.storage.generateUploadUrl();
+        return await issueUploadUrl(ctx, user._id, "thumbnail");
     },
 });
 
@@ -219,6 +224,10 @@ export const remove = mutation({
 
         for (const like of likes) {
             await ctx.db.delete(like._id);
+        }
+
+        if (project.thumbnailStorageId) {
+            await deleteOwnedFile(ctx, project.thumbnailStorageId, user._id, "thumbnail");
         }
 
         await ctx.db.delete(args.id);
@@ -501,6 +510,8 @@ export const clone = mutation({
         if (!sourceProject || !sourceProject.isPublic) {
             throw new ConvexError(createErrorData(ErrorCodes.NOT_FOUND));
         }
+
+        await assertCanCreateProject(ctx, user);
 
         const now = Date.now();
         const projectId = await ctx.db.insert("projects", {

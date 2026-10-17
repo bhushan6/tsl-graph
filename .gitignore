@@ -53,3 +53,6 @@ dist-ssr
 
 # AI logs
 /logs
+
+# Built locally by predev/prebuild; contains no application credentials.
+/public/preview-sandbox.js

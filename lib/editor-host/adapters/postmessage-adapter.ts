@@ -4,8 +4,10 @@ import {
     DEFAULT_POSTMESSAGE_TARGET_ORIGIN,
     EDITOR_POSTMESSAGE_SOURCE,
     HOST_POSTMESSAGE_SOURCE,
+    isFromHostWindow,
     isHostMessage,
     postMessageToHost,
+    resolveHostTargetOrigin,
     type PostMessageEnvelope,
 } from '../postmessage';
 
@@ -37,7 +39,7 @@ function requestHostResponse<TPayload = unknown>({
     requestType: string;
     responseType: string;
     payload: unknown;
-    targetOrigin: string;
+    targetOrigin: string | null;
     timeoutMs: number;
     hostSource: string;
 }): Promise<TPayload | null> {
@@ -59,6 +61,7 @@ function requestHostResponse<TPayload = unknown>({
         };
 
         const handleMessage = (event: MessageEvent) => {
+            if (!isFromHostWindow(event, targetOrigin)) return;
             const data = event.data;
             if (!isHostMessage(data, hostSource)) return;
             if (data.type !== responseType) return;
@@ -100,7 +103,7 @@ function requestHostResponse<TPayload = unknown>({
 export function createPostMessageEditorAdapter(
     options: PostMessageAdapterOptions = {}
 ): EditorPersistenceAdapter<PostMessageEditorRef> {
-    const targetOrigin = options.targetOrigin ?? DEFAULT_POSTMESSAGE_TARGET_ORIGIN;
+    const targetOrigin = resolveHostTargetOrigin(options.targetOrigin ?? DEFAULT_POSTMESSAGE_TARGET_ORIGIN);
     const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     const hostSource = options.hostSource ?? HOST_POSTMESSAGE_SOURCE;
 
@@ -149,7 +152,7 @@ export function createPostMessageEditorAdapter(
 
 export function postEditorResponse(
     message: Omit<PostMessageEnvelope, 'source'>,
-    targetOrigin = DEFAULT_POSTMESSAGE_TARGET_ORIGIN
+    targetOrigin: string | null = DEFAULT_POSTMESSAGE_TARGET_ORIGIN
 ): boolean {
     return postMessageToHost(
         {

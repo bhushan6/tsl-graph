@@ -1,7 +1,8 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
+import { requireRunMutationCtx } from "@convex-dev/better-auth/utils";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { anonymous } from "better-auth/plugins";
-import { api, components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { betterAuth } from "better-auth";
@@ -46,12 +47,13 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
             convex({ authConfig }),
             anonymous({
                 onLinkAccount: async ({ anonymousUser, newUser }) => {
-                    console.log("ON LINK=============")
                     const guestUserId = anonymousUser.user.id
                     const targetUserId = newUser.user.id
+                    const mutationCtx = requireRunMutationCtx(ctx);
 
-                    // Use ctx from the outer createAuth scope to run the mutation
-                    await (ctx as any).runMutation(api.users.transferGuestDataToUser, {
+                    // Better Auth awaits this hook before deleting the anonymous user.
+                    // Let migration errors fail the link flow so the guest account remains recoverable.
+                    await mutationCtx.runMutation(internal.users.transferGuestDataToUser, {
                         guestUserId,
                         targetUserId
                     })

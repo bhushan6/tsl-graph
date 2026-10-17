@@ -35,6 +35,7 @@ import {
     waterDrops, watermelon, waves, wood, zebraLines, bricks,
 } from 'tsl-textures';
 import { registry } from './registry';
+import { assertIsolatedPreview } from './preview-sandbox/security';
 
 const setTSLUniformFactory = () => {
     setUniformFactory(TSL.uniform as unknown as Parameters<typeof setUniformFactory>[0]);
@@ -191,6 +192,7 @@ export function buildTSLMaterial(
     try {
         // 4. Create and execute the function
         // We pass the scope keys as argument names
+        assertIsolatedPreview();
         const func = new Function(...scopeKeys, functionBody);
 
         // Call with scope values
@@ -231,6 +233,7 @@ export function buildTSLPostOutputNode(
         return ${compiled.functionName}(sceneColorNode, sceneDepthNode, sceneNormalNode, sceneTextureNode, sceneDepthTextureNode, sceneNormalTextureNode);
     `;
 
+    assertIsolatedPreview();
     const fn = new Function(
         ...scopeKeys,
         'sceneColorNode',
@@ -408,6 +411,7 @@ export function buildNodePreviewMaterial(
     `;
 
     try {
+        assertIsolatedPreview();
         const func = new Function(...scopeKeys, functionBody);
 
         const material = func(...scopeValues);

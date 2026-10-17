@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NodeDef, NodeType, TSLType } from './types';
+import type { TSLFunction } from './nodes/inferred-types';
 import { registry } from './registry';
 import { initializeNodes } from './nodes';
 
@@ -8,7 +9,7 @@ function registerTestNode(type: string, outputType: TSLType, outputs?: NodeDef['
         type: type as NodeType,
         label: type,
         category: 'Advanced',
-        tsl: type,
+        tsl: type as TSLFunction,
         outputs: outputs ?? { out: { label: 'Out', type: outputType } },
     });
 }

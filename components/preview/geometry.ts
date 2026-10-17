@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { PreviewSettings } from '@/store/editor';
+import { assertIsolatedPreview } from '@/lib/preview-sandbox/security';
 
 export interface PreviewGeometryResult {
     geometry: THREE.BufferGeometry;
@@ -67,6 +68,7 @@ export function buildPreviewGeometry(previewSettings: PreviewSettings): PreviewG
     if (script) {
         const scriptedGeometry = baseGeometry.clone();
         try {
+            assertIsolatedPreview();
             const fn = new Function('geometry', 'THREE', `"use strict";\n${script}`);
             fn(scriptedGeometry, THREE);
             geometry = scriptedGeometry;

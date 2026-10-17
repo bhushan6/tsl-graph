@@ -137,12 +137,45 @@ export const getHostWindow = (): Window | null => {
     return null;
 };
 
-export const postMessageToHost = (
-    message: PostMessageEnvelope,
-    targetOrigin = DEFAULT_POSTMESSAGE_TARGET_ORIGIN
+/**
+ * Resolves the embed's `targetOrigin` parameter to `'*'` (any embedder, the
+ * default) or one exact http(s) origin. Anything else returns null, which
+ * disables the host channel instead of silently widening it.
+ */
+export const resolveHostTargetOrigin = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined || value === '' || value === DEFAULT_POSTMESSAGE_TARGET_ORIGIN) {
+        return DEFAULT_POSTMESSAGE_TARGET_ORIGIN;
+    }
+    try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+        if (url.pathname !== '/' || url.search || url.hash || url.username || url.password) return null;
+        return url.origin;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Host messages must come from the window embedding the editor (never a child
+ * frame such as the sandboxed preview, a popup, or the page itself), and from
+ * the pinned origin when one was configured.
+ */
+export const isFromHostWindow = (
+    event: Pick<MessageEvent, 'source' | 'origin'>,
+    targetOrigin: string | null
 ): boolean => {
     const hostWindow = getHostWindow();
-    if (!hostWindow) return false;
+    if (!hostWindow || targetOrigin === null || event.source !== hostWindow) return false;
+    return targetOrigin === DEFAULT_POSTMESSAGE_TARGET_ORIGIN || event.origin === targetOrigin;
+};
+
+export const postMessageToHost = (
+    message: PostMessageEnvelope,
+    targetOrigin: string | null = DEFAULT_POSTMESSAGE_TARGET_ORIGIN
+): boolean => {
+    const hostWindow = getHostWindow();
+    if (!hostWindow || targetOrigin === null) return false;
 
     hostWindow.postMessage(message, targetOrigin);
     return true;

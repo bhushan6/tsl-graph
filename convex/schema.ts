@@ -1,6 +1,13 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+export const filePurpose = v.union(
+    v.literal("asset"),
+    v.literal("thumbnail"),
+    v.literal("ai-preview"),
+    v.literal("feedback"),
+);
+
 export default defineSchema({
     // Main projects table
     projects: defineTable({
@@ -113,4 +120,40 @@ export default defineSchema({
         .index("by_user", ["userId"])
         .index("by_type", ["type"])
         .index("by_status", ["status"]),
+
+    // ========== File Ownership ==========
+
+    // Server-recorded owner of every stored file the app references. Deleting or
+    // attaching a file requires a binding for the caller; a caller-supplied
+    // storage ID alone never proves ownership.
+    storageBindings: defineTable({
+        storageId: v.id("_storage"),
+        userId: v.string(),
+        purpose: filePurpose,
+        // Legacy file referenced by more than one user: never deleted or re-attached.
+        disputed: v.optional(v.boolean()),
+        createdAt: v.number(),
+    })
+        .index("by_storage", ["storageId"])
+        .index("by_user", ["userId"]),
+
+    // One-use permission to upload a file for a purpose; consumed when the upload is claimed.
+    uploadGrants: defineTable({
+        userId: v.string(),
+        purpose: filePurpose,
+        createdAt: v.number(),
+        expiresAt: v.number(),
+        consumedAt: v.optional(v.number()),
+    })
+        .index("by_user_purpose", ["userId", "purpose", "createdAt"])
+        .index("by_expires", ["expiresAt"]),
+
+    // Progress of one-off storage maintenance (legacy binding backfill).
+    storageMaintenance: defineTable({
+        key: v.string(),
+        // Files created after this time are always bound when legitimate, so unbound ones can be swept.
+        orphanSweepSince: v.optional(v.number()),
+        // Creation time of the newest file the orphan sweep has examined.
+        orphanSweptUntil: v.optional(v.number()),
+    }).index("by_key", ["key"]),
 });

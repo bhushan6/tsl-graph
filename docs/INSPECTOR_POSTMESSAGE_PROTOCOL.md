@@ -352,6 +352,18 @@ menu last for the iframe session only; they do not change the URL, graph, or per
 4. Match responses by `requestId` only.
 5. Treat `graphData` as untrusted input; validate before storing.
 
+What the editor enforces:
+
+- Commands are accepted only from the window that embeds the editor (`window.parent`).
+  Messages from other frames, popups, or the editor's own sandboxed shader preview are ignored.
+- With `targetOrigin=<host-origin>`, commands must also arrive from exactly that origin, and
+  responses/events are sent only to it. The value must be a bare `http(s)` origin
+  (`https://host.example` or `https://host.example/`).
+- An invalid `targetOrigin` disables the channel (an error is logged in the editor console);
+  it never falls back to `*`.
+- Graph code (custom code nodes, geometry scripts) runs in a sandboxed, opaque-origin frame
+  inside the editor, so loading an untrusted graph cannot read the editor's storage or session.
+
 ## Minimal host command helper
 
 ```ts

@@ -509,11 +509,72 @@ describe('editor host adapters', () => {
         expect((missing as { value: { url: string } }).value.url).toBe('');
     });
 
+    function stubEmbeddedWindow(respond: (message: { type: string; requestId?: string }) => { source: unknown; origin: string } | null) {
+        const listeners = new Set<(event: MessageEvent) => void>();
+        const parentWindowMock = {
+            postMessage: vi.fn((message: { type: string; requestId?: string }) => {
+                const sender = respond(message);
+                if (!sender) return;
+                queueMicrotask(() => {
+                    for (const listener of listeners) {
+                        listener({
+                            ...sender,
+                            data: {
+                                source: 'tsl-graph-host',
+                                type: message.type.replace('request', 'response'),
+                                requestId: message.requestId,
+                                payload: { graphData: { version: 2, nodes: [], edges: [] } },
+                            },
+                        } as MessageEvent);
+                    }
+                });
+            }),
+        };
+        vi.stubGlobal('window', {
+            parent: parentWindowMock,
+            addEventListener: (type: string, handler: (event: MessageEvent) => void) => {
+                if (type === 'message') listeners.add(handler);
+            },
+            removeEventListener: (type: string, handler: (event: MessageEvent) => void) => {
+                if (type === 'message') listeners.delete(handler);
+            },
+        } as unknown as Window & typeof globalThis);
+        return parentWindowMock;
+    }
+
+    it('postMessage adapter ignores responses that do not come from the embedding window', async () => {
+        const childFrame = {};
+        stubEmbeddedWindow(() => ({ source: childFrame, origin: 'null' }));
+        const adapter = createPostMessageEditorAdapter({ requestTimeoutMs: 20 });
+        await expect(adapter.load({ docId: 'iframe-doc' })).resolves.toBeNull();
+    });
+
+    it('postMessage adapter pins host traffic to a configured origin', async () => {
+        let origin = 'https://evil.test';
+        const parent = stubEmbeddedWindow(() => ({ source: parent, origin }));
+        const adapter = createPostMessageEditorAdapter({ targetOrigin: 'https://host.test/', requestTimeoutMs: 20 });
+
+        await expect(adapter.load({ docId: 'iframe-doc' })).resolves.toBeNull();
+        origin = 'https://host.test';
+        await expect(adapter.load({ docId: 'iframe-doc' })).resolves.toEqual({
+            graphData: { version: 2, nodes: [], edges: [] },
+            projectName: undefined,
+        });
+        expect(parent.postMessage).toHaveBeenCalledWith(expect.anything(), 'https://host.test');
+    });
+
+    it('postMessage adapter refuses an invalid target origin instead of widening it', async () => {
+        const parent = stubEmbeddedWindow(() => null);
+        const adapter = createPostMessageEditorAdapter({ targetOrigin: 'host.test', requestTimeoutMs: 20 });
+        await expect(adapter.load({ docId: 'iframe-doc' })).resolves.toBeNull();
+        expect(parent.postMessage).not.toHaveBeenCalled();
+    });
+
     it('postMessage adapter exchanges load/save payloads with host window', async () => {
         const listeners = new Set<(event: MessageEvent) => void>();
         const dispatchMessage = (data: unknown) => {
             for (const listener of listeners) {
-                listener({ data } as MessageEvent);
+                listener({ data, source: parentWindowMock, origin: 'https://host.test' } as unknown as MessageEvent);
             }
         };
 

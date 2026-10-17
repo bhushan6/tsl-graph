@@ -1,7 +1,8 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, type QueryCtx } from "./_generated/server";
 import { authComponent } from "./auth";
-import { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import { claimUpload, deleteOwnedFile, issueUploadUrl } from "./files";
 
 // ========== Upload Helpers ==========
 
@@ -12,7 +13,7 @@ export const generateUploadUrl = mutation({
         if (!user) {
             throw new Error("Not authenticated");
         }
-        return await ctx.storage.generateUploadUrl();
+        return await issueUploadUrl(ctx, user._id, "asset");
     },
 });
 
@@ -30,13 +31,16 @@ export const registerAsset = mutation({
             throw new Error("Not authenticated");
         }
 
+        // Proves the caller uploaded this file; another user's storage ID is rejected.
+        const file = await claimUpload(ctx, { storageId: args.storageId, userId: user._id, purpose: "asset" });
+
         const now = Date.now();
         const assetId = await ctx.db.insert("assets", {
             userId: user._id,
             storageId: args.storageId,
-            filename: args.filename,
-            mimeType: args.mimeType,
-            size: args.size,
+            filename: args.filename.slice(0, 255),
+            mimeType: file.contentType,
+            size: file.size,
             createdAt: now,
             lastAccessedAt: now,
         });
@@ -231,12 +235,30 @@ export const handleNodeDelete = mutation({
 
 // ========== Queries ==========
 
+/** Owners, plus anyone who can open a project that references the asset. */
+async function canReadAsset(ctx: QueryCtx, asset: Doc<"assets">, userId: string | undefined) {
+    if (userId !== undefined && asset.userId === userId) return true;
+    const refs = await ctx.db
+        .query("assetReferences")
+        .withIndex("by_asset", (q) => q.eq("assetId", asset._id))
+        .take(100);
+    for (const ref of refs) {
+        const project = await ctx.db.get(ref.graphId);
+        if (project && (project.isPublic || project.userId === userId)) return true;
+    }
+    return false;
+}
+
 // Get asset URL for rendering
 export const getAssetUrl = query({
     args: { assetId: v.id("assets") },
     handler: async (ctx, args) => {
         const asset = await ctx.db.get(args.assetId);
         if (!asset) {
+            return null;
+        }
+        const user = await authComponent.safeGetAuthUser(ctx);
+        if (!(await canReadAsset(ctx, asset, user?._id))) {
             return null;
         }
 
@@ -257,6 +279,12 @@ export const getNodeAssets = query({
         graphId: v.id("projects"),
     },
     handler: async (ctx, args) => {
+        const project = await ctx.db.get(args.graphId);
+        const user = await authComponent.safeGetAuthUser(ctx);
+        if (!project || (!project.isPublic && project.userId !== user?._id)) {
+            return [];
+        }
+
         const refs = await ctx.db
             .query("assetReferences")
             .withIndex("by_node", (q) =>
@@ -336,51 +364,54 @@ export const garbageCollectAssets = internalMutation({
             .withIndex("by_deleted_at", (q) => q.lt("deletedAt", cutoffTime))
             .collect();
 
-        // Collect unique asset IDs from expired refs
-        const assetIdsToCheck = new Set<Id<"assets">>();
-
-        // Delete expired references
+        const expiredByAsset = new Map<Id<"assets">, Id<"deletedAssetReferences">[]>();
         for (const ref of expiredRefs) {
-            assetIdsToCheck.add(ref.assetId);
-            await ctx.db.delete(ref._id);
+            expiredByAsset.set(ref.assetId, [...(expiredByAsset.get(ref.assetId) ?? []), ref._id]);
         }
 
-        // Check each asset for remaining references
         let deletedAssets = 0;
-        for (const assetId of assetIdsToCheck) {
-            // Check for active references
+        let deletedReferences = 0;
+        for (const [assetId, expiredIds] of expiredByAsset) {
+            const expired = new Set(expiredIds);
             const activeRefs = await ctx.db
                 .query("assetReferences")
                 .withIndex("by_asset", (q) => q.eq("assetId", assetId))
                 .first();
-
-            if (activeRefs) {
-                // Asset still has active references, don't delete
-                continue;
-            }
-
-            // Check for other deleted references (still in grace period)
             const otherDeletedRefs = await ctx.db
                 .query("deletedAssetReferences")
                 .withIndex("by_asset", (q) => q.eq("assetId", assetId))
-                .first();
-
-            if (otherDeletedRefs) {
-                // Asset has other deleted references still in grace period
-                continue;
-            }
-
-            // No references remain - delete the asset
+                .collect();
             const asset = await ctx.db.get(assetId);
-            if (asset) {
-                await ctx.storage.delete(asset.storageId);
+            const unreferenced = !activeRefs && otherDeletedRefs.every((ref) => expired.has(ref._id));
+
+            if (asset && unreferenced) {
+                // Delete the file only when the asset's owner provably owns it and no
+                // other asset row points at it. A legacy file without a binding is left,
+                // with its expired references, until the binding backfill has run.
+                const binding = await ctx.db
+                    .query("storageBindings")
+                    .withIndex("by_storage", (q) => q.eq("storageId", asset.storageId))
+                    .first();
+                if (!binding) continue;
+                const sharedWith = await ctx.db
+                    .query("assets")
+                    .withIndex("by_storage", (q) => q.eq("storageId", asset.storageId))
+                    .take(2);
+                if (sharedWith.length === 1) {
+                    await deleteOwnedFile(ctx, asset.storageId, asset.userId, "asset");
+                }
                 await ctx.db.delete(assetId);
                 deletedAssets++;
+            }
+
+            for (const id of expiredIds) {
+                await ctx.db.delete(id);
+                deletedReferences++;
             }
         }
 
         return {
-            expiredReferences: expiredRefs.length,
+            expiredReferences: deletedReferences,
             deletedAssets,
         };
     },

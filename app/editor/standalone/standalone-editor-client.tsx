@@ -21,7 +21,9 @@ import {
 } from '@/lib/editor-host/adapters/standalone-indexeddb-assets';
 import {
     EDITOR_POSTMESSAGE_SOURCE,
+    isFromHostWindow,
     isHostMessage,
+    resolveHostTargetOrigin,
     type LoadCommandPayload,
     type LoadCommandResponsePayload,
     type ClearGraphResponsePayload,
@@ -256,7 +258,14 @@ function StandaloneEditorSession() {
     const globals = useEditorStore((s) => s.globals);
     const lastUniformsSignatureRef = useRef<string>('');
 
-    const targetOrigin = searchParams.get('targetOrigin') ?? '*';
+    const targetOriginParam = searchParams.get('targetOrigin');
+    // null (an invalid value) disables the host channel rather than widening it to '*'.
+    const targetOrigin = useMemo(() => resolveHostTargetOrigin(targetOriginParam), [targetOriginParam]);
+    useEffect(() => {
+        if (targetOrigin === null) {
+            console.error('[tsl-graph] Ignoring host messages: targetOrigin must be "*" or an http(s) origin.');
+        }
+    }, [targetOrigin]);
     const docId = searchParams.get('docId') ?? 'standalone';
     const projectId = searchParams.get('projectId');
     const showParam = searchParams.get('show');
@@ -476,6 +485,7 @@ function StandaloneEditorSession() {
         if (typeof window === 'undefined') return;
 
         const handleMessage = async (event: MessageEvent) => {
+            if (!isFromHostWindow(event, targetOrigin)) return;
             const data = event.data;
             if (!isHostMessage(data)) return;
 

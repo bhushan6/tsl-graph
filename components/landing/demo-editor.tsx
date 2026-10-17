@@ -30,6 +30,8 @@ export default function DemoEditor() {
 
     useEffect(() => {
         const handleMessage = async (event: MessageEvent) => {
+            // Only the embedded same-origin editor may drive the demo (not, e.g., its preview sandbox).
+            if (event.source !== iframeRef.current?.contentWindow || event.origin !== window.location.origin) return;
             const data = event.data;
             if (data && data.source === 'tsl-graph-editor') {
                 if (data.type === 'tsl:event:ready') {
@@ -232,7 +234,7 @@ export default function DemoEditor() {
                             type: "tsl:command:load",
                             requestId: "load-landing-page",
                             payload: { graphData: graphDataToLoad }
-                        }, "*");
+                        }, window.location.origin);
 
                     } catch (err) {
                         console.error("Failed to load landing page shader", err);
@@ -243,7 +245,7 @@ export default function DemoEditor() {
                         source: "tsl-graph-host",
                         type: "tsl:command:get-graph",
                         requestId: "save-demo-graph"
-                    }, "*");
+                    }, window.location.origin);
                 } else if (data.type === 'tsl:response:get-graph' && data.requestId === 'save-demo-graph') {
                     const savedGraphData = data.payload?.graphData || data.graphData;
                     if (savedGraphData) {
