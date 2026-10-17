@@ -55,6 +55,21 @@ import {
 // Counter to keep addNode IDs unique even when many nodes are created in the same millisecond
 let addNodeIdCounter = 0;
 
+// Every markDirty() call is an edit, but only the first one notifies store
+// subscribers (live uniform scrubs rely on that). Autosave listens here instead
+// so it sees each edit without adding a store notification per edit.
+let editRevision = 0;
+const editListeners = new Set<() => void>();
+
+export const getEditRevision = () => editRevision;
+
+export function subscribeToEdits(listener: () => void): () => void {
+    editListeners.add(listener);
+    return () => {
+        editListeners.delete(listener);
+    };
+}
+
 // Preview mesh type
 export type PreviewMeshType = 'box' | 'sphere' | 'torus' | 'plane' | 'cylinder' | 'fullscreenQuad';
 export type RootGraphMode = 'material' | 'post';
@@ -857,6 +872,7 @@ interface EditorState {
     // Save status state
     isSaving: boolean;
     isDirty: boolean; // True when there are unsaved changes
+    saveFailed: boolean; // Autosave gave up after its retries; resumes on edit, reconnect or manual save
 
     // Project ID for asset management
     projectId: string | null;
@@ -874,6 +890,7 @@ interface EditorState {
     }) => void;
     setProjectId: (projectId: string | null) => void;
     setSaving: (saving: boolean) => void;
+    setSaveFailed: (failed: boolean) => void;
     markDirty: () => void;
     markSaved: () => void;
 
@@ -1220,6 +1237,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Save status state initialization
     isSaving: false,
     isDirty: false,
+    saveFailed: false,
 
     // Project ID initialization
     projectId: null,
@@ -1279,6 +1297,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         set({ projectId });
     },
     setSaving: (saving) => set({ isSaving: saving }),
+    setSaveFailed: (failed) => {
+        if (get().saveFailed !== failed) {
+            set({ saveFailed: failed });
+        }
+    },
 
     // Template callbacks setter
     setTemplateCallbacks: (callbacks) => set({
@@ -1289,9 +1312,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 
     markDirty: () => {
+        editRevision += 1;
         if (!get().isDirty) {
             set({ isDirty: true });
         }
+        editListeners.forEach((listener) => listener());
     },
     markSaved: () => set({ isDirty: false }),
 
@@ -4942,6 +4967,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             subgraphStack: [],
             isSaving: false,
             isDirty: false,
+            saveFailed: false,
             history: createEmptyHistoryState(),
             canvasMode: 'pan',
             activeDebugPreviewNodeIds: [],

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useEditorStore } from '@/store/editor';
+import { getEditRevision, subscribeToEdits, useEditorStore } from '@/store/editor';
+import { clearRecoverySnapshot, writeRecoverySnapshot } from './recovery-snapshot';
 import type { EditorAssetsAdapter, EditorHostConfig, SaveReason } from './types';
 
 interface EditorPersistenceControllerOptions<TRef> {
@@ -10,10 +11,16 @@ interface EditorPersistenceControllerOptions<TRef> {
     autosaveDebounceMs: number;
     maxRetries?: number;
     retryBaseMs?: number;
+    recoveryKey?: string;
 }
 
 export interface EditorPersistenceController {
     flush: () => Promise<void>;
+    /**
+     * Stops autosave. Unsaved edits are captured synchronously (the host resets
+     * the store right after) and saved in the background, after any in-flight
+     * save; the recovery snapshot is kept until that save succeeds.
+     */
     dispose: () => void;
 }
 
@@ -36,11 +43,19 @@ export interface EditorAssetReconcilerController {
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BASE_MS = 1000;
+const RECOVERY_WRITE_THROTTLE_MS = 1000;
 
 const parseGraphData = (): unknown => {
     const json = useEditorStore.getState().saveToJSON();
     return JSON.parse(json) as unknown;
 };
+
+let activeController: EditorPersistenceController | null = null;
+
+/** Saves the mounted editor now, e.g. to retry after autosave gave up. */
+export function saveEditorNow(): Promise<void> {
+    return activeController?.flush() ?? Promise.resolve();
+}
 
 export function createEditorPersistenceController<TRef>({
     ref,
@@ -48,13 +63,19 @@ export function createEditorPersistenceController<TRef>({
     autosaveDebounceMs,
     maxRetries = DEFAULT_MAX_RETRIES,
     retryBaseMs = DEFAULT_RETRY_BASE_MS,
+    recoveryKey,
 }: EditorPersistenceControllerOptions<TRef>): EditorPersistenceController {
     let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
-    let isSaving = false;
     let retryCount = 0;
     let hasPendingRetry = false;
+    // Retries are exhausted; autosave stays idle until an edit, reconnect or manual save.
+    let failed = false;
+    let currentSave: Promise<boolean> | null = null;
+    let currentSaveRevision = 0;
+    let recoverySnapshotId: string | null = null;
 
     const clearAutosaveTimer = () => {
         if (!autosaveTimer) return;
@@ -63,21 +84,52 @@ export function createEditorPersistenceController<TRef>({
     };
 
     const clearRetryTimer = () => {
+        hasPendingRetry = false;
         if (!retryTimer) return;
         clearTimeout(retryTimer);
         retryTimer = null;
-        hasPendingRetry = false;
+    };
+
+    const clearRecoveryTimer = () => {
+        if (!recoveryTimer) return;
+        clearTimeout(recoveryTimer);
+        recoveryTimer = null;
     };
 
     const clearTimers = () => {
         clearAutosaveTimer();
         clearRetryTimer();
+        clearRecoveryTimer();
+    };
+
+    const clearFailure = () => {
+        retryCount = 0;
+        if (!failed) return;
+        failed = false;
+        useEditorStore.getState().setSaveFailed(false);
+    };
+
+    const writeRecoveryNow = () => {
+        clearRecoveryTimer();
+        if (!recoveryKey || disposed || !useEditorStore.getState().isDirty) return;
+        const id = writeRecoverySnapshot(recoveryKey, useEditorStore.getState().saveToJSON());
+        if (id) recoverySnapshotId = id;
+    };
+
+    // Throttled rather than debounced so continuous editing still lands on disk.
+    const scheduleRecoveryWrite = () => {
+        if (!recoveryKey || disposed || recoveryTimer) return;
+        recoveryTimer = setTimeout(() => {
+            recoveryTimer = null;
+            writeRecoveryNow();
+        }, RECOVERY_WRITE_THROTTLE_MS);
     };
 
     const scheduleAutosave = (delayMs = autosaveDebounceMs) => {
         if (disposed) return;
         clearAutosaveTimer();
         autosaveTimer = setTimeout(() => {
+            autosaveTimer = null;
             void performSave('autosave');
         }, Math.max(0, delayMs));
     };
@@ -91,14 +143,50 @@ export function createEditorPersistenceController<TRef>({
         clearRetryTimer();
         hasPendingRetry = true;
         retryTimer = setTimeout(() => {
+            retryTimer = null;
+            hasPendingRetry = false;
             void performSave('autosave');
         }, delay);
 
         return true;
     };
 
+    const runSave = async (reason: SaveReason, revision: number): Promise<boolean> => {
+        try {
+            await persistence.save({
+                ref,
+                graphData: parseGraphData(),
+                reason,
+            });
+        } catch (error) {
+            console.error('Editor persistence save failed:', error);
+            if (!disposed && !scheduleRetry()) {
+                failed = true;
+                useEditorStore.getState().setSaveFailed(true);
+            }
+            return false;
+        }
+
+        if (disposed) return true;
+
+        clearFailure();
+        if (getEditRevision() === revision) {
+            if (recoveryKey && recoverySnapshotId) {
+                clearRecoverySnapshot(recoveryKey, recoverySnapshotId);
+                recoverySnapshotId = null;
+            }
+            useEditorStore.getState().markSaved();
+        }
+
+        const { projectId, trackEvent } = useEditorStore.getState();
+        if (projectId) {
+            trackEvent('project_saved', { project_id: projectId, reason });
+        }
+        return true;
+    };
+
     const performSave = async (reason: SaveReason) => {
-        if (disposed || isSaving) return;
+        if (disposed || currentSave) return;
 
         const startState = useEditorStore.getState();
         if (reason === 'autosave' && !startState.isDirty) {
@@ -107,70 +195,151 @@ export function createEditorPersistenceController<TRef>({
 
         clearAutosaveTimer();
         clearRetryTimer();
-        isSaving = true;
+        if (reason === 'manual') {
+            clearFailure();
+        }
         startState.setSaving(true);
 
-        // Mark this snapshot as persisted; if edits happen during save, markDirty()
-        // will set the flag back to true and schedule another save.
-        startState.markSaved();
-
-        const graphData = parseGraphData();
-        let retryScheduledFromError = false;
-
+        // The graph is serialized synchronously here; edits after this point
+        // bump the revision and keep the editor dirty for the next save.
+        currentSaveRevision = getEditRevision();
+        currentSave = runSave(reason, currentSaveRevision);
         try {
-            await persistence.save({
-                ref,
-                graphData,
-                reason,
-            });
-
-            retryCount = 0;
-
-            const { projectId, trackEvent } = useEditorStore.getState();
-            if (projectId) {
-                trackEvent('project_saved', { project_id: projectId, reason });
-            }
-        } catch (error) {
-            console.error('Editor persistence save failed:', error);
-            useEditorStore.getState().markDirty();
-            retryScheduledFromError = scheduleRetry();
+            await currentSave;
         } finally {
-            isSaving = false;
-            useEditorStore.getState().setSaving(false);
+            currentSave = null;
+        }
 
-            if (!disposed && useEditorStore.getState().isDirty && !retryScheduledFromError) {
-                scheduleAutosave();
-            }
+        if (disposed) return;
+        useEditorStore.getState().setSaving(false);
+
+        if (useEditorStore.getState().isDirty && !failed && !hasPendingRetry) {
+            scheduleAutosave();
         }
     };
 
-    const unsubscribe = useEditorStore.subscribe((state) => {
+    const handleEdit = () => {
         if (disposed) return;
-
-        if (!state.isDirty) {
-            clearAutosaveTimer();
-            clearRetryTimer();
-            return;
+        scheduleRecoveryWrite();
+        if (failed) {
+            clearFailure();
         }
-
-        if (state.isSaving || hasPendingRetry) {
-            return;
-        }
-
+        // An in-flight save or pending retry picks up the latest graph when it runs.
+        if (currentSave || hasPendingRetry) return;
         scheduleAutosave();
+    };
+
+    const handleOnline = () => {
+        if (disposed || (!failed && !hasPendingRetry)) return;
+        clearRetryTimer();
+        clearFailure();
+        scheduleAutosave(0);
+    };
+
+    const handlePageHidden = () => {
+        if (disposed) return;
+        writeRecoveryNow();
+        // The page may not come back; start a pending autosave now.
+        if (autosaveTimer) {
+            scheduleAutosave(0);
+        }
+    };
+
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+            handlePageHidden();
+        }
+    };
+
+    const unsubscribeEdits = subscribeToEdits(handleEdit);
+    const unsubscribeStore = useEditorStore.subscribe((state, prevState) => {
+        if (disposed || state.isDirty || !prevState.isDirty) return;
+        // Clean again without this controller's help (host load, reset, ...).
+        clearTimers();
+        clearFailure();
     });
 
-    return {
+    const hasWindow = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+    const hasDocument = typeof document !== 'undefined' && typeof document.addEventListener === 'function';
+    if (hasWindow) {
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('pagehide', handlePageHidden);
+    }
+    if (hasDocument) {
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    const controller: EditorPersistenceController = {
         flush: async () => {
-            clearTimers();
+            while (currentSave) {
+                await currentSave.catch(() => false);
+            }
             await performSave('manual');
         },
         dispose: () => {
+            if (disposed) return;
+
+            const state = useEditorStore.getState();
+            const inFlight = currentSave;
+            const inFlightRevision = currentSaveRevision;
+
             disposed = true;
             clearTimers();
-            unsubscribe();
+            unsubscribeEdits();
+            unsubscribeStore();
+            if (hasWindow) {
+                window.removeEventListener('online', handleOnline);
+                window.removeEventListener('pagehide', handlePageHidden);
+            }
+            if (hasDocument) {
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            }
+            if (activeController === controller) {
+                activeController = null;
+            }
+            if (inFlight) {
+                state.setSaving(false);
+            }
+
+            if (!state.isDirty) return;
+
+            // Capture now: the host resets the store right after dispose.
+            const revision = getEditRevision();
+            const graphJson = state.saveToJSON();
+            const snapshotId = recoveryKey ? writeRecoverySnapshot(recoveryKey, graphJson) : null;
+
+            const saveFinal = async () => {
+                const inFlightSaved = inFlight ? await inFlight.catch(() => false) : false;
+                if (inFlightSaved && inFlightRevision === revision) return;
+                await persistence.save({
+                    ref,
+                    graphData: JSON.parse(graphJson) as unknown,
+                    reason: 'autosave',
+                });
+            };
+
+            void saveFinal().then(
+                () => {
+                    if (recoveryKey && snapshotId) {
+                        clearRecoverySnapshot(recoveryKey, snapshotId);
+                    }
+                },
+                (error) => {
+                    console.error('Editor persistence final save failed; keeping recovery snapshot:', error);
+                }
+            );
         },
     };
+
+    activeController = controller;
+
+    // Edits made before this controller existed (React Flow measuring nodes on
+    // mount, a restored recovery snapshot) still need saving.
+    if (useEditorStore.getState().isDirty) {
+        handleEdit();
+    }
+
+    return controller;
 }
 
 export function createEditorAssetReconcilerController<TRef>({
@@ -242,6 +411,7 @@ export function useEditorPersistence<TRef>(
             autosaveDebounceMs: config.autosaveDebounceMs,
             maxRetries,
             retryBaseMs,
+            recoveryKey: config.recoveryKey,
         });
 
         return () => {
@@ -250,6 +420,7 @@ export function useEditorPersistence<TRef>(
     }, [
         config.autosaveDebounceMs,
         config.persistence,
+        config.recoveryKey,
         config.ref,
         enabled,
         maxRetries,
