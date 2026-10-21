@@ -37,6 +37,7 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
             persistence,
             services,
             autosaveDebounceMs: 2000,
+            recoveryKey: `project:${projectId}`,
             capabilities: {
                 canRenameProject: true,
                 canShare: true,

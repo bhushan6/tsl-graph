@@ -119,6 +119,8 @@ export interface EditorHostConfig<TRef = unknown> {
     ref: TRef;
     persistence: EditorPersistenceAdapter<TRef>;
     autosaveDebounceMs: number;
+    /** Keeps unsaved edits in browser storage under this key and offers them back on load. */
+    recoveryKey?: string;
     capabilities: EditorHostCapabilities;
     enabledGraphs?: EditorGraphKind[];
     defaultGraph?: EditorGraphKind;

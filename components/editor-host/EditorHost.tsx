@@ -1,8 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Editor } from '@/components/Editor';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useEditorStore } from '@/store/editor';
 import type { CodeNodeDefinition, SubgraphDefinition } from '@/lib/types';
 import type { EditorHostConfig } from '@/lib/editor-host/types';
@@ -16,6 +26,12 @@ import {
 import {
     useEditorPersistence,
 } from '@/lib/editor-host/use-editor-persistence';
+import {
+    clearRecoverySnapshot,
+    isSameGraphContent,
+    readRecoverySnapshot,
+    type RecoverySnapshot,
+} from '@/lib/editor-host/recovery-snapshot';
 import type { Id } from '@/convex/_generated/dataModel';
 import { EditorHostProvider } from '@/lib/editor-host/context';
 import { TemplateLibraryProvider, requestTemplateLibraryRefresh } from '@/lib/editor-host/template-library';
@@ -64,6 +80,7 @@ export function EditorHost<TRef>({
 
     const [isInitializing, setIsInitializing] = useState(true);
     const [loadedProjectName, setLoadedProjectName] = useState<string | undefined>(undefined);
+    const [pendingRecovery, setPendingRecovery] = useState<RecoverySnapshot | null>(null);
     const initialDataRef = useRef(initialData);
 
     const capabilities = useMemo(
@@ -173,8 +190,11 @@ export function EditorHost<TRef>({
 
     const effectiveTemplateCallbacks = templateCallbacks ?? hostTemplateCallbacks;
 
+    // Keep this before the bootstrap effect: its cleanup flushes pending edits,
+    // which must happen before that effect's cleanup resets the store. Autosave
+    // waits while a recovery prompt is open so it can't overwrite the snapshot.
     useEditorPersistence(config, {
-        enabled: !isInitializing && !isReadOnly,
+        enabled: !isInitializing && !isReadOnly && !pendingRecovery,
     });
 
     useEffect(() => {
@@ -186,6 +206,7 @@ export function EditorHost<TRef>({
 
         const initialize = async () => {
             setIsInitializing(true);
+            setPendingRecovery(null);
             resetEditor();
 
             setTemplateCallbacks(effectiveTemplateCallbacks);
@@ -223,6 +244,17 @@ export function EditorHost<TRef>({
                     setActiveRootGraph(defaultRootGraph);
                 }
 
+                const recoveryKey = isReadOnly ? undefined : config.recoveryKey;
+                const recovery = recoveryKey ? readRecoverySnapshot(recoveryKey) : null;
+                if (recoveryKey && recovery) {
+                    const loadedJson = useEditorStore.getState().saveToJSON();
+                    if (isSameGraphContent(recovery.graphJson, loadedJson)) {
+                        clearRecoverySnapshot(recoveryKey, recovery.id);
+                    } else {
+                        setPendingRecovery(recovery);
+                    }
+                }
+
                 setLoadedProjectName(loaded?.projectName);
                 markSaved();
             } catch (error) {
@@ -244,7 +276,9 @@ export function EditorHost<TRef>({
     }, [
         capabilities.canUploadAssets,
         config.persistence,
+        config.recoveryKey,
         config.ref,
+        isReadOnly,
         loadFromJSON,
         markSaved,
         defaultRootGraph,
@@ -257,6 +291,24 @@ export function EditorHost<TRef>({
         effectiveTemplateCallbacks,
         onInitialized,
     ]);
+
+    const handleRestoreRecovery = useCallback(() => {
+        if (!pendingRecovery) return;
+        if (loadFromJSON(pendingRecovery.graphJson)) {
+            // Autosave starts once the prompt closes and saves the restored graph.
+            useEditorStore.getState().markDirty();
+        } else {
+            console.error('Failed to restore editor recovery snapshot.');
+        }
+        setPendingRecovery(null);
+    }, [loadFromJSON, pendingRecovery]);
+
+    const handleDiscardRecovery = useCallback(() => {
+        if (pendingRecovery && config.recoveryKey) {
+            clearRecoverySnapshot(config.recoveryKey, pendingRecovery.id);
+        }
+        setPendingRecovery(null);
+    }, [config.recoveryKey, pendingRecovery]);
 
     if (isInitializing) {
         return (
@@ -283,6 +335,26 @@ export function EditorHost<TRef>({
                         />
                     </main>
                 </div>
+                <AlertDialog open={!!pendingRecovery}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Restore unsaved edits?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This browser kept edits to this project from{' '}
+                                {pendingRecovery ? new Date(pendingRecovery.savedAt).toLocaleString() : ''}{' '}
+                                that may not have reached the server. Restoring replaces the version that just loaded.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={handleDiscardRecovery}>
+                                Keep saved version
+                            </AlertDialogCancel>
+                            <AlertDialogAction onClick={handleRestoreRecovery}>
+                                Restore edits
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </TemplateLibraryProvider>
         </EditorHostProvider>
     );

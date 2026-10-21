@@ -48,6 +48,7 @@ import {
 } from '@/lib/editor-host/types';
 import { useEditorHostConfig } from '@/lib/editor-host/context';
 import { getStandaloneProjectUrl } from '@/lib/editor-host/standalone-project';
+import { saveEditorNow } from '@/lib/editor-host/use-editor-persistence';
 
 interface NavbarProps {
     projectName?: string;
@@ -60,7 +61,11 @@ interface NavbarProps {
 // subscription at this leaf so an autosave cycle only reconciles the badge.
 const SaveStatusBadge = memo(function SaveStatusBadge() {
     const status = useEditorStore((state) => (
-        state.isSaving ? 'saving' : state.isDirty ? 'unsaved' : 'saved'
+        state.isSaving
+            ? 'saving'
+            : state.saveFailed
+                ? 'failed'
+                : state.isDirty ? 'unsaved' : 'saved'
     ));
 
     if (status === 'saving') {
@@ -68,6 +73,24 @@ const SaveStatusBadge = memo(function SaveStatusBadge() {
             <Badge variant="default" className="w-[80px] justify-center bg-blue-500 hover:bg-blue-600 border-blue-600 text-white gap-1.5 transition-all">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Saving
+            </Badge>
+        );
+    }
+
+    if (status === 'failed') {
+        return (
+            <Badge
+                asChild
+                variant="secondary"
+                className="w-[80px] justify-center cursor-pointer bg-red-100 text-red-700 hover:bg-red-200 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 transition-all"
+            >
+                <button
+                    type="button"
+                    onClick={() => void saveEditorNow()}
+                    title="Autosave stopped after repeated failures. Click to retry."
+                >
+                    Save failed
+                </button>
             </Badge>
         );
     }
