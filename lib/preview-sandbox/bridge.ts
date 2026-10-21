@@ -8,6 +8,7 @@ import {
     type PreviewAsset,
     type PreviewCameraState,
     type PreviewCommand,
+    type PreviewFrame,
     type PreviewImage,
     type PreviewMode,
     type PreviewSlot,
@@ -19,6 +20,7 @@ const CAPTURE_TIMEOUT_MS = 15_000;
 const MAX_CAPTURE_BYTES = 32 * 1024 * 1024;
 const MAX_CAPTURE_DIMENSION = 8192;
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_PREVIEW_FRAMES = 64;
 
 let bundlePromise: Promise<string> | undefined;
 function loadBundle() {
@@ -98,10 +100,59 @@ export function readCaptureImage(message: Record<string, unknown>): PreviewImage
 
 const readMessageText = (value: unknown) => typeof value === 'string' ? value.slice(0, MAX_MESSAGE_LENGTH) : null;
 
+const isImageBitmap = (value: unknown): value is ImageBitmap =>
+    typeof ImageBitmap !== 'undefined' && value instanceof ImageBitmap;
+
+/** Overlay output is untrusted: accept only bounded images that sit inside their slot. */
+export function readPreviewFrames(value: unknown): PreviewFrame[] | null {
+    if (!Array.isArray(value) || value.length > MAX_PREVIEW_FRAMES) return null;
+    const previews: PreviewFrame[] = [];
+    for (const item of value) {
+        if (!item || typeof item !== 'object') return null;
+        const { id, bitmap, x, y, width, height, slotWidth, slotHeight } = item as Record<string, unknown>;
+        if (typeof id !== 'string' || !isImageBitmap(bitmap)) return null;
+        if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width > MAX_CAPTURE_DIMENSION || bitmap.height > MAX_CAPTURE_DIMENSION) return null;
+        const numbers = [x, y, width, height, slotWidth, slotHeight];
+        if (!numbers.every((number) => typeof number === 'number' && Number.isFinite(number))) return null;
+        const [left, top, w, h, sw, sh] = numbers as number[];
+        if (sw <= 0 || sh <= 0 || sw > MAX_CAPTURE_DIMENSION || sh > MAX_CAPTURE_DIMENSION) return null;
+        // One pixel of slack for rounding.
+        if (left < 0 || top < 0 || w <= 0 || h <= 0 || left + w > sw + 1 || top + h > sh + 1) return null;
+        previews.push({ id, bitmap, x: left, y: top, width: w, height: h, slotWidth: sw, slotHeight: sh });
+    }
+    return previews;
+}
+
+/** Frees the images in a batch that was rejected or arrived too late. */
+export function closePreviewBitmaps(value: unknown) {
+    if (!Array.isArray(value)) return;
+    for (const item of value) {
+        const bitmap = item && typeof item === 'object' ? (item as { bitmap?: unknown }).bitmap : undefined;
+        if (isImageBitmap(bitmap)) bitmap.close();
+    }
+}
+
+/**
+ * Where a preview image goes in its node's canvas, in canvas pixels. The canvas
+ * matches the slot's on-screen size, so the image stays sharp at any zoom.
+ */
+export function placePreviewFrame(preview: Omit<PreviewFrame, 'id' | 'bitmap'>, pixelRatio: number) {
+    const ratio = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1;
+    return {
+        canvasWidth: Math.max(1, Math.round(preview.slotWidth * ratio)),
+        canvasHeight: Math.max(1, Math.round(preview.slotHeight * ratio)),
+        x: preview.x * ratio,
+        y: preview.y * ratio,
+        width: preview.width * ratio,
+        height: preview.height * ratio,
+    };
+}
+
 export interface PreviewBridge {
     capture: (options?: CaptureRequest) => Promise<PreviewImage>;
     setPostEnabled: (enabled: boolean) => void;
-    setSlots: (slots: PreviewSlot[]) => void;
+    /** Overlay frames: render node previews for these slots once; results arrive via `onPreviews`. */
+    renderSlots: (slots: PreviewSlot[]) => void;
     dispose: () => void;
 }
 
@@ -110,6 +161,8 @@ interface BridgeOptions {
     postGraphEnabled?: boolean;
     onReady?: (ready: boolean) => void;
     onError?: (kind: 'material' | 'post' | 'geometry', error: string | null) => void;
+    /** Overlay frames: rendered node previews. The receiver must close each bitmap. */
+    onPreviews?: (previews: PreviewFrame[]) => void;
 }
 
 /** This bridge exposes rendering only. No persistence, auth, upload or AI RPC. */
@@ -119,6 +172,9 @@ export function createPreviewBridge(container: HTMLElement, options: BridgeOptio
     frame.setAttribute('sandbox', PREVIEW_SANDBOX);
     frame.referrerPolicy = 'no-referrer';
     frame.style.cssText = 'border:0;display:block;width:100%;height:100%;background:transparent;color-scheme:light';
+    // The overlay frame still renders at full size (screen-space nodes depend on it),
+    // but its output is shown inside the nodes, so the frame itself stays invisible.
+    if (options.mode === 'overlay') frame.style.opacity = '0';
     let disposed = false;
     let initialized = false;
     let postGraphEnabled = options.postGraphEnabled ?? true;
@@ -198,6 +254,16 @@ export function createPreviewBridge(container: HTMLElement, options: BridgeOptio
             const image = readCaptureImage(message);
             if (image) request.resolve(image);
             else request.reject(new Error('Invalid preview capture.'));
+        } else if (message.type === 'previews' && options.mode === 'overlay') {
+            const previews = readPreviewFrames(message.previews);
+            if (!previews || !options.onPreviews) {
+                closePreviewBitmaps(message.previews);
+                return;
+            }
+            options.onPreviews(previews);
+        } else if (message.type === 'previews-failed' && options.mode === 'overlay') {
+            // The frame can't hand back images, so show it directly, as an overlay.
+            frame.style.opacity = '1';
         }
     };
     window.addEventListener('message', receive);
@@ -252,7 +318,7 @@ export function createPreviewBridge(container: HTMLElement, options: BridgeOptio
             postGraphEnabled = enabled;
             scheduleState();
         },
-        setSlots: (next) => { slots = next; if (initialized) post({ type: 'slots', slots }); },
+        renderSlots: (next) => { slots = next; if (initialized) post({ type: 'slots', slots }); },
         dispose: () => {
             if (disposed) return;
             disposed = true;

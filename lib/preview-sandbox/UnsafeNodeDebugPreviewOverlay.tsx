@@ -1,11 +1,29 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three/webgpu';
 import { buildNodePreviewMaterial } from '@/lib/tsl-builder';
-import { getCanvasRelativeDebugPreviewRect } from '@/lib/debug-preview';
+import { getCanvasRelativeDebugPreviewRect, type DebugPreviewRect } from '@/lib/debug-preview';
 import { useEditorStore } from '@/store/editor';
 import type { PostDebugPreviewOutput } from '@/store/editor';
 import { DEFAULT_POST_OUTPUT_SETTINGS, getPostOutputSettings, type PostOutputSettings } from '@/lib/post-output-settings';
-import type { PreviewSlot } from './protocol';
+import type { PreviewFrame, PreviewSlot } from './protocol';
+
+/** How the overlay frame works with the parent: render on request, hand back images. */
+export interface OverlayDriver {
+    getSlots: () => PreviewSlot[];
+    /** Calls `listener` for each render request (new slots from the parent). */
+    onRequest: (listener: () => void) => () => void;
+    publish: (previews: PreviewFrame[]) => void;
+    /** Images can't be read back here; the parent then shows this frame as an overlay. */
+    fail: () => void;
+}
+
+interface RenderedRegion {
+    slot: PreviewSlot;
+    /** Part of the slot that was drawn, relative to the canvas (slots are clipped to it). */
+    rect: DebugPreviewRect;
+    /** Post previews resize the canvas to the slot, so the whole canvas is the preview. */
+    wholeCanvas: boolean;
+}
 
 interface CachedMaterial {
     version: number;
@@ -40,14 +58,16 @@ function applyRendererOutputSettings(
     renderer.outputColorSpace = OUTPUT_COLOR_SPACE_CONSTANTS[settings.outputColorSpace];
 }
 
-/** Slots are measured by the parent editor, relative to this overlay's frame. */
-export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ getSlots }: { getSlots: () => PreviewSlot[] }) {
+/**
+ * Slots are measured by the parent editor, relative to this overlay's frame. Each
+ * request renders all of them once; the parent paints the results into the nodes.
+ */
+export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ driver }: { driver: OverlayDriver }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGPURenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const meshRef = useRef<THREE.Mesh | null>(null);
     const orthographicCameraRef = useRef<THREE.OrthographicCamera | null>(null);
-    const frameIdRef = useRef<number>(0);
     const materialCacheRef = useRef<Map<string, CachedMaterial>>(new Map());
     const postOutputCacheRef = useRef<Map<string, CachedPostOutput>>(new Map());
     const graphStructureVersionRef = useRef(0);
@@ -205,16 +225,15 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
             }
         };
 
-        const render = () => {
-            if (isDisposed) return;
-            frameIdRef.current = requestAnimationFrame(render);
-
+        /** Draws every slot once and returns what was drawn, for capture. */
+        const render = (): RenderedRegion[] => {
+            const rendered: RenderedRegion[] = [];
             const currentRenderer = rendererRef.current;
             const currentMesh = meshRef.current;
             const currentScene = sceneRef.current;
             const currentOrthographicCamera = orthographicCameraRef.current;
-            if (!currentRenderer || !currentMesh || !currentScene || !currentOrthographicCamera) {
-                return;
+            if (isDisposed || !currentRenderer || !currentMesh || !currentScene || !currentOrthographicCamera) {
+                return rendered;
             }
 
             const state = useEditorStore.getState();
@@ -225,7 +244,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
             applyRendererOutputSettings(currentRenderer, postSettings);
 
             const canvasRect = { x: 0, y: 0, width: container.clientWidth, height: container.clientHeight };
-            const slots = getSlots();
+            const slots = driver.getSlots();
             const visibleNodeIds = new Set<string>();
 
             if (isPostDebugMode) {
@@ -241,7 +260,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
                     });
                     postOutputCache.clear();
                     currentRenderer.setScissorTest(false);
-                    return;
+                    return rendered;
                 }
 
                 visibleNodeIds.add(nodeId);
@@ -256,6 +275,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
                 if (postOutput) {
                     postOutput.preview.update(rect.width / rect.height);
                     postOutput.pipeline.render();
+                    rendered.push({ slot, rect, wholeCanvas: true });
                 }
 
                 for (const [cachedNodeId, cached] of postOutputCache) {
@@ -266,7 +286,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
                 }
 
                 currentRenderer.setScissorTest(false);
-                return;
+                return rendered;
             }
 
             resizeRendererToFullOverlay();
@@ -290,6 +310,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
                 if (!material) continue;
                 currentMesh.material = material;
                 currentRenderer.render(currentScene, currentOrthographicCamera);
+                rendered.push({ slot, rect, wholeCanvas: false });
             }
 
             for (const [nodeId, cached] of materialCache) {
@@ -310,9 +331,76 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
             }
 
             currentRenderer.setScissorTest(false);
+            return rendered;
+        };
+
+        // createImageBitmap copies the canvas when it is called, so call it right after drawing.
+        const capture = async ({ slot, rect, wholeCanvas }: RenderedRegion): Promise<PreviewFrame> => {
+            const canvas = renderer.domElement;
+            const ratio = renderer.getPixelRatio();
+            const bitmap = wholeCanvas
+                ? await createImageBitmap(canvas)
+                : await createImageBitmap(
+                    canvas,
+                    Math.round(rect.x * ratio),
+                    Math.round(rect.y * ratio),
+                    Math.max(1, Math.round(rect.width * ratio)),
+                    Math.max(1, Math.round(rect.height * ratio)),
+                );
+            return {
+                id: slot.id,
+                bitmap,
+                x: rect.x - slot.x,
+                y: rect.y - slot.y,
+                width: rect.width,
+                height: rect.height,
+                slotWidth: slot.width,
+                slotHeight: slot.height,
+            };
+        };
+
+        // One render at a time; requests that arrive meanwhile collapse into one more.
+        let busy = false;
+        let pending = false;
+        let imagesUnavailable = false;
+        const renderAndPublish = async () => {
+            if (isDisposed) return;
+            if (busy) {
+                pending = true;
+                return;
+            }
+            busy = true;
+            try {
+                do {
+                    pending = false;
+                    const regions = render();
+                    if (imagesUnavailable || regions.length === 0) continue;
+                    try {
+                        const previews = await Promise.all(regions.map(capture));
+                        if (isDisposed) {
+                            previews.forEach((preview) => preview.bitmap.close());
+                            return;
+                        }
+                        driver.publish(previews);
+                    } catch (error) {
+                        // The parent then shows this frame itself, as before.
+                        console.error('Node debug preview capture failed:', error);
+                        imagesUnavailable = true;
+                        driver.fail();
+                    }
+                } while (pending && !isDisposed);
+            } finally {
+                busy = false;
+            }
+        };
+        const requestFrame = () => {
+            renderAndPublish().catch((error) => {
+                console.error('Node debug preview render failed:', error);
+            });
         };
 
         const resizeObserver = new ResizeObserver(resizeRendererToFullOverlay);
+        let stopRequests: (() => void) | null = null;
 
         async function init() {
             await renderer.init();
@@ -323,7 +411,8 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
             resizeRendererToFullOverlay();
             container.appendChild(renderer.domElement);
             resizeObserver.observe(container);
-            render();
+            stopRequests = driver.onRequest(requestFrame);
+            requestFrame();
         }
 
         init().catch((error) => {
@@ -332,7 +421,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
 
         return () => {
             isDisposed = true;
-            cancelAnimationFrame(frameIdRef.current);
+            stopRequests?.();
             resizeObserver.disconnect();
             materialCache.forEach((entry) => entry.material.dispose());
             materialCache.clear();
@@ -359,7 +448,7 @@ export const NodeDebugPreviewOverlay = memo(function NodeDebugPreviewOverlay({ g
             rendererRef.current = null;
             isMountedRef.current = false;
         };
-    }, [geometry, getSlots, setDebugPreviewError]);
+    }, [driver, geometry, setDebugPreviewError]);
 
     return <div ref={containerRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true" />;
 });

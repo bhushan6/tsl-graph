@@ -1171,6 +1171,14 @@ function DebugPreviewSlot({
           message ? "bg-white/95 dark:bg-card/95" : "bg-transparent",
         )}
       >
+        {status.supported && !error && (
+          // NodeDebugPreviewOverlay paints the sandboxed render in here.
+          <canvas
+            data-debug-preview-canvas={nodeId}
+            className="absolute inset-0 h-full w-full"
+            aria-hidden="true"
+          />
+        )}
         {message && (
           <div className="absolute inset-0 flex items-center justify-center px-2 text-center text-[9px] leading-tight text-muted-foreground">
             {message}

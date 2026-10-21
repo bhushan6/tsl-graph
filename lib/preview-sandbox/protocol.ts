@@ -37,11 +37,28 @@ export interface CaptureRequest {
     quality?: number;
 }
 export interface PreviewImage { blob: Blob; width: number; height: number; mimeType: string }
+/**
+ * One node preview rendered by an overlay frame. The parent paints it into a
+ * canvas inside the node, so the preview moves with the node.
+ */
+export interface PreviewFrame {
+    id: string;
+    bitmap: ImageBitmap;
+    /** The rendered (on-screen) part of the slot, in CSS pixels relative to the slot. */
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    /** The slot size the frame rendered for, in CSS pixels. */
+    slotWidth: number;
+    slotHeight: number;
+}
 /** Browser-local files the opaque frame cannot fetch by the parent's `blob:` URL. */
 export interface PreviewAsset { url: string; blob: Blob }
 export type PreviewCommand =
     | { type: 'init'; mode: PreviewMode }
     | { type: 'state'; snapshot: PreviewSnapshot; postGraphEnabled: boolean; assets: PreviewAsset[] }
+    /** Overlay frames: render node previews for these slots and send them back as images. */
     | { type: 'slots'; slots: PreviewSlot[] }
     | { type: 'uniform'; event: UniformEvent }
     | { type: 'camera'; camera: PreviewCameraState }

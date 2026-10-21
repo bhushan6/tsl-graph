@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import * as THREE from 'three/webgpu';
 import { PreviewCanvas3D, type CameraSource } from './UnsafePreviewCanvas3D';
-import { NodeDebugPreviewOverlay } from './UnsafeNodeDebugPreviewOverlay';
+import { NodeDebugPreviewOverlay, type OverlayDriver } from './UnsafeNodeDebugPreviewOverlay';
 import { useEditorStore } from '@/store/editor';
 import { applyUniformEvent } from '@/lib/uniform-store';
 import { initializeNodes } from '@/lib/nodes';
@@ -27,7 +27,8 @@ assertIsolatedPreview();
 initializeNodes();
 
 const MAX_CAPTURE_SIZE = 4096;
-const send = (message: Record<string, unknown>) => window.parent.postMessage({ channel: PREVIEW_CHANNEL, ...message }, '*');
+const send = (message: Record<string, unknown>, transfer: Transferable[] = []) =>
+    window.parent.postMessage({ channel: PREVIEW_CHANNEL, ...message }, '*', transfer);
 const noop = () => {};
 
 // Frame-level settings from the parent, read by React through useSyncExternalStore.
@@ -51,9 +52,20 @@ const reportPostError = (error: string | null) => send({ type: 'error', kind: 'p
 const reportGeometryError = (error: string | null) => send({ type: 'error', kind: 'geometry', error });
 const reportCamera = (camera: PreviewCameraState) => send({ type: 'camera', camera });
 
-// Overlay frames: slot rectangles are measured by the parent and read every frame.
+// Overlay frames: the parent sends slot rectangles every animation frame. Each set
+// is rendered once and goes back as images the parent paints into the nodes.
 let slots: PreviewSlot[] = [];
-const getSlots = () => slots;
+const renderRequestListeners = new Set<() => void>();
+const overlayDriver: OverlayDriver = {
+    // Nothing to render until the graph has arrived (the parent sends slots first on boot).
+    getSlots: () => (hasState ? slots : []),
+    onRequest: (listener) => {
+        renderRequestListeners.add(listener);
+        return () => { renderRequestListeners.delete(listener); };
+    },
+    publish: (previews) => send({ type: 'previews', previews }, previews.map((preview) => preview.bitmap)),
+    fail: () => send({ type: 'previews-failed' }),
+};
 
 // Overlay frames mirror the main preview camera for post-graph node previews.
 let mirroredCamera: PreviewCameraState | null = null;
@@ -92,7 +104,7 @@ function Runtime() {
             {isPostDebug && <PreviewCanvas3D headless layoutMode="inline" postGraphEnabled={false}
                 onReadyChange={noop} onMaterialErrorChange={noop} onPostErrorChange={noop}
                 onGeometryScriptErrorChange={noop} cameraSource={cameraSource} />}
-            <NodeDebugPreviewOverlay getSlots={getSlots} />
+            <NodeDebugPreviewOverlay driver={overlayDriver} />
         </>;
     }
     return null;
@@ -257,6 +269,7 @@ window.addEventListener('message', (event: MessageEvent) => {
             return;
         case 'slots':
             slots = Array.isArray(message.slots) ? message.slots : [];
+            for (const listener of renderRequestListeners) listener();
             return;
         case 'uniform':
             applyUniformEvent(message.event);
