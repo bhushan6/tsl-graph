@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import posthog from "posthog-js";
-import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, Split, /* Sparkles, */ FileCode2 } from 'lucide-react';
+import { Code, Layers, Undo2, Redo2, Hand, MousePointer2, Group, Ungroup, Loader2, Check, X, Repeat, Combine, Split, FileCode2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -22,11 +22,10 @@ import {
 
 interface ToolbarProps {
     onOpenCodePanel?: () => void;
-    onOpenAiDock?: () => void;
     onCreateCodeNode?: () => void;
 }
 
-export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: ToolbarProps) {
+export function Toolbar({ onOpenCodePanel, onCreateCodeNode }: ToolbarProps) {
     const selectedNodeIds = useEditorStore((s) => s.selectedNodeIds);
     const createSubgraph = useEditorStore((s) => s.createSubgraph);
     const enterSubgraphEditor = useEditorStore((s) => s.enterSubgraphEditor);
@@ -701,27 +700,6 @@ export function Toolbar({ onOpenCodePanel, onOpenAiDock, onCreateCodeNode }: Too
             <div className="w-px h-4 bg-border" />
 
             <ExportImageButton />
-
-            {/* AI assistant intentionally hidden from the toolbar.
-            {onOpenAiDock && (
-                <>
-                    <div className="w-px h-4 bg-border" />
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={onOpenAiDock}
-                                className="h-8 w-8"
-                            >
-                                <Sparkles className="w-4 h-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>AI Assistant</TooltipContent>
-                    </Tooltip>
-                </>
-            )}
-            */}
 
             {onOpenCodePanel && (
                 <>

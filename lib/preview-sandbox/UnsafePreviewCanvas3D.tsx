@@ -23,7 +23,7 @@ export interface CameraSource {
     subscribe: (listener: () => void) => () => void;
 }
 
-type UnsafePreviewCanvas3DProps = Omit<PreviewCanvas3DProps, 'onUploadPreviewBlob'> & {
+type UnsafePreviewCanvas3DProps = Omit<PreviewCanvas3DProps, 'onUploadThumbnail'> & {
     /**
      * Keep the scene (for post-graph node previews) without a renderer or render loop.
      * The overlay frame uses this because it cannot share the main frame's scene.

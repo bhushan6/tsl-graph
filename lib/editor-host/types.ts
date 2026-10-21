@@ -14,7 +14,6 @@ export interface EditorHostCapabilities {
     canRenameProject: boolean;
     canShare: boolean;
     canUploadAssets: boolean;
-    canUseAI: boolean;
 }
 
 export interface EditorTemplateRecord<TData = unknown> {
@@ -131,7 +130,6 @@ export const DEFAULT_EDITOR_HOST_CAPABILITIES: EditorHostCapabilities = {
     canRenameProject: true,
     canShare: true,
     canUploadAssets: true,
-    canUseAI: true,
 };
 
 export const DEFAULT_EDITOR_ENABLED_GRAPHS: readonly EditorGraphKind[] = EDITOR_GRAPH_KINDS;

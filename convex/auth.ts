@@ -10,6 +10,15 @@ import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL;
 
+// Local dev plus the site with and without "www.".
+const trustedOrigins = new Set(["http://localhost:3000"]);
+if (siteUrl) {
+    const { protocol, host } = new URL(siteUrl);
+    const apexHost = host.replace(/^www\./, "");
+    trustedOrigins.add(`${protocol}//${apexHost}`);
+    trustedOrigins.add(`${protocol}//www.${apexHost}`);
+}
+
 // The component client has methods needed for integrating Convex with Better Auth,
 // as well as helper methods for general use.
 export const authComponent = createClient<DataModel>(components.betterAuth);
@@ -18,11 +27,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     return betterAuth({
         baseURL: siteUrl,
         database: authComponent.adapter(ctx),
-        trustedOrigins: [
-            "http://localhost:3000",
-            "https://www.tsl-graph.xyz",
-            "https://tsl-graph.xyz",
-        ],
+        trustedOrigins: [...trustedOrigins],
         user: {
             deleteUser: {
                 enabled: true,

@@ -67,18 +67,9 @@ export const deleteSelf = mutation({
             .collect();
         for (const c of codeNodes) await ctx.db.delete(c._id);
 
-        // 5. Delete Feedbacks
-        const feedbacks = await ctx.db
-            .query("feedbacks")
-            .withIndex("by_user", (q) => q.eq("userId", userId))
-            .collect();
-        for (const f of feedbacks) {
-            await ctx.db.delete(f._id);
-        }
-
-        // 6. Delete files: thumbnails, asset files, feedback attachments and AI
-        // captures. Only files bound to this user are deleted; storage IDs that
-        // merely appear in this user's rows may belong to someone else.
+        // 5. Delete files: thumbnails and asset files. Only files bound to this
+        // user are deleted; storage IDs that merely appear in this user's rows
+        // may belong to someone else.
         await deleteUserFiles(ctx, userId);
 
         return { success: true };
@@ -131,15 +122,6 @@ export const transferGuestDataToUser = internalMutation({
 
         for (const asset of assets) {
             await ctx.db.patch(asset._id, { userId: targetConvexId });
-        }
-
-        const feedbacks = await ctx.db
-            .query("feedbacks")
-            .withIndex("by_user", (q) => q.eq("userId", guestConvexId))
-            .collect();
-
-        for (const feedback of feedbacks) {
-            await ctx.db.patch(feedback._id, { userId: targetConvexId });
         }
 
         await transferFileOwnership(ctx, guestConvexId, targetConvexId);

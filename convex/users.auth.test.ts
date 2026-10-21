@@ -83,7 +83,7 @@ describe("guest data migration", () => {
         expect(context.patches).toEqual([]);
     });
 
-    it("transfers every guest project plus assets and feedbacks", async () => {
+    it("transfers every guest project plus assets", async () => {
         setUsers({
             guest: { _id: "convex:guest", isAnonymous: true },
             target: { _id: "convex:target", isAnonymous: false },
@@ -94,17 +94,15 @@ describe("guest data migration", () => {
                 { _id: "projects:two", userId: "convex:guest" },
             ],
             assets: [{ _id: "assets:one", userId: "convex:guest" }],
-            feedbacks: [{ _id: "feedbacks:one", userId: "convex:guest" }],
         });
 
         await expect(handler(context.ctx, { guestUserId: "guest", targetUserId: "target" }))
             .resolves.toEqual({ success: true });
-        expect(context.queries).toEqual(["projects", "assets", "feedbacks", "storageBindings", "uploadGrants"]);
+        expect(context.queries).toEqual(["projects", "assets", "storageBindings", "uploadGrants"]);
         expect(context.patches).toEqual([
             ["projects:one", { userId: "convex:target" }],
             ["projects:two", { userId: "convex:target" }],
             ["assets:one", { userId: "convex:target" }],
-            ["feedbacks:one", { userId: "convex:target" }],
         ]);
     });
 

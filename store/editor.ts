@@ -840,28 +840,6 @@ interface EditorState {
     updatePreviewSettings: (updates: Partial<PreviewSettings>) => void;
     updatePreviewSettingsDebounced: (updates: Partial<PreviewSettings>) => void;
 
-    // Preview snapshot (used for AI visual verification)
-    previewSnapshotProvider: ((
-        options?: { format?: 'png' | 'jpeg'; quality?: number }
-    ) => Promise<{
-        imageUrl: string;
-        storageId: string;
-        width: number;
-        height: number;
-        format: string;
-    }>) | null;
-    setPreviewSnapshotProvider: (
-        provider: ((
-            options?: { format?: 'png' | 'jpeg'; quality?: number }
-        ) => Promise<{
-            imageUrl: string;
-            storageId: string;
-            width: number;
-            height: number;
-            format: string;
-        }>) | null
-    ) => void;
-
     // History state
     history: HistoryState;
     isUndoRedoInProgress: boolean;
@@ -1222,8 +1200,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }, 250);
         };
     })(),
-    previewSnapshotProvider: null,
-    setPreviewSnapshotProvider: (provider) => set({ previewSnapshotProvider: provider }),
     postDebugPreviewOutputBuilder: null,
     setPostDebugPreviewOutputBuilder: (builder) => set({ postDebugPreviewOutputBuilder: builder }),
 
@@ -4975,7 +4951,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             postDebugPreviewOutputBuilder: null,
             codeNodes: {},
             previewSettings: createDefaultPreviewSettings(),
-            previewSnapshotProvider: null,
             projectId: null,
             onSubgraphTemplateCreate: null,
             onSubgraphTemplateUpdate: null,

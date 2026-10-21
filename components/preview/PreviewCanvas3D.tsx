@@ -40,10 +40,10 @@ export const PreviewCanvas3D = forwardRef<PreviewCanvasHandle, PreviewCanvas3DPr
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
             }).catch((error) => console.error('Failed to capture preview snapshot:', error));
         },
-        capturePreviewForAi: async (options) => {
+        captureThumbnail: async (options) => {
             if (!bridge.current) throw new Error('Preview renderer not ready');
-            const image = await bridge.current.capture({ format: options?.format, quality: options?.quality });
-            return callbacks.current.onUploadPreviewBlob({ ...image, format: image.mimeType, purpose: options?.purpose ?? 'ai' });
+            const { blob, mimeType } = await bridge.current.capture({ format: options?.format, quality: options?.quality });
+            await callbacks.current.onUploadThumbnail({ blob, mimeType });
         },
     }), []);
     return <div ref={container} className="w-full h-full" />;

@@ -1,7 +1,7 @@
 # Private files: design proposal
 
 Status: **proposal, waiting for owner approval. Nothing here is implemented.**
-Prepared 17 October 2026 on top of `security-hardening` (`f15395e`). Read with `docs/SECURITY_HANDOFF_2026-10-17.md`.
+Prepared 17 October 2026 on top of `security-hardening` (`f15395e`).
 
 **Revision, 18 October 2026.** An independent review found three medium issues. All three are now resolved:
 

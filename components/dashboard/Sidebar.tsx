@@ -22,7 +22,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { FeedbackDialog } from "@/components/feedback/FeedbackDialog";
 
 interface SidebarProps {
     className?: string;
@@ -165,7 +164,6 @@ export function Sidebar({ className, user }: SidebarProps) {
 
             {/* Bottom Section */}
             <div className="flex flex-col gap-4 p-4 border-t border-sidebar-border/50 items-center">
-                <FeedbackDialog />
                 <ThemeToggle />
 
                 <DropdownMenu>

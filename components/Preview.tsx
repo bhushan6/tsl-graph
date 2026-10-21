@@ -1,15 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation } from 'convex/react';
 import { toast } from 'sonner';
 import { useEditorStore, type ThumbnailMode } from '@/store/editor';
 import { cn } from '@/lib/utils';
-import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
 import { PreviewCanvas3D } from './preview/PreviewCanvas3D';
 import { PreviewControls } from './preview/PreviewControls';
-import type { PreviewCanvasHandle, PreviewCaptureUploadArgs } from './preview/types';
+import type { PreviewCanvasHandle } from './preview/types';
 import { useEditorHostConfig } from '@/lib/editor-host/context';
 import { normalizeEnabledGraphs } from '@/lib/editor-host/types';
 
@@ -22,7 +19,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
     const previewSettings = useEditorStore((state) => state.previewSettings);
     const updatePreviewSettings = useEditorStore((state) => state.updatePreviewSettings);
     const updatePreviewSettingsDebounced = useEditorStore((state) => state.updatePreviewSettingsDebounced);
-    const setPreviewSnapshotProvider = useEditorStore((state) => state.setPreviewSnapshotProvider);
     const nodeCount = useEditorStore((state) => state.nodes.length);
 
     const [isFullScreen, setIsFullScreen] = useState(false);
@@ -34,8 +30,6 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
     const [isGeometryScriptOpen, setIsGeometryScriptOpen] = useState(false);
     const [geometryScriptDraft, setGeometryScriptDraft] = useState(previewSettings.geometryScript ?? '');
 
-    const generatePreviewUploadUrl = useMutation(api.ai.generatePreviewUploadUrl);
-    const registerPreviewImage = useMutation(api.ai.registerPreviewImage);
     const projectService = hostConfig?.services?.project;
     const hostRef = hostConfig?.ref;
     const canUploadThumbnail = Boolean(projectService?.uploadThumbnail && hostRef !== undefined);
@@ -55,86 +49,20 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
         }
     }, [geometryScriptError]);
 
-    const handleUploadPreviewBlob = useCallback(async ({
-        blob,
-        mimeType,
-        width,
-        height,
-        format,
-        purpose,
-    }: PreviewCaptureUploadArgs) => {
-        if (purpose === 'thumbnail') {
-            if (!projectService?.uploadThumbnail || hostRef === undefined) {
-                throw new Error('Thumbnail upload is not available for this host.');
-            }
-
-            const result = await projectService.uploadThumbnail({
-                ref: hostRef,
-                blob,
-                mimeType,
-            });
-
-            return {
-                imageUrl: '',
-                storageId: result.storageId ?? '',
-                width,
-                height,
-                format,
-            };
+    const handleUploadThumbnail = useCallback(async ({ blob, mimeType }: { blob: Blob; mimeType: string }) => {
+        if (!projectService?.uploadThumbnail || hostRef === undefined) {
+            throw new Error('Thumbnail upload is not available for this host.');
         }
-
-        const uploadUrl = await generatePreviewUploadUrl();
-        const response = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': mimeType },
-            body: blob,
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to upload preview image');
-        }
-
-        const { storageId } = await response.json() as { storageId: Id<'_storage'> };
-        const result = await registerPreviewImage({ storageId });
-
-        return {
-            imageUrl: result.url,
-            storageId,
-            width,
-            height,
-            format,
-        };
-    }, [
-        generatePreviewUploadUrl,
-        hostRef,
-        projectService,
-        registerPreviewImage,
-    ]);
-
-    const capturePreviewForAi = useCallback(async (options?: { format?: 'png' | 'jpeg'; quality?: number }) => {
-        if (!canvasRef.current) {
-            throw new Error('Preview renderer not ready');
-        }
-
-        return canvasRef.current.capturePreviewForAi({
-            ...options,
-            purpose: 'ai',
-        });
-    }, []);
-
-    useEffect(() => {
-        setPreviewSnapshotProvider(capturePreviewForAi);
-        return () => setPreviewSnapshotProvider(null);
-    }, [capturePreviewForAi, setPreviewSnapshotProvider]);
+        await projectService.uploadThumbnail({ ref: hostRef, blob, mimeType });
+    }, [hostRef, projectService]);
 
     const captureSnapshot = useCallback(async (): Promise<boolean> => {
         if (!canUploadThumbnail || !canvasRef.current) return false;
 
         try {
-            await canvasRef.current.capturePreviewForAi({
+            await canvasRef.current.captureThumbnail({
                 format: 'jpeg',
                 quality: 0.7,
-                purpose: 'thumbnail',
             });
             return true;
         } catch (err) {
@@ -290,7 +218,7 @@ export function Preview(props: { projectId?: string; hasThumbnail?: boolean; onH
                 ref={canvasRef}
                 layoutMode={isFullScreen ? 'fullscreen' : 'inline'}
                 postGraphEnabled={postGraphEnabled}
-                onUploadPreviewBlob={handleUploadPreviewBlob}
+                onUploadThumbnail={handleUploadThumbnail}
                 onMaterialErrorChange={setMaterialError}
                 onPostErrorChange={setPostError}
                 onGeometryScriptErrorChange={setGeometryScriptError}

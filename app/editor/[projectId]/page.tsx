@@ -42,7 +42,6 @@ function EditorWithProject({ projectId }: { projectId: Id<"projects"> }) {
                 canRenameProject: true,
                 canShare: true,
                 canUploadAssets: true,
-                canUseAI: true,
             },
         }),
         [projectId, persistence, services]

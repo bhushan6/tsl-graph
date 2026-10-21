@@ -1,39 +1,19 @@
 import type { PreviewSettings, ThumbnailMode } from '@/store/editor';
 
-export type PreviewCapturePurpose = 'ai' | 'thumbnail';
-
 export interface PreviewCaptureOptions {
     format?: 'png' | 'jpeg';
     quality?: number;
-    purpose?: PreviewCapturePurpose;
-}
-
-export interface PreviewCaptureUploadArgs {
-    blob: Blob;
-    mimeType: string;
-    width: number;
-    height: number;
-    format: string;
-    purpose: PreviewCapturePurpose;
-}
-
-export interface PreviewCaptureResult {
-    imageUrl: string;
-    storageId: string;
-    width: number;
-    height: number;
-    format: string;
 }
 
 export interface PreviewCanvasHandle {
     downloadSnapshot: () => void;
-    capturePreviewForAi: (options?: PreviewCaptureOptions) => Promise<PreviewCaptureResult>;
+    captureThumbnail: (options?: PreviewCaptureOptions) => Promise<void>;
 }
 
 export interface PreviewCanvas3DProps {
     layoutMode: 'inline' | 'fullscreen';
     postGraphEnabled: boolean;
-    onUploadPreviewBlob: (args: PreviewCaptureUploadArgs) => Promise<PreviewCaptureResult>;
+    onUploadThumbnail: (args: { blob: Blob; mimeType: string }) => Promise<void>;
     onMaterialErrorChange: (error: string | null) => void;
     onPostErrorChange: (error: string | null) => void;
     onGeometryScriptErrorChange: (error: string | null) => void;

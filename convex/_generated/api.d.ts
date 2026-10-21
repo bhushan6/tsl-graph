@@ -8,12 +8,10 @@
  * @module
  */
 
-import type * as ai from "../ai.js";
 import type * as assets from "../assets.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as errors from "../errors.js";
-import type * as feedback from "../feedback.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as projects from "../projects.js";
@@ -27,12 +25,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  ai: typeof ai;
   assets: typeof assets;
   auth: typeof auth;
   crons: typeof crons;
   errors: typeof errors;
-  feedback: typeof feedback;
   files: typeof files;
   http: typeof http;
   projects: typeof projects;

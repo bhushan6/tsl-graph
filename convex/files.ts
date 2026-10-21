@@ -3,7 +3,7 @@ import { internalMutation, type MutationCtx, type QueryCtx } from "./_generated/
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { createErrorData, ErrorCodes } from "./errors";
-import { filePurpose } from "./schema";
+import { uploadPurpose } from "./schema";
 
 // File ownership. Convex upload URLs return a storage ID to whoever uploads, and
 // any caller can name any storage ID, so a storage ID never proves ownership.
@@ -15,7 +15,7 @@ import { filePurpose } from "./schema";
 // then the random storage ID is known only to the uploader's client. Files that
 // predate the caller's grant (all legacy files) can never be claimed.
 
-export type FilePurpose = Infer<typeof filePurpose>;
+export type FilePurpose = Infer<typeof uploadPurpose>;
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -37,8 +37,6 @@ interface FilePolicy {
 export const FILE_POLICIES: Record<FilePurpose, FilePolicy> = {
     asset: { maxBytes: 50 * MB, contentTypes: /^(image\/[\w.+-]+|application\/octet-stream)$/, uploadsPerHour: 100 },
     thumbnail: { maxBytes: 5 * MB, contentTypes: /^image\/(png|jpeg|webp)$/, uploadsPerHour: 120 },
-    "ai-preview": { maxBytes: 25 * MB, contentTypes: /^image\/(png|jpeg)$/, uploadsPerHour: 120 },
-    feedback: { maxBytes: 20 * MB, contentTypes: /^(image\/[\w.+-]+|application\/pdf)$/, uploadsPerHour: 20 },
 };
 
 /** Issue an upload URL backed by a one-use, rate-limited grant for `purpose`. */
@@ -201,13 +199,13 @@ async function bindLegacyFile(ctx: MutationCtx, storageId: Id<"_storage">, userI
     await ctx.db.insert("storageBindings", { storageId, userId, purpose, createdAt: Date.now() });
 }
 
-const backfillTable = v.union(v.literal("assets"), v.literal("projects"), v.literal("feedbacks"));
-const BACKFILL_ORDER = ["assets", "projects", "feedbacks"] as const;
+const backfillTable = v.union(v.literal("assets"), v.literal("projects"));
+const BACKFILL_ORDER = ["assets", "projects"] as const;
 const BACKFILL_PAGE_SIZE = 100;
 
 /**
- * One-off: bind files referenced by existing assets, project thumbnails and
- * feedback. Run once after deploying with `npx convex run files:backfillStorageBindings`;
+ * One-off: bind files referenced by existing assets and project thumbnails.
+ * Run once after deploying with `npx convex run files:backfillStorageBindings`;
  * it reschedules itself page by page, then enables the orphan sweep for files
  * created from that point on.
  */
@@ -226,17 +224,10 @@ export const backfillStorageBindings = internalMutation({
             const page = await ctx.db.query("assets").paginate(paginationOpts);
             for (const asset of page.page) await bindLegacyFile(ctx, asset.storageId, asset.userId, "asset");
             ({ isDone, continueCursor } = page);
-        } else if (table === "projects") {
+        } else {
             const page = await ctx.db.query("projects").paginate(paginationOpts);
             for (const project of page.page) {
                 if (project.thumbnailStorageId) await bindLegacyFile(ctx, project.thumbnailStorageId, project.userId, "thumbnail");
-            }
-            ({ isDone, continueCursor } = page);
-        } else {
-            const page = await ctx.db.query("feedbacks").paginate(paginationOpts);
-            for (const feedback of page.page) {
-                const attachments = [...(feedback.attachments ?? []), ...(feedback.attachment ? [feedback.attachment] : [])];
-                for (const storageId of attachments) await bindLegacyFile(ctx, storageId, feedback.userId, "feedback");
             }
             ({ isDone, continueCursor } = page);
         }

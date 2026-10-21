@@ -23,10 +23,8 @@ import {
     runStorageMaintenance,
     transferFileOwnership,
 } from "./files";
-import { deletePreviewImage, generatePreviewUploadUrl, registerPreviewImage } from "./ai";
 import { garbageCollectAssets, generateUploadUrl as generateAssetUploadUrl, getAssetUrl, getNodeAssets, registerAsset } from "./assets";
 import { clone, generateThumbnailUploadUrl, remove, updateThumbnail } from "./projects";
-import { generateUploadUrl as generateFeedbackUploadUrl, submitFeedback } from "./feedback";
 import { deleteSelf } from "./users";
 import type { Id } from "./_generated/dataModel";
 
@@ -104,33 +102,34 @@ describe("claimUpload", () => {
         const big = await uploadAs(alice, "thumbnail", { size: FILE_POLICIES.thumbnail.maxBytes + 1, contentType: "image/jpeg" });
         await expect(claimUpload(ctx(), { storageId: big, userId: alice._id, purpose: "thumbnail" })).rejects.toThrow("Unsupported");
 
-        const html = await uploadAs(alice, "feedback", { contentType: "text/html" });
-        await expect(claimUpload(ctx(), { storageId: html, userId: alice._id, purpose: "feedback" })).rejects.toThrow("Unsupported");
+        const html = await uploadAs(alice, "asset", { contentType: "text/html" });
+        await expect(claimUpload(ctx(), { storageId: html, userId: alice._id, purpose: "asset" })).rejects.toThrow("Unsupported");
         expect(bindingFor(html)).toBeUndefined();
     });
 });
 
 describe("issueUploadUrl", () => {
     it("rate-limits upload URLs per user and purpose", async () => {
-        const limit = FILE_POLICIES.feedback.uploadsPerHour;
-        for (let index = 0; index < limit; index += 1) await issueUploadUrl(ctx(), alice._id, "feedback");
-        await expect(issueUploadUrl(ctx(), alice._id, "feedback")).rejects.toThrow();
-        await expect(issueUploadUrl(ctx(), mallory._id, "feedback")).resolves.toBe("https://upload.test/url");
+        const limit = FILE_POLICIES.asset.uploadsPerHour;
+        for (let index = 0; index < limit; index += 1) await issueUploadUrl(ctx(), alice._id, "asset");
+        await expect(issueUploadUrl(ctx(), alice._id, "asset")).rejects.toThrow();
+        await expect(issueUploadUrl(ctx(), alice._id, "thumbnail")).resolves.toBe("https://upload.test/url");
+        await expect(issueUploadUrl(ctx(), mallory._id, "asset")).resolves.toBe("https://upload.test/url");
         fake.advance(HOUR + 1);
-        await expect(issueUploadUrl(ctx(), alice._id, "feedback")).resolves.toBe("https://upload.test/url");
+        await expect(issueUploadUrl(ctx(), alice._id, "asset")).resolves.toBe("https://upload.test/url");
     });
 });
 
 describe("deleteOwnedFile", () => {
     it("deletes only files bound to the caller for that purpose", async () => {
-        const id = await uploadAs(alice, "ai-preview");
-        await claimUpload(ctx(), { storageId: id, userId: alice._id, purpose: "ai-preview" });
+        const id = await uploadAs(alice, "thumbnail");
+        await claimUpload(ctx(), { storageId: id, userId: alice._id, purpose: "thumbnail" });
 
-        expect(await deleteOwnedFile(ctx(), id, mallory._id, "ai-preview")).toBe(false);
-        expect(await deleteOwnedFile(ctx(), id, alice._id, "thumbnail")).toBe(false);
+        expect(await deleteOwnedFile(ctx(), id, mallory._id, "thumbnail")).toBe(false);
+        expect(await deleteOwnedFile(ctx(), id, alice._id, "asset")).toBe(false);
         expect(fake.files.has(id)).toBe(true);
 
-        expect(await deleteOwnedFile(ctx(), id, alice._id, "ai-preview")).toBe(true);
+        expect(await deleteOwnedFile(ctx(), id, alice._id, "thumbnail")).toBe(true);
         expect(fake.files.has(id)).toBe(false);
         expect(bindingFor(id)).toBeUndefined();
     });
@@ -156,26 +155,6 @@ describe("transferFileOwnership", () => {
         await transferFileOwnership(ctx(), guest._id, alice._id);
         expect(bindingFor(id)?.userId).toBe(alice._id);
         expect(fake.rows("uploadGrants").filter((grant) => grant.userId === guest._id)).toEqual([]);
-    });
-});
-
-describe("AI preview images", () => {
-    it("registers the caller's capture and blocks deleting someone else's file", async () => {
-        as(alice);
-        await handlerOf(generatePreviewUploadUrl)(ctx(), {});
-        fake.advance(1000);
-        const capture = storageId(fake.upload());
-        await expect(handlerOf(registerPreviewImage)(ctx(), { storageId: capture }))
-            .resolves.toEqual({ url: `https://files.test/${capture}` });
-
-        // The original exploit: any signed-in user deleting a known storage ID.
-        as(mallory);
-        await expect(handlerOf(deletePreviewImage)(ctx(), { storageId: capture })).resolves.toEqual({ success: false });
-        expect(fake.files.has(capture)).toBe(true);
-
-        as(alice);
-        await expect(handlerOf(deletePreviewImage)(ctx(), { storageId: capture })).resolves.toEqual({ success: true });
-        expect(fake.files.has(capture)).toBe(false);
     });
 });
 
@@ -300,20 +279,6 @@ describe("assets", () => {
     });
 });
 
-describe("feedback attachments", () => {
-    it("requires sign-in for upload URLs and only accepts the caller's own uploads", async () => {
-        await expect(handlerOf(generateFeedbackUploadUrl)(ctx(), {})).rejects.toThrow();
-
-        const victimFile = await uploadAs(alice, "thumbnail");
-        await claimUpload(ctx(), { storageId: victimFile, userId: alice._id, purpose: "thumbnail" });
-        as(mallory);
-        await handlerOf(generateFeedbackUploadUrl)(ctx(), {});
-        await expect(handlerOf(submitFeedback)(ctx(), { title: "t", description: "d", type: "bug", attachments: [victimFile] }))
-            .rejects.toThrow();
-        expect(fake.rows("feedbacks")).toEqual([]);
-    });
-});
-
 describe("account deletion", () => {
     it("deletes the user's own files but not storage IDs planted in their rows", async () => {
         as(mallory);
@@ -326,7 +291,6 @@ describe("account deletion", () => {
         await fake.insert("storageBindings", { storageId: victimFile, userId: alice._id, purpose: "asset", createdAt: 0 });
         await fake.insert("assets", { userId: mallory._id, storageId: victimFile, filename: "x", mimeType: "image/png", size: 1, createdAt: 0, lastAccessedAt: 0 });
         await fake.insert("projects", { userId: mallory._id, name: "P", isPublic: false, graphData: {}, thumbnailStorageId: victimFile, createdAt: 0, updatedAt: 0 });
-        await fake.insert("feedbacks", { userId: mallory._id, title: "t", description: "d", type: "bug", status: "new", createdAt: 0, attachments: [victimFile] });
 
         await handlerOf(deleteSelf)(ctx(), {});
         expect(fake.files.has(own)).toBe(false);
@@ -364,18 +328,16 @@ describe("legacy backfill and maintenance", () => {
     it("binds existing files to their single owner and marks shared ones disputed", async () => {
         const asset = storageId(fake.upload());
         const thumbnail = storageId(fake.upload());
-        const attachment = storageId(fake.upload());
         const shared = storageId(fake.upload());
         await fake.insert("assets", { userId: alice._id, storageId: asset, filename: "a", mimeType: "image/png", size: 1, createdAt: 0, lastAccessedAt: 0 });
         await fake.insert("assets", { userId: alice._id, storageId: shared, filename: "s", mimeType: "image/png", size: 1, createdAt: 0, lastAccessedAt: 0 });
         await fake.insert("projects", { userId: alice._id, name: "P", isPublic: false, graphData: {}, thumbnailStorageId: thumbnail, createdAt: 0, updatedAt: 0 });
         await fake.insert("projects", { userId: mallory._id, name: "M", isPublic: false, graphData: {}, thumbnailStorageId: shared, createdAt: 0, updatedAt: 0 });
-        await fake.insert("feedbacks", { userId: alice._id, title: "t", description: "d", type: "bug", status: "new", createdAt: 0, attachments: [attachment, "_storage:missing"] });
+        await fake.insert("assets", { userId: alice._id, storageId: "_storage:missing", filename: "m", mimeType: "image/png", size: 1, createdAt: 0, lastAccessedAt: 0 });
 
         await runBackfill();
         expect(bindingFor(asset)).toMatchObject({ userId: alice._id, purpose: "asset" });
         expect(bindingFor(thumbnail)).toMatchObject({ userId: alice._id, purpose: "thumbnail" });
-        expect(bindingFor(attachment)).toMatchObject({ userId: alice._id, purpose: "feedback" });
         expect(bindingFor(shared)).toMatchObject({ disputed: true });
         expect(bindingFor("_storage:missing")).toBeUndefined();
         expect(fake.rows("storageMaintenance")[0].orphanSweepSince).toBe(fake.now());

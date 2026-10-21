@@ -5,7 +5,6 @@ import {
     GraduationCap,
     HelpCircle,
     Loader2,
-    MessageSquarePlus,
     Moon,
     MoreHorizontal,
     Pen,
@@ -35,7 +34,6 @@ import { Badge } from '@/components/ui/badge';
 import { useEditorStore } from '@/store/editor';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/ui/logo';
-import { FeedbackDialog } from '@/components/feedback/FeedbackDialog';
 import { ShareDialog } from '@/components/ShareDialog';
 import { HelpDialog } from '@/components/HelpDialog';
 import Link from 'next/link';
@@ -150,7 +148,6 @@ export const Navbar = memo(function Navbar({
     const [isRenamingInProgress, setIsRenamingInProgress] = useState(false);
     const [tempName, setTempName] = useState(projectName || "");
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-    const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = useState(false);
     const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
     const [projectIsPublic, setProjectIsPublic] = useState(false);
     const [isShareStateLoaded, setIsShareStateLoaded] = useState(false);
@@ -428,10 +425,6 @@ export const Navbar = memo(function Navbar({
                             <GraduationCap />
                             <span>Interactive tutorials</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setIsFeedbackDialogOpen(true)}>
-                            <MessageSquarePlus />
-                            <span>Send feedback</span>
-                        </DropdownMenuItem>
 
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => setTheme(isDarkTheme ? 'light' : 'dark')}>
@@ -483,11 +476,6 @@ export const Navbar = memo(function Navbar({
                 />
             )}
 
-            <FeedbackDialog
-                open={isFeedbackDialogOpen}
-                onOpenChange={setIsFeedbackDialogOpen}
-                showTrigger={false}
-            />
             <HelpDialog
                 open={isHelpDialogOpen}
                 onOpenChange={setIsHelpDialogOpen}

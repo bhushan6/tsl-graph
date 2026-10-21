@@ -718,7 +718,6 @@ function StandaloneEditorSession() {
                 canRenameProject: false,
                 canShare: false,
                 canUploadAssets: true,
-                canUseAI: false,
             },
             enabledGraphs,
             services: {

@@ -22,7 +22,6 @@ export default function TutorialEditorClient() {
                 canRenameProject: false,
                 canShare: false,
                 canUploadAssets: true,
-                canUseAI: false,
             },
             enabledGraphs: ['material', 'postprocessing'], // Tutorials focus on material node shaders, post-processing needed for tutorial 14
             services: {

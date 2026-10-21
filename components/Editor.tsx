@@ -42,7 +42,6 @@ import { UILayer } from './UILayer';
 import { Preview } from './Preview';
 import { NodeDebugPreviewOverlay } from './NodeDebugPreviewOverlay';
 import { Toolbar } from './Toolbar';
-import { AiChatDock } from './AiChatDock';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodePanel } from './CodePanel';
 import { Button } from '@/components/ui/button';
@@ -55,7 +54,7 @@ import { useEdgeDropPickerStore } from '@/store/edge-drop-picker';
 import { CodeNodeDialog } from './CodeNodeDialog';
 import { StaleTemplatesNotification } from './StaleTemplatesNotification';
 import type { Id } from '@/convex/_generated/dataModel';
-import { DEFAULT_EDITOR_HOST_CAPABILITIES, type EditorHostCapabilities } from '@/lib/editor-host/types';
+import type { EditorHostCapabilities } from '@/lib/editor-host/types';
 import { TutorialOverlay, TutorialHighlight, TutorialComplete, TutorialLauncher } from '@/components/tutorial';
 import { useTutorialStore } from '@/store/tutorial-store';
 import { EDITOR_SHORTCUTS, isEditorShortcutBlocked, matchesEditorShortcut } from '@/lib/editor-shortcuts';
@@ -125,10 +124,7 @@ const EditorChrome = memo(function EditorChrome({
     const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
     const [isNodePickerOpen, setIsNodePickerOpen] = useState(true);
     const [isCodeNodeDialogOpen, setIsCodeNodeDialogOpen] = useState(false);
-    const [bottomBarMode, setBottomBarMode] = useState<'ai' | 'toolbar'>('toolbar');
     const [chromeOverrides, setChromeOverrides] = useState<Partial<EditorChromeVisibility>>({});
-    const canUseAI = navbarProps?.capabilities?.canUseAI ?? DEFAULT_EDITOR_HOST_CAPABILITIES.canUseAI;
-    const effectiveBottomBarMode = canUseAI ? bottomBarMode : 'toolbar';
     const visibleChrome = { ...chromeVisibility, ...chromeOverrides };
 
     const onNodePickerClose = useCallback(() => setIsNodePickerOpen(false), []);
@@ -136,8 +132,6 @@ const EditorChrome = memo(function EditorChrome({
     const onOpenCodePanel = useCallback(() => setIsCodePanelOpen(true), []);
     const onCloseCodePanel = useCallback(() => setIsCodePanelOpen(false), []);
     const onOpenCodeNodeDialog = useCallback(() => setIsCodeNodeDialogOpen(true), []);
-    const onOpenAiDock = useCallback(() => setBottomBarMode('ai'), []);
-    const onOpenToolbar = useCallback(() => setBottomBarMode('toolbar'), []);
     const setChromeVisible = useCallback((surface: ToggleableChrome, visible: boolean) => {
         setChromeOverrides((current) => ({ ...current, [surface]: visible }));
     }, []);
@@ -264,27 +258,10 @@ const EditorChrome = memo(function EditorChrome({
 
                 {!isReadOnly && visibleChrome.toolbar && (
                     <UILayer.BottomBar>
-                        {editorMode === 'subgraph' ? (
-                            <Toolbar
-                                onOpenCodePanel={onOpenCodePanel}
-                                onCreateCodeNode={onOpenCodeNodeDialog}
-                            />
-                        ) : (
-                            <div className="pointer-events-auto">
-                                <div className={effectiveBottomBarMode === 'toolbar' ? 'block' : 'hidden'}>
-                                    <Toolbar
-                                        onOpenCodePanel={onOpenCodePanel}
-                                        onOpenAiDock={canUseAI ? onOpenAiDock : undefined}
-                                        onCreateCodeNode={onOpenCodeNodeDialog}
-                                    />
-                                </div>
-                                {canUseAI && (
-                                    <div className={effectiveBottomBarMode === 'ai' ? 'block' : 'hidden'}>
-                                        <AiChatDock onOpenToolbar={onOpenToolbar} isOpen={effectiveBottomBarMode === 'ai'} />
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <Toolbar
+                            onOpenCodePanel={onOpenCodePanel}
+                            onCreateCodeNode={onOpenCodeNodeDialog}
+                        />
                     </UILayer.BottomBar>
                 )}
             </UILayer>

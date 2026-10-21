@@ -165,7 +165,7 @@ interface BridgeOptions {
     onPreviews?: (previews: PreviewFrame[]) => void;
 }
 
-/** This bridge exposes rendering only. No persistence, auth, upload or AI RPC. */
+/** This bridge exposes rendering only. No persistence, auth or upload RPC. */
 export function createPreviewBridge(container: HTMLElement, options: BridgeOptions): PreviewBridge {
     const frame = document.createElement('iframe');
     frame.title = options.mode === 'main' ? 'Shader preview' : 'Node previews';
