@@ -4,18 +4,17 @@ A node-based editor for [Three.js Shading Language (TSL)](https://github.com/mrd
 
 Live at **[tsl-graph.xyz](https://tsl-graph.xyz)**.
 
-> **Status:** this project is open source but not actively maintained. Issues and pull requests may not get a response. Forks are welcome.
-
 ## Features
 
 - Material and post-processing graphs that compile to readable TSL code
-- Live WebGPU preview; graph code runs in a sandboxed iframe
-- Subgraphs (your own reusable nodes) and code nodes (hand-written TSL inside a graph)
+- Live preview; graph code runs in a sandboxed iframe
+- Subgraphs (your own reusable nodes) and code nodes (hand-written TSL and WGSL inside a graph)
 - Per-node debug previews
 - Procedural textures from [tsl-textures](https://github.com/boytchev/tsl-textures)
 - Interactive tutorials and generated node reference docs (`/docs`)
 - Accounts with guest, Google and GitHub sign-in, cloud-saved projects, a public gallery and share links
 - An embeddable standalone editor driven over `postMessage` ([protocol](docs/INSPECTOR_POSTMESSAGE_PROTOCOL.md))
+- Loop node
 
 ## Tech stack
 
